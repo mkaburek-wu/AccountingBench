@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AccountingBench — Methodology</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&amp;family=IBM+Plex+Mono:wght@300;400;500&amp;family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+
+
+
+
+<link href="styles.css" rel="stylesheet"/>
+</head>
+<body>
+<!-- BOTTOM TAB BAR (mobile only) -->
+<div aria-label="Hauptnavigation" class="m-tabs" id="mTabs" role="navigation">
+<button aria-label="Overview" class="m-tab" id="mtab-home" onclick="showPage('home')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><rect height="7" width="7" x="3" y="3"></rect><rect height="7" width="7" x="14" y="3"></rect><rect height="7" width="7" x="3" y="14"></rect><rect height="7" width="7" x="14" y="14"></rect></svg>
+    Overview
+  </button>
+<button aria-label="Leaderboard" class="m-tab" id="mtab-leaderboard" onclick="showPage('leaderboard')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    Results
+  </button>
+<button aria-label="Dashboard" class="m-tab" id="mtab-dashboard" onclick="showPage('dashboard')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg>
+    Analytics
+  </button>
+<button aria-label="Methodology" class="m-tab active" id="mtab-methodology" onclick="showPage('methodology')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+    Method
+  </button>
+<button aria-label="About" class="m-tab" id="mtab-about" onclick="showPage('about')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    About
+  </button>
+</div>
+<!-- NAV -->
+<nav>
+<div class="nav-left">
+<div class="nav-partners">
+<a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank" title="WU Accounting &amp; Auditing">
+<img alt="WU Accounting &amp; Auditing" class="nav-partner-logo-wu" src="img/wu-logo.png"/>
+</a>
+<a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank" title="Board Service Center">
+<img alt="Board Service Center" class="nav-partner-logo-bsc" src="img/bsc-logo.png"/>
+</a>
+</div>
+<a class="nav-logo-wrap" href="#" onclick="showPage('home');return false;">
+<div class="nav-logo-bar"></div>
+<div class="nav-logo">Accounting<span>Bench</span></div>
+</a>
+</div>
+<span class="m-page-label" id="mPageLabel">Methodology</span>
+<ul class="nav-links" style="display:none;">
+<li><a href="#" id="navlink-leaderboard" onclick="showSection('leaderboard');return false;">Leaderboard</a></li>
+<li><a href="#" id="navlink-breakdown" onclick="showSection('breakdown');return false;">Breakdown</a></li>
+<li><a href="#" id="navlink-dashboard" onclick="showSection('dashboard');return false;">Dashboard</a></li>
+<li><a href="#" id="navlink-methodology" onclick="showSection('methodology');return false;">Methodology</a></li>
+</ul>
+</nav>
+<!-- PAGE TABS -->
+<div class="page-tabs">
+<button class="page-tab" onclick="showPage('home')">Overview</button>
+<button class="page-tab" onclick="showPage('leaderboard')">Leaderboard</button>
+<button class="page-tab" onclick="showPage('dashboard')">Dashboard</button>
+<button class="page-tab active" onclick="showPage('methodology')">Methodology</button>
+<button class="page-tab" onclick="showPage('about')">About Us</button>
+</div>
+
+<div class="page-view active" id="page-methodology">
+<div class="meth-hero">
+<h2>Methodology</h2>
+<p>How AccountingBench is designed, executed, and scored.</p>
+</div>
+<div class="meth-section" style="max-width:1400px; margin:0 auto; padding:52px 40px;">
+<!-- 01 DESIGN PRINCIPLES -->
+<div class="section-header"><span class="section-num">01</span><h2 class="section-title">Design Principles</h2></div>
+<div style="margin-bottom:52px;">
+<div class="meth-step"><div class="meth-step-num">1</div><div class="meth-step-body"><h4>Question Curation</h4><p>Questions are drawn from professional examination materials and university coursework, aligned with real-world accounting competency standards across educational and professional practice levels.</p></div></div>
+<div class="meth-step"><div class="meth-step-num">2</div><div class="meth-step-body"><h4>Multi-trial Execution</h4><p>Each model answers each question 3 times. The majority answer is used as the final answer, reducing random variance.</p></div></div>
+<div class="meth-step"><div class="meth-step-num">3</div><div class="meth-step-body"><h4>Hybrid Scoring</h4><p>Structured answers (SC/MC) are scored by formula. Open-text responses are evaluated by GPT-5-mini as an LLM judge, rating 0–100 on correctness and completeness following specific grading criteria.</p></div></div>
+<div class="meth-step"><div class="meth-step-num">4</div><div class="meth-step-body"><h4>Aggregation &amp; Reporting</h4><p>Scores are averaged per category and framework, then aggregated to an overall figure. All runs are timestamped and fully reproducible from logged configuration metadata.</p></div></div>
+</div>
+<!-- 02 SCORING -->
+<div class="section-header"><span class="section-num">02</span><h2 class="section-title">Scoring</h2></div>
+<div class="meth-two-col" style="margin-bottom:52px;">
+<div>
+<h3 style="font-size:15px; color:var(--wu-blue); margin-bottom:12px; font-weight:600;">Structured Questions (SC/MC)</h3>
+<p style="font-family:'Source Serif 4',serif; font-size:13px; color:var(--text-muted); line-height:1.78; margin-bottom:16px;">Single-choice and multiple-choice questions use a penalized scoring formula. Correct selections earn points, incorrect selections subtract points.</p>
+<div class="formula-block">Single-Choice: 100 if answer = gold; else 0
+
+Multiple-Choice:
+(100 / # of correct alternatives) * # of correct marks by LLM
+− (100 / # of correct alternatives) * # of incorrect marks by LLM</div>
+<h3 style="font-size:15px; color:var(--wu-blue); margin-bottom:12px; font-weight:600; margin-top:24px;">Open-Text &amp; Aggregation</h3>
+<p style="font-family:'Source Serif 4',serif; font-size:13px; color:var(--text-muted); line-height:1.78; margin-bottom:16px;">Open-text responses are scored by GPT-5-mini (0–100). Each question runs 3 times — SC/MC uses majority vote, open-text averages the three judge scores. If a model fails to produce a parseable answer, it scores 0, but is not included in the benchmarking results.</p>
+</div>
+<div>
+<h3 style="font-size:15px; color:var(--wu-blue); margin-bottom:12px; font-weight:600;">Score Interpretation</h3>
+<table class="meth-table">
+<thead><tr><th>Range</th><th>Badge</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>≥ 90%</td><td><span class="meth-tag tag-green">Excellent</span></td><td>Near-expert level</td></tr>
+<tr><td>75–90%</td><td><span class="meth-tag tag-blue">Strong</span></td><td>Professional-level</td></tr>
+<tr><td>60–75%</td><td><span class="meth-tag" style="background:#ede9fe;color:#4c1d95;">Moderate</span></td><td>Requires verification</td></tr>
+<tr><td>50–60%</td><td><span class="meth-tag tag-amber">Weak</span></td><td>Below professional threshold</td></tr>
+<tr><td>&lt; 50%</td><td><span class="meth-tag tag-red">Poor</span></td><td>Not suitable for professional use</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- 03 EVALUATION PIPELINE -->
+<div class="section-header"><span class="section-num">03</span><h2 class="section-title">Evaluation Pipeline</h2></div>
+<div aria-label="Evaluation Pipeline Diagram" class="pipeline-diagram">
+<div class="pl-layer pl-layer-blue">
+<div class="pl-num">1</div><div class="pl-icon">⊞</div>
+<div class="pl-title">Dataset</div>
+<div class="pl-items">
+<div class="pl-item">520 Tasks</div>
+<div class="pl-item">Tags: category, framework, level</div>
+<div class="pl-item">Gold answers</div>
+</div>
+</div>
+<div class="pl-arrow">→</div>
+<div class="pl-layer pl-layer-gray">
+<div class="pl-num">2</div><div class="pl-icon">⚙</div>
+<div class="pl-title">Model Input</div>
+<div class="pl-items">
+<div class="pl-item">Scratchpad + final_answer</div>
+<div class="pl-item">Task type resolution</div>
+</div>
+</div>
+<div class="pl-arrow">→</div>
+<div class="pl-layer pl-layer-purple">
+<div class="pl-num">3</div><div class="pl-icon">🧠</div>
+<div class="pl-title">3-Trial Inference</div>
+<div class="pl-items">
+<div class="pl-item">Trial 1</div>
+<div class="pl-item">Trial 2</div>
+<div class="pl-item">Trial 3</div>
+</div>
+</div>
+<div class="pl-arrow">→</div>
+<div class="pl-layer pl-layer-orange">
+<div class="pl-num">4</div><div class="pl-icon">⚖</div>
+<div class="pl-title">Scoring</div>
+<div class="pl-items">
+<div class="pl-item pl-item-sc">SC/MC majority vote + formula</div>
+<div class="pl-item pl-item-ot">Open-text: LLM-as-a-Judge</div>
+<div class="pl-item pl-item-num">Numeric: tolerance check</div>
+</div>
+</div>
+<div class="pl-arrow">→</div>
+<div class="pl-layer pl-layer-green">
+<div class="pl-num">5</div><div class="pl-icon">📊</div>
+<div class="pl-title">Output</div>
+<div class="pl-items">
+<div class="pl-item">Runs sheet — metadata</div>
+<div class="pl-item">Outputs sheet — scores</div>
+<div class="pl-item">Reproducible &amp; auditable</div>
+</div>
+</div>
+</div>
+<div class="pl-loop-label">↺  Reproducibility &amp; Audit — all runs logged with full configuration metadata</div>
+<!-- 04 LIMITATIONS -->
+<div class="section-header"><span class="section-num">04</span><h2 class="section-title">Limitations &amp; Caveats</h2></div>
+<div class="lim-grid">
+<div class="lim-item"><div class="lim-num">01</div><div class="lim-body"><div class="lim-title">LLM Judge Reliability</div><div class="lim-text">Open-text questions are scored by an LLM judge (GPT-5-mini), which introduces potential biases. The judge may favor answers stylistically similar to its own outputs. A sample has been manually validated, but full human validation has not been performed.</div></div></div>
+<div class="lim-item"><div class="lim-num">02</div><div class="lim-body"><div class="lim-title">Output Format Sensitivity</div><div class="lim-text">Some models were not able to generate parseable answers to some of the tasks. These tasks were automatically scored as 0, but not included in calculation of overall score.</div></div></div>
+<div class="lim-item"><div class="lim-num">03</div><div class="lim-body"><div class="lim-title">Dataset Size &amp; Scope</div><div class="lim-text">520 tasks is sufficient for category-level comparisons but may produce high variance at the subcategory level. Results reflect Austrian regulatory frameworks specifically.</div></div></div>
+<div class="lim-item"><div class="lim-num">04</div><div class="lim-body"><div class="lim-title">Static Snapshot</div><div class="lim-text">Results reflect a single evaluation run in March 2026. Model capabilities change over time and results should be re-evaluated periodically, especially after major model version releases.</div></div></div>
+<div class="lim-item"><div class="lim-num">05</div><div class="lim-body"><div class="lim-title">Benchmark Contamination</div><div class="lim-text">Contamination risk — the possibility that models have seen benchmark questions during training — cannot be fully eliminated. This is a general limitation of all static benchmarks.</div></div></div>
+<div class="lim-item"><div class="lim-num">06</div><div class="lim-body"><div class="lim-title">Ecological Validity</div><div class="lim-text">Static, isolated tasks differ substantially from real-world accounting work. Benchmark performance does not directly predict performance in practice, where models encounter multi-step workflows and domain-specific documents.</div></div></div>
+</div>
+<div class="reference-box animate-on-scroll">
+<pre class="reference-bibtex">@misc{aschauer2026accountingbench,
+  author       = {Ewald Aschauer and Alexander Hofer and Markus Isack and Manuel Kaburek},
+  title        = {AccountingBench: A Structured Benchmark for Systematic Evaluation of Large Language Models in Accounting Education and Professional Tasks},
+  year         = {2026},
+  institution  = {Vienna University of Economics and Business}
+}</pre>
+</div>
+</div>
+</div>
+
+<footer>
+<div class="footer-top">
+<div>
+<div class="footer-logo">Accounting<span>Bench</span></div>
+<div class="footer-tagline">A structured benchmark for evaluating large language models<br/>in accounting education and professional practice</div>
+</div>
+</div>
+<div class="footer-bottom">
+<span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center </span>
+</div>
+</footer>
+<script src="results.js"></script>
+<script src="data.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

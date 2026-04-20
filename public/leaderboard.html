@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AccountingBench — Leaderboard</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&amp;family=IBM+Plex+Mono:wght@300;400;500&amp;family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+
+
+
+
+<link href="styles.css" rel="stylesheet"/>
+</head>
+<body>
+<!-- BOTTOM TAB BAR (mobile only) -->
+<div aria-label="Hauptnavigation" class="m-tabs" id="mTabs" role="navigation">
+<button aria-label="Overview" class="m-tab" id="mtab-home" onclick="showPage('home')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><rect height="7" width="7" x="3" y="3"></rect><rect height="7" width="7" x="14" y="3"></rect><rect height="7" width="7" x="3" y="14"></rect><rect height="7" width="7" x="14" y="14"></rect></svg>
+    Overview
+  </button>
+<button aria-label="Leaderboard" class="m-tab active" id="mtab-leaderboard" onclick="showPage('leaderboard')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    Results
+  </button>
+<button aria-label="Dashboard" class="m-tab" id="mtab-dashboard" onclick="showPage('dashboard')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg>
+    Analytics
+  </button>
+<button aria-label="Methodology" class="m-tab" id="mtab-methodology" onclick="showPage('methodology')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+    Method
+  </button>
+<button aria-label="About" class="m-tab" id="mtab-about" onclick="showPage('about')">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    About
+  </button>
+</div>
+<!-- NAV -->
+<nav>
+<div class="nav-left">
+<div class="nav-partners">
+<a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank" title="WU Accounting &amp; Auditing">
+<img alt="WU Accounting &amp; Auditing" class="nav-partner-logo-wu" src="img/wu-logo.png"/>
+</a>
+<a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank" title="Board Service Center">
+<img alt="Board Service Center" class="nav-partner-logo-bsc" src="img/bsc-logo.png"/>
+</a>
+</div>
+<a class="nav-logo-wrap" href="#" onclick="showPage('home');return false;">
+<div class="nav-logo-bar"></div>
+<div class="nav-logo">Accounting<span>Bench</span></div>
+</a>
+</div>
+<span class="m-page-label" id="mPageLabel">Results</span>
+<ul class="nav-links" style="display:none;">
+<li><a href="#" id="navlink-leaderboard" onclick="showSection('leaderboard');return false;">Leaderboard</a></li>
+<li><a href="#" id="navlink-breakdown" onclick="showSection('breakdown');return false;">Breakdown</a></li>
+<li><a href="#" id="navlink-dashboard" onclick="showSection('dashboard');return false;">Dashboard</a></li>
+<li><a href="#" id="navlink-methodology" onclick="showSection('methodology');return false;">Methodology</a></li>
+</ul>
+</nav>
+<!-- PAGE TABS -->
+<div class="page-tabs">
+<button class="page-tab" onclick="showPage('home')">Overview</button>
+<button class="page-tab active" onclick="showPage('leaderboard')">Leaderboard</button>
+<button class="page-tab" onclick="showPage('dashboard')">Dashboard</button>
+<button class="page-tab" onclick="showPage('methodology')">Methodology</button>
+<button class="page-tab" onclick="showPage('about')">About Us</button>
+</div>
+
+<div class="page-view active" id="page-leaderboard">
+<div class="mobile-page-hero">
+<h2>Leaderboard</h2>
+</div>
+<section style="padding-top:36px;overflow-x:hidden;">
+<div class="section-header"><span class="section-num">01</span><h2 class="section-title">Full Leaderboard</h2></div>
+<!-- Filter controls -->
+<div class="chart-controls" style="margin-bottom:16px;">
+<span class="ctrl-label">Sort by:</span>
+<button class="ctrl-btn active" onclick="sortLeaderboard('overall',this)">Overall</button>
+<button class="ctrl-btn" onclick="sortLeaderboard('financial',this)">Financial Accounting</button>
+<button class="ctrl-btn" onclick="sortLeaderboard('management',this)">Management Accounting</button>
+<button class="ctrl-btn" onclick="sortLeaderboard('tax',this)">Tax</button>
+</div>
+<div class="leaderboard-container" id="full-leaderboard">
+<div class="leaderboard-header">
+<div class="lh-cell">#</div><div class="lh-cell">Model</div><div class="lh-cell">Overall</div>
+<div class="lh-cell">Fin. Acc.</div><div class="lh-cell">Mgmt. Acc.</div><div class="lh-cell">Tax</div>
+<div class="lh-cell">Best Framework</div><div class="lh-cell">n</div>
+</div>
+<div id="leaderboard-rows"></div>
+</div>
+
+<!-- SCORE BREAKDOWN CHARTS -->
+<div style="margin-top:40px;">
+  <div class="section-header" style="margin-bottom:20px;">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Score Breakdown by Category</h2>
+  </div>
+  <div id="breakdown-charts" style="display:flex;flex-direction:column;gap:32px;"></div>
+</div>
+
+<!-- MOBILE leaderboard cards (same data, accordion style) -->
+<div id="mLbCardsLeaderboard" style="flex-direction:column; gap:8px;">
+<div class="m-lb-card rank-1" onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank gold">1</div><div class="m-lb-info"><div class="m-lb-name">gpt-5.4 <span style="font-size:10px;background:rgba(180,83,9,0.12);color:var(--gold);padding:1px 6px;font-weight:700;">🏆 #1</span></div><div class="m-lb-org">OpenAI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--gold);">72.2%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:72.2%;background:#0d4a2a;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">78.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">88.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">68.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">98.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">82.4%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card rank-2" onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank silver">2</div><div class="m-lb-info"><div class="m-lb-name">gpt-5.2</div><div class="m-lb-org">OpenAI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--silver);">68.6%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:68.6%;background:#166534;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">77.3%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">87.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">62.9%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">98.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">83.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card rank-3" onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank bronze">3</div><div class="m-lb-info"><div class="m-lb-name">claude-opus-4-6</div><div class="m-lb-org">Anthropic</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--bronze);">63.3%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:63.3%;background:#1e40af;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">74.4%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">88.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">57.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">100.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">72.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">465/520</div></div></div><div class="m-lb-note">⚠️ 55 tasks excluded (no final_answer). Scored on 465/520 tasks.</div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">4</div><div class="m-lb-info"><div class="m-lb-name">claude-sonnet-4-6</div><div class="m-lb-org">Anthropic</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">63.1%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:63.1%;background:#3b82f6;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">77.6%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">88.3%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">54.4%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">99.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">80.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">5</div><div class="m-lb-info"><div class="m-lb-name">gpt-5-mini</div><div class="m-lb-org">OpenAI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">58.3%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:58.3%;background:#15803d;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">70.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">82.7%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">50.6%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">99.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">75.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">6</div><div class="m-lb-info"><div class="m-lb-name">Mistral-Large-3</div><div class="m-lb-org">Mistral AI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">52.7%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:52.7%;background:#c2410c;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">69.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">85.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">42.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">99.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">70.4%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">516/520</div></div></div><div class="m-lb-note">⚠️ 4 tasks excluded (no final_answer). Scored on 516/520 tasks.</div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">7</div><div class="m-lb-info"><div class="m-lb-name">grok-4-fast</div><div class="m-lb-org">xAI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">49.1%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:49.1%;background:#0f766e;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">64.3%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">84.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">38.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">97.3%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">62.9%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">8</div><div class="m-lb-info"><div class="m-lb-name">gpt-4o</div><div class="m-lb-org">OpenAI</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">48.9%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:48.9%;background:#16a34a;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">67.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">79.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">38.2%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">100.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">71.9%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">9</div><div class="m-lb-info"><div class="m-lb-name">DeepSeek-V3.2-2</div><div class="m-lb-org">DeepSeek</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">44.8%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:44.8%;background:#4338ca;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">58.9%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">74.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">35.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">95.7%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">53.5%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">519/520</div></div></div><div class="m-lb-note">⚠️ 1 tasks excluded (no final_answer). Scored on 519/520 tasks.</div></div>
+</div>
+<div class="m-lb-card " onclick="toggleMCard(this)">
+<div class="m-lb-card-summary"><div class="m-lb-rank ">10</div><div class="m-lb-info"><div class="m-lb-name">mercury-2</div><div class="m-lb-org">Inception Labs</div></div><div class="m-lb-score-wrap"><div class="m-lb-score" style="color:var(--text-muted);">43.8%</div><div class="m-lb-score-bar"><div class="m-lb-score-bar-fill" style="width:43.8%;background:#7c3aed;"></div></div></div><svg class="m-lb-chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewbox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<div class="m-lb-detail"><div class="m-lb-detail-grid"><div class="m-lb-detail-item"><div class="m-lb-detail-label">Fin. Acc.</div><div class="m-lb-detail-val">63.1%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Mgmt. Acc.</div><div class="m-lb-detail-val">77.2%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tax</div><div class="m-lb-detail-val">32.4%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">IFRS</div><div class="m-lb-detail-val">99.0%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">National GAAP</div><div class="m-lb-detail-val">62.8%</div></div><div class="m-lb-detail-item"><div class="m-lb-detail-label">Tasks</div><div class="m-lb-detail-val">520</div></div></div></div>
+</div>
+</section></div>
+
+<footer>
+<div class="footer-top">
+<div>
+<div class="footer-logo">Accounting<span>Bench</span></div>
+<div class="footer-tagline">A structured benchmark for evaluating large language models<br/>in accounting education and professional practice</div>
+</div>
+</div>
+<div class="footer-bottom">
+<span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center </span>
+</div>
+</footer>
+<script src="results.js"></script>
+<script src="data.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
