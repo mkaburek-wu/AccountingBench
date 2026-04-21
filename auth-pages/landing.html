@@ -12,7 +12,7 @@
 <script
   async
   crossorigin="anonymous"
-   data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
+  data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
   src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
   type="text/javascript">
 </script>
@@ -50,16 +50,22 @@
 </div>
 
 <div class="private-page">
+
+  <!-- Hero -->
   <div class="landing-hero">
     <div class="landing-hero-eyebrow">Submission Portal</div>
     <div class="landing-hero-title">Welcome back<span id="userName">.</span></div>
-    <div class="landing-hero-sub">Contribute new accounting benchmark tasks and track their results below. Each approved submission is averaged into the public leaderboard.</div>
+    <div class="landing-hero-sub">
+      Contribute new accounting benchmark tasks and track their results below.
+      Each approved submission is averaged into the public leaderboard.
+    </div>
     <div class="landing-hero-actions">
       <a href="upload.html" class="btn-primary">+ Contribute New Task</a>
       <button class="btn-sign-out" onclick="handleSignOut()">Sign Out</button>
     </div>
   </div>
 
+  <!-- Submissions -->
   <div class="landing-content">
     <div class="submissions-header">
       <div class="submissions-header-left">
@@ -67,7 +73,9 @@
         <span class="submissions-title">Your Submissions</span>
       </div>
     </div>
+
     <div class="submissions-grid" id="submissionsGrid">
+      <!-- Skeleton loading cards -->
       <div class="skeleton-card">
         <div class="skeleton skeleton-line" style="width:40%;margin-bottom:14px;"></div>
         <div class="skeleton skeleton-line" style="width:100%;"></div>
@@ -80,6 +88,7 @@
       </div>
     </div>
   </div>
+
 </div>
 
 <footer>
@@ -95,43 +104,62 @@
 </footer>
 
 <script>
+  // ── Initialise ────────────────────────────────────────────────────────────
   window.addEventListener('load', function() {
     waitForClerk(async function() {
       await window.Clerk.load();
-      // Only redirect if Clerk confirms no user — never redirect on API errors
       if (!window.Clerk.user) { window.location.href = 'sign-in.html'; return; }
+
       var firstName = window.Clerk.user.firstName;
-      if (firstName) { document.getElementById('userName').textContent = ', ' + firstName + '.'; }
+      if (firstName) {
+        document.getElementById('userName').textContent = ', ' + firstName + '.';
+      }
+
       await loadSubmissions();
     });
   });
 
+  // ── Sign out ──────────────────────────────────────────────────────────────
   async function handleSignOut() {
     try { await window.Clerk.signOut(); } catch (e) { /* ignore */ }
     window.location.href = 'sign-in.html';
   }
 
+  // ── Load and render submissions ───────────────────────────────────────────
   async function loadSubmissions() {
     var grid    = document.getElementById('submissionsGrid');
     var countEl = document.getElementById('submissionCount');
+
     try {
       var token = await window.Clerk.session.getToken();
       var res   = await fetch(API + '/submissions/mine', {
-        headers: { 'Authorization': 'Bearer ' + token }, credentials: 'include',
+        headers:     { 'Authorization': 'Bearer ' + token },
+        credentials: 'include',
       });
 
       // Show error inline — never redirect on API errors
       if (!res.ok) {
-        grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-title">Could not load submissions</div><div class="submissions-empty-text">Server returned ' + res.status + '. Make sure the server is running and refresh.</div></div>';
+        grid.innerHTML =
+          '<div class="submissions-empty">' +
+          '<div class="submissions-empty-title">Could not load submissions</div>' +
+          '<div class="submissions-empty-text">Server returned ' + res.status +
+          '. Make sure the server is running and refresh.</div></div>';
         countEl.textContent = '0 submissions';
         return;
       }
 
       var submissions = await res.json();
-      countEl.textContent = submissions.length + ' submission' + (submissions.length !== 1 ? 's' : '');
+      countEl.textContent =
+        submissions.length + ' submission' + (submissions.length !== 1 ? 's' : '');
 
       if (submissions.length === 0) {
-        grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-icon">\uD83D\uDCCB</div><div class="submissions-empty-title">No submissions yet</div><div class="submissions-empty-text">Contribute your first accounting benchmark task to get started.</div><a href="upload.html" class="btn-primary">Contribute New Task</a></div>';
+        grid.innerHTML =
+          '<div class="submissions-empty">' +
+          '<div class="submissions-empty-icon">\uD83D\uDCCB</div>' +
+          '<div class="submissions-empty-title">No submissions yet</div>' +
+          '<div class="submissions-empty-text">Contribute your first accounting benchmark task to get started.</div>' +
+          '<a href="upload.html" class="btn-primary">Contribute New Task</a>' +
+          '</div>';
         return;
       }
 
@@ -139,26 +167,64 @@
 
     } catch (err) {
       console.error('Failed to load submissions:', err);
-      grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-title">Could not reach the server</div><div class="submissions-empty-text">Make sure the FastAPI server is running and refresh.</div></div>';
+      grid.innerHTML =
+        '<div class="submissions-empty">' +
+        '<div class="submissions-empty-title">Could not reach the server</div>' +
+        '<div class="submissions-empty-text">Make sure the FastAPI server is running and refresh.</div>' +
+        '</div>';
       countEl.textContent = '0 submissions';
     }
   }
 
+  // ── Build a single submission card ────────────────────────────────────────
   function buildCard(s) {
     var date = s.submitted_at
-      ? new Date(s.submitted_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+      ? new Date(s.submitted_at).toLocaleDateString('en-GB', {
+          day: 'numeric', month: 'short', year: 'numeric'
+        })
       : '\u2014';
-    var labels  = { pending:'Pending', processing:'Processing', done:'Done', error:'Error', rejected:'Rejected' };
-    var category = s.task_category ? s.task_category.replace(/_/g,' ').replace(/\b\w/g,function(l){return l.toUpperCase();}) : '\u2014';
-    var viewBtn  = s.status === 'done' ? '<a href="upload.html?submission=' + s.id + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>' : '';
-    return '<div class="submission-card">' +
-      '<div class="submission-card-meta">' +
-        '<span class="submission-date">' + escHtml(date) + '</span>' +
-        '<span class="submission-status status-' + escHtml(s.status) + '">' + escHtml(labels[s.status] || s.status) + '</span>' +
-      '</div>' +
-      '<div class="submission-category">' + escHtml(category) + '</div>' +
-      '<div class="submission-prompt">' + escHtml(s.task_preview || 'Task details not available.') + '</div>' +
-      viewBtn + '</div>';
+
+    var labels = {
+      pending:    'Pending',
+      processing: 'Processing',
+      done:       'Done',
+      error:      'Error',
+      rejected:   'Rejected',
+    };
+
+    var category = s.task_category
+      ? s.task_category.replace(/_/g, ' ').replace(/\b\w/g, function(l) {
+          return l.toUpperCase();
+        })
+      : '\u2014';
+
+    // "View Result" links to results.html — pulls from database, no re-run
+    var viewBtn = s.status === 'done'
+      ? '<a href="results.html?submission=' + s.id +
+        '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>'
+      : '';
+
+    // If still processing, link to results.html which will show the spinner
+    var processingBtn = s.status === 'processing'
+      ? '<a href="results.html?submission=' + s.id +
+        '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Progress</a>'
+      : '';
+
+    return (
+      '<div class="submission-card">' +
+        '<div class="submission-card-meta">' +
+          '<span class="submission-date">' + escHtml(date) + '</span>' +
+          '<span class="submission-status status-' + escHtml(s.status || 'pending') + '">' +
+            escHtml(labels[s.status] || s.status) +
+          '</span>' +
+        '</div>' +
+        '<div class="submission-category">' + escHtml(category) + '</div>' +
+        '<div class="submission-prompt">' +
+          escHtml(s.task_preview || 'Task details not available.') +
+        '</div>' +
+        viewBtn + processingBtn +
+      '</div>'
+    );
   }
 </script>
 </body>

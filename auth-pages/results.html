@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AccountingBench — Benchmark Result</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="../public/styles.css" rel="stylesheet"/>
+
+<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
+<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
+  src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+  type="text/javascript">
+</script>
+
+<!-- Shared auth utilities -->
+<script src="auth-pages.js"></script>
+</head>
+<body>
+
+<nav>
+  <div class="nav-left">
+    <div class="nav-partners">
+      <a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank">
+        <img alt="WU Accounting &amp; Auditing" class="nav-partner-logo-wu" src="../public/img/wu-logo.png"/>
+      </a>
+      <a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank">
+        <img alt="Board Service Center" class="nav-partner-logo-bsc" src="../public/img/bsc-logo.png"/>
+      </a>
+    </div>
+    <a class="nav-logo-wrap" href="../public/index.html">
+      <div class="nav-logo-bar"></div>
+      <div class="nav-logo">Accounting<span>Bench</span></div>
+    </a>
+  </div>
+  <span class="m-page-label">Benchmark Result</span>
+</nav>
+
+<div class="page-tabs">
+  <button class="page-tab" onclick="window.location.href='../public/index.html'">Overview</button>
+  <button class="page-tab" onclick="window.location.href='../public/leaderboard.html'">Leaderboard</button>
+  <button class="page-tab" onclick="window.location.href='../public/dashboard.html'">Dashboard</button>
+  <button class="page-tab" onclick="window.location.href='../public/methodology.html'">Methodology</button>
+  <button class="page-tab" onclick="window.location.href='../public/about.html'">About Us</button>
+  <button class="page-tab active" onclick="window.location.href='landing.html'">Portal</button>
+</div>
+
+<div class="private-page">
+
+  <!-- Hero -->
+  <div class="upload-hero">
+    <div class="upload-hero-eyebrow">Submission Portal</div>
+    <div class="upload-hero-title" id="heroTitle">Benchmark Result</div>
+    <div class="upload-hero-sub" id="heroSub">
+      Your task has been evaluated against all models.
+    </div>
+  </div>
+
+  <div class="upload-content">
+
+    <!-- PROCESSING VIEW — shown while benchmark is still running -->
+    <div id="processingView" style="display:none;">
+      <div class="processing-icon"></div>
+      <div class="processing-title">Running Benchmark</div>
+      <div class="processing-sub">
+        Your task is being evaluated against all models.
+        This takes approximately 30 seconds — please keep this page open.
+      </div>
+      <div class="processing-status" id="processingStatus">Initialising…</div>
+    </div>
+
+    <!-- RESULT VIEW — shown when benchmark is done -->
+    <div id="resultView" style="display:none;">
+      <div class="result-header">
+        <div class="result-header-icon">✓</div>
+        <div class="result-header-text">
+          <h3>Benchmark Complete</h3>
+          <p>
+            Results are private until reviewed and approved by the administrator.
+            Once approved, your task's scores will be averaged into the public leaderboard.
+          </p>
+        </div>
+      </div>
+
+      <div class="results-table-wrap">
+        <div class="results-table-header">
+          <div class="rth-cell">Model</div>
+          <div class="rth-cell">Score</div>
+          <div class="rth-cell">Method</div>
+        </div>
+        <div id="resultsRows"></div>
+      </div>
+
+      <div class="result-actions">
+        <a href="landing.html" class="btn-primary">Back to My Submissions</a>
+        <a href="upload.html"  class="btn-secondary">Submit Another Task</a>
+      </div>
+    </div>
+
+    <!-- ERROR VIEW -->
+    <div id="errorView" style="display:none;">
+      <div class="result-error">
+        <h3>Benchmark Error</h3>
+        <p id="errorMsg">
+          The benchmark script encountered an error processing your task.
+          Please contact the administrator.
+        </p>
+      </div>
+      <div class="result-actions" style="margin-top:24px;">
+        <a href="landing.html" class="btn-primary">Back to My Submissions</a>
+        <a href="upload.html"  class="btn-secondary">Submit Another Task</a>
+      </div>
+    </div>
+
+    <!-- NO SUBMISSION ID — shown if page is opened without ?submission= -->
+    <div id="noIdView" style="display:none;">
+      <div class="submissions-empty">
+        <div class="submissions-empty-icon">🔍</div>
+        <div class="submissions-empty-title">No submission specified</div>
+        <div class="submissions-empty-text">
+          This page requires a submission ID in the URL.
+          Go to your submissions to find your results.
+        </div>
+        <a href="landing.html" class="btn-primary">My Submissions</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="footer-top">
+    <div>
+      <div class="footer-logo">Accounting<span>Bench</span></div>
+      <div class="footer-tagline">A structured benchmark for evaluating large language models<br/>in accounting education and professional practice</div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center</span>
+  </div>
+</footer>
+
+<script>
+  var clerkToken   = null;
+  var pollInterval = null;
+  var submissionId = null;
+
+  var STATUS_MSGS = [
+    'Sending task to models\u2026',
+    'Running trial 1 of 3\u2026',
+    'Running trial 2 of 3\u2026',
+    'Running trial 3 of 3\u2026',
+    'Consolidating answers\u2026',
+    'Running LLM judge evaluation\u2026',
+    'Writing results to database\u2026',
+    'Almost done\u2026',
+  ];
+
+  // ── On page load ──────────────────────────────────────────────────────────
+  window.addEventListener('load', function() {
+    waitForClerk(async function() {
+      await window.Clerk.load();
+      if (!window.Clerk.user) { window.location.href = 'sign-in.html'; return; }
+      clerkToken = await window.Clerk.session.getToken();
+
+      // Read submission ID from URL
+      var params = new URLSearchParams(window.location.search);
+      var sid    = params.get('submission');
+
+      if (!sid) {
+        document.getElementById('noIdView').style.display = 'block';
+        return;
+      }
+
+      submissionId = parseInt(sid);
+
+      // Check status immediately — if already done, show results right away
+      // without ever showing the processing spinner
+      await checkOrPoll(submissionId);
+    });
+  });
+
+  // ── Check status once, then decide whether to poll or show results ─────────
+ async function checkOrPoll(sid) {
+  try {
+    // Refresh token
+    clerkToken = await window.Clerk.session.getToken();
+
+    var res = await fetch(API + '/submissions/' + sid + '/status', {
+      headers:     { 'Authorization': 'Bearer ' + clerkToken },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      // Non-OK response — show error with the status code
+      showError('Server returned ' + res.status + '. Please try refreshing the page.');
+      return;
+    }
+
+    var data = await res.json();
+    console.log('Submission status:', data); // debug — check browser console
+
+    if (data.status === 'done') {
+      showResult(data.model_scores || []);
+    } else if (data.status === 'error') {
+      showError(data.error_message || null);
+    } else if (data.status === 'processing' || data.status === 'pending') {
+      showProcessing();
+      startPolling(sid);
+    } else {
+      // Unknown status — show it
+      showError('Unknown submission status: ' + data.status);
+    }
+
+  } catch (err) {
+    console.error('checkOrPoll error:', err);
+    showError('Could not load the result. Please refresh the page. (' + err.message + ')');
+  }
+}
+
+
+
+
+  // ── Polling — called only when status is pending/processing ───────────────
+  function startPolling(sid) {
+    var attempts = 0;
+    pollInterval = setInterval(async function() {
+      attempts++;
+      var msgIndex = Math.min(attempts - 1, STATUS_MSGS.length - 1);
+      document.getElementById('processingStatus').textContent = STATUS_MSGS[msgIndex];
+
+      try {
+        clerkToken = await window.Clerk.session.getToken();
+        var res    = await fetch(API + '/submissions/' + sid + '/status', {
+          headers:     { 'Authorization': 'Bearer ' + clerkToken },
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+
+        var data = await res.json();
+
+        if (data.status === 'done') {
+          clearInterval(pollInterval);
+          showResult(data.model_scores || []);
+        } else if (data.status === 'error') {
+          clearInterval(pollInterval);
+          showError(data.error_message || null);
+        } else if (attempts >= 40) {
+          clearInterval(pollInterval);
+          showError('The benchmark is taking longer than expected. Please check back later.');
+        }
+
+      } catch (err) {
+        console.error('Poll error:', err);
+      }
+    }, 3000);
+  }
+
+  // ── View transitions ──────────────────────────────────────────────────────
+  function showProcessing() {
+    document.getElementById('processingView').style.display = 'block';
+    document.getElementById('resultView').style.display     = 'none';
+    document.getElementById('errorView').style.display      = 'none';
+    document.getElementById('heroTitle').textContent        = 'Running Benchmark';
+    document.getElementById('heroSub').textContent          =
+      'Your task is being evaluated against all models. Please keep this page open.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showResult(scores) {
+    document.getElementById('processingView').style.display = 'none';
+    document.getElementById('resultView').style.display     = 'block';
+    document.getElementById('errorView').style.display      = 'none';
+    document.getElementById('heroTitle').textContent        = 'Benchmark Complete';
+    document.getElementById('heroSub').textContent          =
+      'Results are shown below. They are private until reviewed by the administrator.';
+
+    var rows = document.getElementById('resultsRows');
+
+    if (!scores || scores.length === 0) {
+      rows.innerHTML =
+        '<div style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center;">' +
+        'No scores available yet.</div>';
+      return;
+    }
+
+    rows.innerHTML = scores.map(function(s) {
+      var v      = (s.score !== null && s.score !== undefined) ? s.score : null;
+      var cls    = v === null ? '' : v >= 75 ? 'score-high' : v >= 60 ? 'score-mid' :
+                   v >= 45 ? 'score-low' : 'score-poor';
+      var scoreStr = v !== null ? v.toFixed(1) + '%' : '\u2014';
+      var method = s.method === 'sc_mc_formula' ? 'SC/MC Formula' :
+                   s.method === 'judge'          ? 'LLM Judge'     :
+                   (s.method || '\u2014');
+      return (
+        '<div class="result-row">' +
+          '<div class="result-model-name">' + escHtml(s.model) + '</div>' +
+          '<div class="result-score ' + cls + '">' + scoreStr + '</div>' +
+          '<div class="result-method">' + escHtml(method) + '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showError(msg) {
+    document.getElementById('processingView').style.display = 'none';
+    document.getElementById('resultView').style.display     = 'none';
+    document.getElementById('errorView').style.display      = 'block';
+    document.getElementById('heroTitle').textContent        = 'Benchmark Error';
+    document.getElementById('heroSub').textContent          =
+      'Something went wrong while processing your task.';
+    if (msg) {
+      document.getElementById('errorMsg').textContent = msg;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>

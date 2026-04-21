@@ -53,182 +53,175 @@
   <div class="upload-hero">
     <div class="upload-hero-eyebrow">Submission Portal</div>
     <div class="upload-hero-title">Contribute a Benchmark Task</div>
-    <div class="upload-hero-sub">Fill in the task details below. Your task will be benchmarked against all models and the results shown to you immediately.</div>
+    <div class="upload-hero-sub">
+      Fill in the task details below. Your task will be benchmarked against
+      all models and the results shown to you immediately.
+    </div>
   </div>
 
   <div class="upload-content">
+    <div class="form-error" id="formError"></div>
 
-    <!-- FORM VIEW -->
-    <div id="formView">
-      <div class="form-error" id="formError"></div>
+    <!-- Section 1: Task content -->
+    <div class="form-card">
+      <div class="form-card-title">Task Content</div>
+      <div class="form-card-sub">The question that will be sent to all models.</div>
 
-      <div class="form-card">
-        <div class="form-card-title">Task Content</div>
-        <div class="form-card-sub">The question that will be sent to all models.</div>
-        <div class="form-row">
-          <label>Question / Prompt <span class="required">*</span></label>
-          <textarea class="tall" id="prompt" placeholder="Enter the full question text here..."></textarea>
-        </div>
-        <div class="form-row-2col">
-          <div>
-            <label>Answer Type <span class="required">*</span></label>
-            <select id="answerType" onchange="handleAnswerTypeChange()">
-              <option value="">— Select —</option>
-              <option value="single_choice">Single Choice</option>
-              <option value="multi_choice">Multiple Choice</option>
-              <option value="open_text">Open Text</option>
-              <option value="open_numeric">Open Numeric</option>
-              <option value="journal_entry">Journal Entry</option>
-            </select>
-          </div>
-          <div>
-            <label>Task Type <span class="required">*</span></label>
-            <select id="taskType">
-              <option value="">— Select —</option>
-              <option value="interpretation_of_law">Interpretation of Law</option>
-              <option value="calculation">Calculation</option>
-              <option value="journal_entry">Journal Entry</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row conditional-field" id="fieldOptions">
-          <label>Answer Options <span class="required">*</span></label>
-          <textarea id="options" placeholder="A) Option one | B) Option two | C) Option three"></textarea>
-          <div class="field-hint">Separate options with a pipe: A) Option | B) Option</div>
-        </div>
-        <div class="form-row">
-          <label>Correct Answer <span class="required">*</span></label>
-          <input type="text" id="goldAnswer" placeholder="e.g. A  or  A,C  or  the correct value"/>
-          <div class="field-hint" id="goldAnswerHint">For choice tasks enter the letter(s). For open tasks enter the reference answer.</div>
-        </div>
-        <div class="form-row conditional-field" id="fieldGrading">
-          <label>Grading Criteria <span class="required">*</span></label>
-          <textarea id="gradingCriteria" placeholder="Describe what a correct answer must include..."></textarea>
-          <div class="field-hint">The LLM judge uses this rubric to score open-text responses.</div>
-        </div>
-        <div class="form-row conditional-field" id="fieldTolerance">
-          <label>Numeric Tolerance <span class="optional">(optional)</span></label>
-          <input type="number" id="numericTolerance" step="0.01" placeholder="e.g. 1.00"/>
-          <div class="field-hint">Acceptable ± tolerance. Leave blank for exact match.</div>
-        </div>
-        <div class="form-row">
-          <label>Context <span class="optional">(optional)</span></label>
-          <textarea id="context" placeholder="Background information provided to the model alongside the question..."></textarea>
-        </div>
+      <div class="form-row">
+        <label>Question / Prompt <span class="required">*</span></label>
+        <textarea class="tall" id="prompt" placeholder="Enter the full question text here..."></textarea>
       </div>
 
-      <div class="form-card">
-        <div class="form-card-title">Classification &amp; Metadata</div>
-        <div class="form-card-sub">These fields help categorise your task within the benchmark dataset.</div>
-        <div class="form-row-2col">
-          <div>
-            <label>Category <span class="required">*</span></label>
-            <select id="category">
-              <option value="">— Select —</option>
-              <option value="tax">Tax</option>
-              <option value="financial_accounting">Financial Accounting</option>
-              <option value="management_accounting">Management Accounting</option>
-            </select>
-          </div>
-          <div>
-            <label>Subcategory <span class="optional">(optional)</span></label>
-            <input type="text" id="subcategory" placeholder="e.g. Personalverrechnung"/>
-          </div>
-        </div>
-        <div class="form-row-2col">
-          <div>
-            <label>Regulatory Framework <span class="required">*</span></label>
-            <select id="regulatoryFramework">
-              <option value="">— Select —</option>
-              <option value="austrian_tax_law">Austrian Tax Law</option>
-              <option value="ifrs">IFRS</option>
-              <option value="national_gaap">National GAAP</option>
-              <option value="mixed_accounting_framework">Mixed Accounting Framework</option>
-              <option value="mixed_accounting_tax">Mixed: Accounting + Tax</option>
-            </select>
-          </div>
-          <div>
-            <label>Applicable Year <span class="required">*</span></label>
-            <input type="number" id="regulatoryYear" placeholder="e.g. 2026" min="2000" max="2100"/>
-          </div>
-        </div>
-        <div class="form-row">
-          <label>Education Level <span class="required">*</span></label>
-          <select id="educationLevel">
+      <div class="form-row-2col">
+        <div>
+          <label>Answer Type <span class="required">*</span></label>
+          <select id="answerType" onchange="handleAnswerTypeChange()">
             <option value="">— Select —</option>
-            <option value="professional_examinations">Professional Examinations</option>
-            <option value="university_masters">University Master's</option>
-            <option value="secondary_vocational">Secondary Vocational</option>
+            <option value="single_choice">Single Choice</option>
+            <option value="multi_choice">Multiple Choice</option>
+            <option value="open_text">Open Text</option>
+            <option value="open_numeric">Open Numeric</option>
+            <option value="journal_entry">Journal Entry</option>
           </select>
         </div>
-        <div class="form-row">
-          <label>Notes <span class="optional">(optional)</span></label>
-          <textarea id="notes" placeholder="Any additional notes for reviewers..."></textarea>
+        <div>
+          <label>Task Type <span class="required">*</span></label>
+          <select id="taskType">
+            <option value="">— Select —</option>
+            <option value="interpretation_of_law">Interpretation of Law</option>
+            <option value="calculation">Calculation</option>
+            <option value="journal_entry">Journal Entry</option>
+          </select>
         </div>
       </div>
 
-      <div class="form-card">
-        <div class="form-card-title">Supporting Documents</div>
-        <div class="form-card-sub">Upload any reference materials — PDF or Excel only, max 20 MB each.</div>
-        <div class="form-row-2col">
-          <div>
-            <label>PDF Document <span class="optional">(optional)</span></label>
-            <div class="file-upload-area" id="pdfArea">
-              <input accept=".pdf" id="pdfFile" type="file"/>
-              <div class="file-upload-icon">📄</div>
-              <div class="file-upload-label"><strong>Click to upload</strong> or drag &amp; drop<br/>PDF only · Max 20 MB</div>
-              <div class="file-name" id="pdfName"></div>
-            </div>
-          </div>
-          <div>
-            <label>Excel Spreadsheet <span class="optional">(optional)</span></label>
-            <div class="file-upload-area" id="excelArea">
-              <input accept=".xlsx,.xls" id="excelFile" type="file"/>
-              <div class="file-upload-icon">📊</div>
-              <div class="file-upload-label"><strong>Click to upload</strong> or drag &amp; drop<br/>Excel only · Max 20 MB</div>
-              <div class="file-name" id="excelName"></div>
-            </div>
-          </div>
+      <div class="form-row conditional-field" id="fieldOptions">
+        <label>Answer Options <span class="required">*</span></label>
+        <textarea id="options" placeholder="A) Option one | B) Option two | C) Option three"></textarea>
+        <div class="field-hint">Separate options with a pipe: A) Option | B) Option</div>
+      </div>
+
+      <div class="form-row">
+        <label>Correct Answer <span class="required">*</span></label>
+        <input type="text" id="goldAnswer" placeholder="e.g. A  or  A,C  or  the correct value"/>
+        <div class="field-hint" id="goldAnswerHint">
+          For choice tasks enter the letter(s). For open tasks enter the reference answer.
         </div>
       </div>
 
-      <div class="form-submit-area">
-        <div class="form-submit-note">After submitting, all fixed models will be benchmarked against your task (~30 seconds).</div>
-        <button class="btn-primary" id="submitBtn" onclick="handleSubmit()" style="padding:13px 28px;font-size:12px;">Submit &amp; Run Benchmark</button>
+      <div class="form-row conditional-field" id="fieldGrading">
+        <label>Grading Criteria <span class="required">*</span></label>
+        <textarea id="gradingCriteria" placeholder="Describe what a correct answer must include..."></textarea>
+        <div class="field-hint">The LLM judge uses this rubric to score open-text responses.</div>
       </div>
-    </div><!-- /#formView -->
 
-    <!-- PROCESSING VIEW -->
-    <div id="processingView">
-      <div class="processing-icon"></div>
-      <div class="processing-title">Running Benchmark</div>
-      <div class="processing-sub">Your task is being evaluated against all models. This takes approximately 30 seconds — please keep this page open.</div>
-      <div class="processing-status" id="processingStatus">Initialising…</div>
-    </div>
+      <div class="form-row conditional-field" id="fieldTolerance">
+        <label>Numeric Tolerance <span class="optional">(optional)</span></label>
+        <input type="number" id="numericTolerance" step="0.01" placeholder="e.g. 1.00"/>
+        <div class="field-hint">Acceptable ± tolerance. Leave blank for exact match.</div>
+      </div>
 
-    <!-- RESULT VIEW -->
-    <div id="resultView">
-      <div class="result-header">
-        <div class="result-header-icon">✓</div>
-        <div class="result-header-text">
-          <h3>Benchmark Complete</h3>
-          <p>Results are private until reviewed and approved by the administrator.</p>
-        </div>
-      </div>
-      <div class="results-table-wrap">
-        <div class="results-table-header">
-          <div class="rth-cell">Model</div>
-          <div class="rth-cell">Score</div>
-          <div class="rth-cell">Method</div>
-        </div>
-        <div id="resultsRows"></div>
-      </div>
-      <div class="result-actions">
-        <a href="landing.html" class="btn-primary">Back to My Submissions</a>
-        <button class="btn-secondary" onclick="resetForm()">Submit Another Task</button>
+      <div class="form-row">
+        <label>Context <span class="optional">(optional)</span></label>
+        <textarea id="context" placeholder="Background information provided to the model alongside the question..."></textarea>
       </div>
     </div>
 
+    <!-- Section 2: Classification -->
+    <div class="form-card">
+      <div class="form-card-title">Classification &amp; Metadata</div>
+      <div class="form-card-sub">These fields help categorise your task within the benchmark dataset.</div>
+
+      <div class="form-row-2col">
+        <div>
+          <label>Category <span class="required">*</span></label>
+          <select id="category">
+            <option value="">— Select —</option>
+            <option value="tax">Tax</option>
+            <option value="financial_accounting">Financial Accounting</option>
+            <option value="management_accounting">Management Accounting</option>
+          </select>
+        </div>
+        <div>
+          <label>Subcategory <span class="optional">(optional)</span></label>
+          <input type="text" id="subcategory" placeholder="e.g. Personalverrechnung"/>
+        </div>
+      </div>
+
+      <div class="form-row-2col">
+        <div>
+          <label>Regulatory Framework <span class="required">*</span></label>
+          <select id="regulatoryFramework">
+            <option value="">— Select —</option>
+            <option value="austrian_tax_law">Austrian Tax Law</option>
+            <option value="ifrs">IFRS</option>
+            <option value="national_gaap">National GAAP</option>
+            <option value="mixed_accounting_framework">Mixed Accounting Framework</option>
+            <option value="mixed_accounting_tax">Mixed: Accounting + Tax</option>
+          </select>
+        </div>
+        <div>
+          <label>Applicable Year <span class="required">*</span></label>
+          <input type="number" id="regulatoryYear" placeholder="e.g. 2026" min="2000" max="2100"/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Education Level <span class="required">*</span></label>
+        <select id="educationLevel">
+          <option value="">— Select —</option>
+          <option value="professional_examinations">Professional Examinations</option>
+          <option value="university_masters">University Master's</option>
+          <option value="secondary_vocational">Secondary Vocational</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Notes <span class="optional">(optional)</span></label>
+        <textarea id="notes" placeholder="Any additional notes for reviewers..."></textarea>
+      </div>
+    </div>
+
+    <!-- Section 3: Files -->
+    <div class="form-card">
+      <div class="form-card-title">Supporting Documents</div>
+      <div class="form-card-sub">Upload any reference materials — PDF or Excel only, max 20 MB each.</div>
+      <div class="form-row-2col">
+        <div>
+          <label>PDF Document <span class="optional">(optional)</span></label>
+          <div class="file-upload-area" id="pdfArea">
+            <input accept=".pdf" id="pdfFile" type="file"/>
+            <div class="file-upload-icon">📄</div>
+            <div class="file-upload-label">
+              <strong>Click to upload</strong> or drag &amp; drop<br/>PDF only · Max 20 MB
+            </div>
+            <div class="file-name" id="pdfName"></div>
+          </div>
+        </div>
+        <div>
+          <label>Excel Spreadsheet <span class="optional">(optional)</span></label>
+          <div class="file-upload-area" id="excelArea">
+            <input accept=".xlsx,.xls" id="excelFile" type="file"/>
+            <div class="file-upload-icon">📊</div>
+            <div class="file-upload-label">
+              <strong>Click to upload</strong> or drag &amp; drop<br/>Excel only · Max 20 MB
+            </div>
+            <div class="file-name" id="excelName"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="form-submit-area">
+      <div class="form-submit-note">
+        After submitting, all fixed models will be benchmarked against your task (~30 seconds).
+      </div>
+      <button class="btn-primary" id="submitBtn" onclick="handleSubmit()"
+              style="padding:13px 28px;font-size:12px;">
+        Submit &amp; Run Benchmark
+      </button>
+    </div>
   </div>
 </div>
 
@@ -245,23 +238,18 @@
 </footer>
 
 <script>
-  var clerkToken   = null;
-  var pollInterval = null;
+  var clerkToken = null;
 
-  // Initialise
+  // ── Auth check ────────────────────────────────────────────────────────────
   window.addEventListener('load', function() {
     waitForClerk(async function() {
       await window.Clerk.load();
       if (!window.Clerk.user) { window.location.href = 'sign-in.html'; return; }
       clerkToken = await window.Clerk.session.getToken();
-      // Return to view a result from the landing page
-      var params = new URLSearchParams(window.location.search);
-      var sid    = params.get('submission');
-      if (sid) { showProcessing(); startPolling(parseInt(sid)); }
     });
   });
 
-  // File name display
+  // ── File name display ─────────────────────────────────────────────────────
   document.getElementById('pdfFile').addEventListener('change', function() {
     document.getElementById('pdfName').textContent = this.files[0] ? this.files[0].name : '';
   });
@@ -269,44 +257,47 @@
     document.getElementById('excelName').textContent = this.files[0] ? this.files[0].name : '';
   });
 
-  // Drag-and-drop styling
-  ['pdfArea','excelArea'].forEach(function(id) {
+  // ── Drag-and-drop styling ─────────────────────────────────────────────────
+  ['pdfArea', 'excelArea'].forEach(function(id) {
     var area = document.getElementById(id);
     area.addEventListener('dragover',  function(e) { e.preventDefault(); area.classList.add('dragover'); });
     area.addEventListener('dragleave', function()  { area.classList.remove('dragover'); });
     area.addEventListener('drop',      function()  { area.classList.remove('dragover'); });
   });
 
-  // Conditional fields
+  // ── Conditional fields ────────────────────────────────────────────────────
   function handleAnswerTypeChange() {
     var type = document.getElementById('answerType').value;
-    ['fieldOptions','fieldGrading','fieldTolerance'].forEach(function(id) {
+    ['fieldOptions', 'fieldGrading', 'fieldTolerance'].forEach(function(id) {
       document.getElementById(id).classList.remove('visible');
     });
     if (type === 'single_choice' || type === 'multi_choice') {
       document.getElementById('fieldOptions').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent = 'Enter the correct letter(s): A, or A,C for multiple answers.';
+      document.getElementById('goldAnswerHint').textContent =
+        'Enter the correct letter(s): A, or A,C for multiple answers.';
     } else if (type === 'open_text' || type === 'journal_entry') {
       document.getElementById('fieldGrading').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent = 'Enter the reference answer for the LLM judge to compare against.';
+      document.getElementById('goldAnswerHint').textContent =
+        'Enter the reference answer for the LLM judge to compare against.';
     } else if (type === 'open_numeric') {
       document.getElementById('fieldGrading').classList.add('visible');
       document.getElementById('fieldTolerance').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent = 'Enter the correct numeric value, e.g. 1250.50';
+      document.getElementById('goldAnswerHint').textContent =
+        'Enter the correct numeric value, e.g. 1250.50';
     }
   }
 
-  // Validation
+  // ── Validation ────────────────────────────────────────────────────────────
   function validateForm() {
     var required = [
-      {id:'prompt',              label:'Question / Prompt'},
-      {id:'answerType',          label:'Answer Type'},
-      {id:'taskType',            label:'Task Type'},
-      {id:'goldAnswer',          label:'Correct Answer'},
-      {id:'category',            label:'Category'},
-      {id:'regulatoryFramework', label:'Regulatory Framework'},
-      {id:'regulatoryYear',      label:'Applicable Year'},
-      {id:'educationLevel',      label:'Education Level'},
+      { id: 'prompt',              label: 'Question / Prompt' },
+      { id: 'answerType',          label: 'Answer Type' },
+      { id: 'taskType',            label: 'Task Type' },
+      { id: 'goldAnswer',          label: 'Correct Answer' },
+      { id: 'category',            label: 'Category' },
+      { id: 'regulatoryFramework', label: 'Regulatory Framework' },
+      { id: 'regulatoryYear',      label: 'Applicable Year' },
+      { id: 'educationLevel',      label: 'Education Level' },
     ];
     for (var i = 0; i < required.length; i++) {
       var el = document.getElementById(required[i].id);
@@ -317,25 +308,31 @@
       }
     }
     var type = document.getElementById('answerType').value;
-    if ((type === 'single_choice' || type === 'multi_choice') && !document.getElementById('options').value.trim()) {
-      showError('formError', 'Please enter the answer options for choice tasks.'); return false;
+    if ((type === 'single_choice' || type === 'multi_choice') &&
+        !document.getElementById('options').value.trim()) {
+      showError('formError', 'Please enter the answer options for choice tasks.');
+      return false;
     }
-    if (['open_text','journal_entry','open_numeric'].indexOf(type) >= 0 && !document.getElementById('gradingCriteria').value.trim()) {
-      showError('formError', 'Please enter grading criteria for open-ended tasks.'); return false;
+    if (['open_text', 'journal_entry', 'open_numeric'].indexOf(type) >= 0 &&
+        !document.getElementById('gradingCriteria').value.trim()) {
+      showError('formError', 'Please enter grading criteria for open-ended tasks.');
+      return false;
     }
     return true;
   }
 
-  // Submit
+  // ── Submit — navigates to results.html on success ─────────────────────────
   async function handleSubmit() {
     hideMessages(['formError']);
     if (!validateForm()) return;
 
     var btn = document.getElementById('submitBtn');
-    btn.disabled = true; btn.textContent = 'Submitting\u2026';
+    btn.disabled = true;
+    btn.textContent = 'Submitting\u2026';
 
     try {
       clerkToken = await window.Clerk.session.getToken();
+
       var fd = new FormData();
       fd.append('prompt',               document.getElementById('prompt').value.trim());
       fd.append('answer_type',          document.getElementById('answerType').value);
@@ -346,7 +343,14 @@
       fd.append('applicable_regulatory_year', document.getElementById('regulatoryYear').value);
       fd.append('education_level',      document.getElementById('educationLevel').value);
 
-      var opts = { options:'options', gradingCriteria:'grading_criteria', numericTolerance:'numeric_tolerance', context:'context', subcategory:'subcategory', notes:'notes' };
+      var opts = {
+        options:          'options',
+        gradingCriteria:  'grading_criteria',
+        numericTolerance: 'numeric_tolerance',
+        context:          'context',
+        subcategory:      'subcategory',
+        notes:            'notes',
+      };
       Object.keys(opts).forEach(function(elId) {
         var el = document.getElementById(elId);
         if (el && el.value && el.value.trim()) fd.append(opts[elId], el.value.trim());
@@ -358,87 +362,31 @@
       if (excelFile) fd.append('excel_file', excelFile);
 
       var res = await fetch(API + '/submissions/prepare', {
-        method: 'POST', headers: { 'Authorization': 'Bearer ' + clerkToken },
-        body: fd, credentials: 'include',
+        method:      'POST',
+        headers:     { 'Authorization': 'Bearer ' + clerkToken },
+        body:        fd,
+        credentials: 'include',
       });
 
       if (!res.ok) {
-        var err = await res.json().catch(function(){return{};});
+        var err = await res.json().catch(function() { return {}; });
         showError('formError', err.detail || 'Submission failed. Please try again.');
-        btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
+        btn.disabled = false;
+        btn.textContent = 'Submit & Run Benchmark';
         return;
       }
 
       var data = await res.json();
-      showProcessing();
-      startPolling(data.submission_id);
+
+      // Navigate to the dedicated results page — the script runs in the background
+      window.location.href = 'results.html?submission=' + data.submission_id;
 
     } catch (err) {
       console.error('Submit error:', err);
       showError('formError', 'A network error occurred. Please check your connection and try again.');
-      btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
+      btn.disabled = false;
+      btn.textContent = 'Submit & Run Benchmark';
     }
-  }
-
-  // Polling
-  var STATUS_MSGS = ['Sending task to models\u2026','Running trial 1 of 3\u2026','Running trial 2 of 3\u2026','Running trial 3 of 3\u2026','Consolidating answers\u2026','Running LLM judge evaluation\u2026','Writing results to database\u2026','Almost done\u2026'];
-
-  function startPolling(submissionId) {
-    var attempts = 0;
-    pollInterval = setInterval(async function() {
-      attempts++;
-      document.getElementById('processingStatus').textContent = STATUS_MSGS[Math.min(attempts-1, STATUS_MSGS.length-1)];
-      try {
-        clerkToken = await window.Clerk.session.getToken();
-        var res = await fetch(API + '/submissions/' + submissionId + '/status', {
-          headers: { 'Authorization': 'Bearer ' + clerkToken }, credentials: 'include',
-        });
-        if (!res.ok) return;
-        var data = await res.json();
-        if (data.status === 'done')  { clearInterval(pollInterval); showResult(data.model_scores || []); }
-        if (data.status === 'error') { clearInterval(pollInterval); showResultError(); }
-        if (attempts >= 40)          { clearInterval(pollInterval); showResultError('The benchmark is taking longer than expected. Please check back on the submissions page.'); }
-      } catch(e) { console.error('Poll error:', e); }
-    }, 3000);
-  }
-
-  function showProcessing() {
-    document.getElementById('formView').style.display       = 'none';
-    document.getElementById('processingView').style.display = 'block';
-    document.getElementById('resultView').style.display     = 'none';
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-
-  function showResult(scores) {
-    document.getElementById('processingView').style.display = 'none';
-    document.getElementById('resultView').style.display     = 'block';
-    var rows = document.getElementById('resultsRows');
-    if (!scores.length) { rows.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center;">No scores available yet.</div>'; return; }
-    rows.innerHTML = scores.map(function(s) {
-      var v = s.score != null ? s.score : null;
-      var cls = v==null?'':v>=75?'score-high':v>=60?'score-mid':v>=45?'score-low':'score-poor';
-      var method = s.method==='sc_mc_formula'?'SC/MC Formula':s.method==='judge'?'LLM Judge':(s.method||'\u2014');
-      return '<div class="result-row"><div class="result-model-name">'+escHtml(s.model)+'</div><div class="result-score '+cls+'">'+(v!=null?v.toFixed(1)+'%':'\u2014')+'</div><div class="result-method">'+escHtml(method)+'</div></div>';
-    }).join('');
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-
-  function showResultError(msg) {
-    document.getElementById('processingView').style.display = 'none';
-    document.getElementById('resultView').style.display     = 'block';
-    document.getElementById('resultsRows').innerHTML = '<div class="result-error" style="margin:0;"><h3>Benchmark Error</h3><p>'+escHtml(msg||'The benchmark script encountered an error. Please contact the administrator.')+'</p></div>';
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-
-  function resetForm() {
-    if (pollInterval) clearInterval(pollInterval);
-    document.getElementById('formView').style.display       = 'block';
-    document.getElementById('processingView').style.display = 'none';
-    document.getElementById('resultView').style.display     = 'none';
-    var btn = document.getElementById('submitBtn');
-    btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
-    hideMessages(['formError']);
-    window.scrollTo({top:0,behavior:'smooth'});
   }
 </script>
 </body>

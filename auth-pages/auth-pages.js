@@ -248,3 +248,34 @@ function setupCodeInput(inputId, onComplete) {
     }
   });
 }
+
+async function checkOrPoll(submissionId) {
+  try {
+    clerkToken = await window.Clerk.session.getToken();
+    var res = await fetch(API + '/submissions/' + submissionId + '/status', {
+      headers: { 'Authorization': 'Bearer ' + clerkToken },
+      credentials: 'include',
+    });
+    if (!res.ok) { showProcessing(); startPolling(submissionId); return; }
+
+    var data = await res.json();
+
+    if (data.status === 'done') {
+      // Already done — show results immediately, no spinner needed
+      showResult(data.model_scores || []);
+
+    } else if (data.status === 'error') {
+      showResultError();
+
+    } else {
+      // Still processing — show spinner and start polling
+      showProcessing();
+      startPolling(submissionId);
+    }
+
+  } catch (err) {
+    // Could not reach server — show spinner and try polling
+    showProcessing();
+    startPolling(submissionId);
+  }
+}

@@ -22,6 +22,8 @@ File structure this depends on:
     └── leaderboard.py     ← public aggregate scores (Phase 5)
 """
 
+
+
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -31,10 +33,12 @@ from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from backend.submissions import router as submissions_router
 
 from backend.database import get_db, check_connection, engine
 from backend.models import Base, Settings
 from backend.auth import get_current_user, require_admin
+
 
 load_dotenv()
 
@@ -123,6 +127,8 @@ def _ensure_settings_row():
         db.close()
 
 
+
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title="AccountingBench API",
@@ -147,6 +153,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 4. Register routers — HERE
+app.include_router(submissions_router)
 
 
 # ── Root endpoint (health check) ──────────────────────────────────────────────
