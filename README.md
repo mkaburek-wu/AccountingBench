@@ -1,2 +1,2 @@
-# Accounting-Benchmark
-Accounting Benchmark Repo (Dataset, Files, Code)
+# AccountingBench
+A Structured Benchmark for Systematic Evaluation of Large Language Models in Accounting Education and Professional Tasks
