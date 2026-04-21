@@ -8,188 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
 
-<!-- Clerk JavaScript SDK — replace both placeholders with your actual values -->
+<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
 <script
   async
   crossorigin="anonymous"
-  data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
+   data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
   src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
   type="text/javascript">
 </script>
 
-<style>
-  .auth-wrapper {
-    min-height: 100vh;
-    padding-top: 140px;
-    padding-bottom: 60px;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .auth-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--wu-blue);
-    padding: 40px 44px 48px;
-    width: 100%;
-    max-width: 420px;
-    box-shadow: 0 4px 24px rgba(0,60,120,0.07);
-  }
-
-  .auth-eyebrow {
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--wu-blue);
-    font-weight: 600;
-    margin-bottom: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .auth-title {
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--wu-blue);
-    letter-spacing: -0.5px;
-    margin-bottom: 6px;
-  }
-
-  .auth-subtitle {
-    font-family: 'Source Serif 4', serif;
-    font-style: italic;
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 20px;
-    line-height: 1.6;
-  }
-
-  .auth-domain-note {
-    background: var(--wu-light);
-    border-left: 4px solid var(--wu-blue);
-    padding: 11px 14px;
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 26px;
-    line-height: 1.6;
-  }
-
-  .auth-domain-note strong { color: var(--wu-blue); font-weight: 600; }
-
-  .form-group { margin-bottom: 18px; }
-
-  .form-row-2col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-bottom: 18px;
-  }
-
-  .form-group label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 7px;
-  }
-
-  .form-group input {
-    width: 100%;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    padding: 10px 14px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 14px;
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
-  .form-group input:focus {
-    border-color: var(--wu-blue);
-    box-shadow: 0 0 0 3px rgba(0,60,120,0.07);
-  }
-
-  .auth-submit {
-    width: 100%;
-    background: var(--wu-blue);
-    color: #fff;
-    border: none;
-    padding: 12px 22px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.2s;
-    margin-top: 8px;
-  }
-
-  .auth-submit:hover    { background: var(--wu-blue2); }
-  .auth-submit:disabled { background: var(--border2); cursor: not-allowed; }
-
-  .auth-error {
-    display: none;
-    background: var(--red-bg);
-    border-left: 4px solid var(--red);
-    color: var(--red);
-    padding: 11px 14px;
-    font-size: 13px;
-    margin-bottom: 18px;
-    line-height: 1.5;
-  }
-
-  .auth-success {
-    display: none;
-    background: var(--green-bg);
-    border-left: 4px solid var(--green);
-    color: var(--green);
-    padding: 11px 14px;
-    font-size: 13px;
-    margin-bottom: 18px;
-    line-height: 1.5;
-  }
-
-  .auth-step        { display: none; }
-  .auth-step.active { display: block; }
-
-  .auth-footer-note {
-    margin-top: 24px;
-    font-size: 12px;
-    color: var(--text-dim);
-    text-align: center;
-    line-height: 1.8;
-  }
-
-  .auth-footer-note a { color: var(--wu-blue); text-decoration: none; font-weight: 500; }
-  .auth-footer-note a:hover { text-decoration: underline; }
-
-  .btn-spinner {
-    display: inline-block;
-    width: 12px; height: 12px;
-    border: 2px solid rgba(255,255,255,0.4);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: btnSpin 0.7s linear infinite;
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-  @keyframes btnSpin { to { transform: rotate(360deg); } }
-
-  @media (max-width: 500px) {
-    .auth-card     { padding: 28px 20px 36px; }
-    .auth-title    { font-size: 22px; }
-    .form-row-2col { grid-template-columns: 1fr; }
-  }
-</style>
+<!-- Shared auth utilities -->
+<script src="auth-pages.js"></script>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
   <div class="nav-left">
     <div class="nav-partners">
@@ -208,7 +40,6 @@
   <span class="m-page-label">Register</span>
 </nav>
 
-<!-- PAGE TABS -->
 <div class="page-tabs">
   <button class="page-tab" onclick="window.location.href='../public/index.html'">Overview</button>
   <button class="page-tab" onclick="window.location.href='../public/leaderboard.html'">Leaderboard</button>
@@ -218,25 +49,22 @@
   <button class="page-tab active">Register</button>
 </div>
 
-<!-- MAIN CONTENT -->
 <div class="auth-wrapper">
   <div class="auth-card">
     <div class="auth-eyebrow">Submission Portal</div>
     <div class="auth-title">Create Account</div>
-    <div class="auth-subtitle">
-      Register to contribute benchmark tasks and view results.
-    </div>
+    <div class="auth-subtitle">Register to contribute benchmark tasks and view results.</div>
 
     <div class="auth-domain-note">
-      <strong>Access restriction:</strong> Registration is limited to
-      authorised institutional email addresses. If your registration is
-      declined, please contact the administrator.
+      <strong>Access restriction:</strong> Registration is limited to authorised
+      institutional email addresses. If your registration is declined, please
+      contact the administrator.
     </div>
 
-    <div class="auth-error"   id="authError"></div>
-    <div class="auth-success" id="authSuccess"></div>
+    <div class="auth-msg" id="authError"></div>
+    <div class="auth-msg" id="authSuccess"></div>
 
-    <!-- STEP 1 — Registration form -->
+    <!-- Step 1 — registration form -->
     <div class="auth-step active" id="stepRegister">
       <div class="form-row-2col">
         <div class="form-group">
@@ -254,38 +82,30 @@
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input autocomplete="new-password" id="passwordInput" placeholder="Choose a strong password" type="password"/>
+        <input autocomplete="new-password" id="passwordInput" placeholder="Choose a strong password (min. 8 chars)" type="password"/>
       </div>
-      <button class="auth-submit" id="registerBtn" onclick="handleRegister()">
-        Create Account
-      </button>
+      <button class="auth-submit" id="registerBtn" onclick="handleRegister()">Create Account</button>
     </div>
 
-    <!-- STEP 2 — Email verification code -->
+    <!-- Step 2 — email verification -->
     <div class="auth-step" id="stepVerify">
-      <p style="font-family:'Source Serif 4',serif;font-size:14px;color:var(--text-muted);margin-bottom:22px;line-height:1.6;">
-        A verification code has been sent to <strong id="verifyEmailLabel" style="color:var(--wu-blue);font-weight:600;"></strong>.
-        Enter it below to activate your account.
-      </p>
+      <div class="auth-msg" id="verifyInfoMsg">
+        A verification code has been sent to your email. Enter it below to activate your account.
+      </div>
       <div class="form-group">
         <label>Verification Code</label>
-        <input
-          autocomplete="one-time-code"
-          id="codeInput"
-          inputmode="numeric"
-          maxlength="6"
-          placeholder="6-digit code"
-          style="letter-spacing:0.2em;font-family:'IBM Plex Mono',monospace;font-size:18px;"
-          type="text"
-        />
+        <input class="code-input" id="codeInput" inputmode="numeric" maxlength="6"
+               placeholder="— — — — — —" type="text" autocomplete="one-time-code"/>
       </div>
       <button class="auth-submit" id="verifyBtn" onclick="handleVerifyCode()">
         Verify Email &amp; Sign In
       </button>
-      <p style="margin-top:14px;font-size:12px;color:var(--text-dim);text-align:center;">
-        Didn't receive it?
-        <a href="#" onclick="resendCode(); return false;" style="color:var(--wu-blue);font-weight:500;">Resend code</a>
-      </p>
+      <div class="auth-resend">
+        Didn't receive it? &nbsp;
+        <a onclick="handleResendCode();return false;">Resend code</a>
+        &nbsp;·&nbsp;
+        <a onclick="goBack();return false;">Go back</a>
+      </div>
     </div>
 
     <div class="auth-footer-note">
@@ -295,7 +115,6 @@
   </div>
 </div>
 
-<!-- FOOTER -->
 <footer>
   <div class="footer-top">
     <div>
@@ -309,165 +128,106 @@
 </footer>
 
 <script>
-  let signUpAttempt = null;
+  var signUpAttempt = null;
 
-  // Redirect if already signed in
-  window.addEventListener('load', async () => {
-    try {
+  window.addEventListener('load', function() {
+    waitForClerk(async function() {
       await window.Clerk.load();
-      if (window.Clerk.user) {
-        window.location.href = 'landing.html';
-      }
-    } catch (err) {
-      showError('Authentication service unavailable. Please refresh the page.');
-    }
+      if (window.Clerk.user) { window.location.href = 'landing.html'; }
+    });
   });
 
-  // Allow Enter key to submit
-  document.getElementById('passwordInput').addEventListener('keydown', e => {
+  document.getElementById('passwordInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') handleRegister();
   });
-  document.getElementById('codeInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') handleVerifyCode();
-  });
+  setupCodeInput('codeInput', handleVerifyCode);
 
   async function handleRegister() {
-    hideMessages();
+    hideMessages(['authError', 'authSuccess']);
+    var firstName = document.getElementById('firstNameInput').value.trim();
+    var lastName  = document.getElementById('lastNameInput').value.trim();
+    var email     = document.getElementById('emailInput').value.trim();
+    var password  = document.getElementById('passwordInput').value;
 
-    const firstName = document.getElementById('firstNameInput').value.trim();
-    const lastName  = document.getElementById('lastNameInput').value.trim();
-    const email     = document.getElementById('emailInput').value.trim();
-    const password  = document.getElementById('passwordInput').value;
+    if (!firstName || !lastName) { showError('authError', 'Please enter your first and last name.'); return; }
+    if (!email)    { showError('authError', 'Please enter your email address.'); return; }
+    if (!password || password.length < 8) { showError('authError', 'Password must be at least 8 characters long.'); return; }
 
-    if (!firstName || !lastName) {
-      showError('Please enter your first and last name.');
-      return;
-    }
-    if (!email) {
-      showError('Please enter your email address.');
-      return;
-    }
-    if (!password || password.length < 8) {
-      showError('Password must be at least 8 characters long.');
-      return;
-    }
+    // Check domain is allowed before creating the Clerk account
+var emailDomain = email.split('@')[1].toLowerCase();
+setLoading('registerBtn', true, 'Checking domain\u2026');
+try {
+  var domainCheck = await fetch('http://localhost:8000/auth/check-domain?domain=' + emailDomain);
+  if (domainCheck.status === 403) {
+    showError('authError', 'Your email domain (@' + emailDomain + ') is not authorised to register. Please contact the administrator.');
+    setLoading('registerBtn', false, 'Create Account');
+    return;
+  }
+} catch (err) {
+  // Server unreachable — proceed anyway, backend will block if needed
+}
 
-    setLoading('registerBtn', true, 'Creating account…');
 
+
+    setLoading('registerBtn', true, 'Creating account\u2026');
     try {
+      await window.Clerk.load();
       signUpAttempt = await window.Clerk.client.signUp.create({
-        firstName:    firstName,
-        lastName:     lastName,
-        emailAddress: email,
-        password:     password,
+        firstName: firstName, lastName: lastName,
+        emailAddress: email,  password: password,
       });
-
-      // Prepare email verification
-      await signUpAttempt.prepareEmailAddressVerification({
-        strategy: 'email_code',
-      });
-
-      // Show the verification step
-      document.getElementById('verifyEmailLabel').textContent = email;
+      await signUpAttempt.prepareEmailAddressVerification({ strategy: 'email_code' });
+      document.getElementById('verifyInfoMsg').textContent =
+        'A verification code has been sent to ' + email + '. Enter it below to activate your account.';
       showStep('stepVerify');
       setLoading('registerBtn', false, 'Create Account');
-      showSuccess('Account created! Please check your email for the verification code.');
-
+      showSuccess('authSuccess', 'Account created! Please check your email for the verification code.');
+      document.getElementById('codeInput').focus();
     } catch (err) {
       setLoading('registerBtn', false, 'Create Account');
-      handleClerkError(err);
+      handleClerkError(err, 'authError');
     }
   }
 
   async function handleVerifyCode() {
-    hideMessages();
+    hideMessages(['authError', 'authSuccess']);
+    var code = document.getElementById('codeInput').value.trim();
+    if (!code || code.length < 6) { showError('authError', 'Please enter the complete 6-digit code.'); return; }
 
-    const code = document.getElementById('codeInput').value.trim();
-    if (!code) {
-      showError('Please enter the verification code from your email.');
-      return;
-    }
-
-    setLoading('verifyBtn', true, 'Verifying…');
-
+    setLoading('verifyBtn', true, 'Verifying\u2026');
     try {
-      const result = await signUpAttempt.attemptEmailAddressVerification({ code });
-
+      var result = await signUpAttempt.attemptEmailAddressVerification({ code: code });
       if (result.status === 'complete') {
         await window.Clerk.setActive({ session: result.createdSessionId });
-        showSuccess('Email verified! Redirecting to your account…');
-        setTimeout(() => window.location.href = 'landing.html', 1000);
+        showSuccess('authSuccess', 'Email verified! Redirecting\u2026');
+        setTimeout(function() { window.location.href = 'landing.html'; }, 1000);
       } else {
-        showError('Verification incomplete. Please try again.');
-        setLoading('verifyBtn', false, 'Verify Email & Sign In');
+        showError('authError', 'Verification incomplete. Please try again.');
+        setLoading('verifyBtn', false, 'Verify Email &amp; Sign In');
       }
-
     } catch (err) {
-      setLoading('verifyBtn', false, 'Verify Email & Sign In');
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || '';
-      if (msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid')) {
-        showError('Incorrect code. Please check your email and try again.');
-      } else if (msg.toLowerCase().includes('expired')) {
-        showError('Code has expired. Click "Resend code" to get a new one.');
-      } else {
-        handleClerkError(err);
-      }
+      setLoading('verifyBtn', false, 'Verify Email &amp; Sign In');
+      document.getElementById('codeInput').value = '';
+      handleClerkError(err, 'authError');
     }
   }
 
-  async function resendCode() {
+  async function handleResendCode() {
+    hideMessages(['authError', 'authSuccess']);
     try {
       await signUpAttempt.prepareEmailAddressVerification({ strategy: 'email_code' });
-      showSuccess('A new code has been sent to your email.');
-    } catch (err) {
-      showError('Could not resend code. Please try again.');
-    }
+      showSuccess('authSuccess', 'A new code has been sent to your email.');
+      document.getElementById('codeInput').value = '';
+      document.getElementById('codeInput').focus();
+    } catch (err) { showError('authError', 'Could not resend. Please refresh the page.'); }
   }
 
-  function showStep(id) {
-    document.querySelectorAll('.auth-step').forEach(el => el.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-  }
-
-  function setLoading(btnId, loading, label) {
-    const btn = document.getElementById(btnId);
-    btn.disabled = loading;
-    btn.innerHTML = loading ? `<span class="btn-spinner"></span>${label}` : label;
-  }
-
-  function showError(msg) {
-    const el = document.getElementById('authError');
-    el.textContent = msg;
-    el.style.display = 'block';
-    document.getElementById('authSuccess').style.display = 'none';
-  }
-
-  function showSuccess(msg) {
-    const el = document.getElementById('authSuccess');
-    el.textContent = msg;
-    el.style.display = 'block';
-    document.getElementById('authError').style.display = 'none';
-  }
-
-  function hideMessages() {
-    document.getElementById('authError').style.display   = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-  }
-
-  function handleClerkError(err) {
-    const msg = err?.errors?.[0]?.longMessage
-             || err?.errors?.[0]?.message
-             || err?.message
-             || 'An error occurred. Please try again.';
-    if (msg.toLowerCase().includes('email') && msg.toLowerCase().includes('taken')) {
-      showError('This email address is already registered. Try signing in instead.');
-    } else if (msg.toLowerCase().includes('password')) {
-      showError('Password is too weak. Please choose a stronger password (min. 8 characters).');
-    } else {
-      showError(msg);
-    }
+  function goBack() {
+    signUpAttempt = null;
+    hideMessages(['authError', 'authSuccess']);
+    document.getElementById('codeInput').value = '';
+    showStep('stepRegister');
   }
 </script>
-
 </body>
 </html>

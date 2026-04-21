@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
 
-<!-- Clerk JavaScript SDK — replace both placeholders with your actual values -->
+<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
 <script
   async
   crossorigin="anonymous"
@@ -17,159 +17,11 @@
   type="text/javascript">
 </script>
 
-<style>
-  .auth-wrapper {
-    min-height: 100vh;
-    padding-top: 140px;
-    padding-bottom: 60px;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .auth-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--wu-blue);
-    padding: 40px 44px 48px;
-    width: 100%;
-    max-width: 420px;
-    box-shadow: 0 4px 24px rgba(0,60,120,0.07);
-  }
-
-  .auth-eyebrow {
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--wu-blue);
-    font-weight: 600;
-    margin-bottom: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .auth-title {
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--wu-blue);
-    letter-spacing: -0.5px;
-    margin-bottom: 6px;
-  }
-
-  .auth-subtitle {
-    font-family: 'Source Serif 4', serif;
-    font-style: italic;
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 32px;
-    line-height: 1.6;
-  }
-
-  .form-group { margin-bottom: 18px; }
-
-  .form-group label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 7px;
-  }
-
-  .form-group input {
-    width: 100%;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    padding: 10px 14px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 14px;
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
-  .form-group input:focus {
-    border-color: var(--wu-blue);
-    box-shadow: 0 0 0 3px rgba(0,60,120,0.07);
-  }
-
-  .auth-submit {
-    width: 100%;
-    background: var(--wu-blue);
-    color: #fff;
-    border: none;
-    padding: 12px 22px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.2s;
-    margin-top: 8px;
-  }
-
-  .auth-submit:hover    { background: var(--wu-blue2); }
-  .auth-submit:disabled { background: var(--border2); cursor: not-allowed; }
-
-  .auth-error {
-    display: none;
-    background: var(--red-bg);
-    border-left: 4px solid var(--red);
-    color: var(--red);
-    padding: 11px 14px;
-    font-size: 13px;
-    margin-bottom: 18px;
-    line-height: 1.5;
-  }
-
-  .auth-success {
-    display: none;
-    background: var(--green-bg);
-    border-left: 4px solid var(--green);
-    color: var(--green);
-    padding: 11px 14px;
-    font-size: 13px;
-    margin-bottom: 18px;
-    line-height: 1.5;
-  }
-
-  .auth-step        { display: none; }
-  .auth-step.active { display: block; }
-
-  .auth-footer-note {
-    margin-top: 24px;
-    font-size: 12px;
-    color: var(--text-dim);
-    text-align: center;
-    line-height: 1.8;
-  }
-
-  .auth-footer-note a { color: var(--wu-blue); text-decoration: none; font-weight: 500; }
-  .auth-footer-note a:hover { text-decoration: underline; }
-
-  .btn-spinner {
-    display: inline-block;
-    width: 12px; height: 12px;
-    border: 2px solid rgba(255,255,255,0.4);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: btnSpin 0.7s linear infinite;
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-  @keyframes btnSpin { to { transform: rotate(360deg); } }
-
-  @media (max-width: 500px) {
-    .auth-card  { padding: 28px 20px 36px; }
-    .auth-title { font-size: 22px; }
-  }
-</style>
+<!-- Shared auth utilities -->
+<script src="auth-pages.js"></script>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
   <div class="nav-left">
     <div class="nav-partners">
@@ -188,7 +40,6 @@
   <span class="m-page-label">Sign In</span>
 </nav>
 
-<!-- PAGE TABS -->
 <div class="page-tabs">
   <button class="page-tab" onclick="window.location.href='../public/index.html'">Overview</button>
   <button class="page-tab" onclick="window.location.href='../public/leaderboard.html'">Leaderboard</button>
@@ -198,23 +49,20 @@
   <button class="page-tab active">Sign In</button>
 </div>
 
-<!-- MAIN CONTENT -->
 <div class="auth-wrapper">
   <div class="auth-card">
     <div class="auth-eyebrow">Submission Portal</div>
     <div class="auth-title">Sign In</div>
-    <div class="auth-subtitle">
-      Access your benchmark submissions and contribute new tasks.
-    </div>
+    <div class="auth-subtitle">Access your benchmark submissions and contribute new tasks.</div>
 
-    <div class="auth-error"   id="authError"></div>
-    <div class="auth-success" id="authSuccess"></div>
+    <div class="auth-msg" id="authError"></div>
+    <div class="auth-msg" id="authSuccess"></div>
 
-    <!-- STEP 1 — Email + Password -->
+    <!-- Step 1 — email + password -->
     <div class="auth-step active" id="stepCredentials">
       <div class="form-group">
         <label>Email Address</label>
-        <input autocomplete="email" id="emailInput" placeholder="your@email.com" type="email"/>
+        <input autocomplete="email" id="emailInput" placeholder="your@institution.ac.at" type="email"/>
       </div>
       <div class="form-group">
         <label>Password</label>
@@ -223,26 +71,26 @@
       <button class="auth-submit" id="signInBtn" onclick="handleSignIn()">Sign In</button>
     </div>
 
-    <!-- STEP 2 — Verification code (if Clerk requires MFA) -->
+    <!-- Step 2 — new-device verification code -->
     <div class="auth-step" id="stepCode">
-      <p style="font-family:'Source Serif 4',serif;font-size:14px;color:var(--text-muted);margin-bottom:22px;line-height:1.6;">
-        A verification code has been sent to your email address. Enter it below to continue.
-      </p>
+      <div class="auth-msg" id="codeInfoMsg">
+        You are signing in from a new device. A 6-digit verification code
+        has been sent to your email address. Enter it below to continue.
+      </div>
       <div class="form-group">
         <label>Verification Code</label>
-        <input
-          autocomplete="one-time-code"
-          id="codeInput"
-          inputmode="numeric"
-          maxlength="6"
-          placeholder="6-digit code"
-          style="letter-spacing:0.2em;font-family:'IBM Plex Mono',monospace;font-size:18px;"
-          type="text"
-        />
+        <input class="code-input" id="codeInput" inputmode="numeric" maxlength="6"
+               placeholder="— — — — — —" type="text" autocomplete="one-time-code"/>
       </div>
       <button class="auth-submit" id="verifyBtn" onclick="handleVerifyCode()">
         Verify &amp; Sign In
       </button>
+      <div class="auth-resend">
+        Didn't receive it? &nbsp;
+        <a onclick="handleResendCode();return false;">Resend code</a>
+        &nbsp;·&nbsp;
+        <a onclick="goBack();return false;">Go back</a>
+      </div>
     </div>
 
     <div class="auth-footer-note">
@@ -252,7 +100,6 @@
   </div>
 </div>
 
-<!-- FOOTER -->
 <footer>
   <div class="footer-top">
     <div>
@@ -266,129 +113,115 @@
 </footer>
 
 <script>
-  let signInAttempt = null;
+  var signInAttempt = null;
 
-  // Redirect if already signed in
-  window.addEventListener('load', async () => {
-    try {
+  // Initialise
+  window.addEventListener('load', function() {
+    waitForClerk(async function() {
       await window.Clerk.load();
-      if (window.Clerk.user) {
-        window.location.href = 'landing.html';
-      }
-    } catch (err) {
-      showError('Authentication service unavailable. Please refresh the page.');
-    }
+      if (window.Clerk.user) { window.location.href = 'landing.html'; }
+    });
   });
 
-  // Allow Enter key to submit
-  document.getElementById('passwordInput').addEventListener('keydown', e => {
+  // Enter key shortcuts
+  document.getElementById('passwordInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') handleSignIn();
   });
-  document.getElementById('codeInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') handleVerifyCode();
-  });
+  setupCodeInput('codeInput', handleVerifyCode);
 
+  // Step 1 — sign in
   async function handleSignIn() {
-    hideMessages();
-    const email    = document.getElementById('emailInput').value.trim();
-    const password = document.getElementById('passwordInput').value;
-    if (!email || !password) {
-      showError('Please enter your email address and password.');
-      return;
-    }
-    setLoading('signInBtn', true, 'Signing in…');
+    hideMessages(['authError', 'authSuccess']);
+    var email    = document.getElementById('emailInput').value.trim();
+    var password = document.getElementById('passwordInput').value;
+    if (!email || !password) { showError('authError', 'Please enter your email address and password.'); return; }
+
+    setLoading('signInBtn', true, 'Signing in\u2026');
     try {
-      signInAttempt = await window.Clerk.client.signIn.create({
-        identifier: email,
-        password:   password,
-      });
+      await window.Clerk.load();
+      signInAttempt = await window.Clerk.client.signIn.create({ identifier: email, password: password });
+
       if (signInAttempt.status === 'complete') {
         await window.Clerk.setActive({ session: signInAttempt.createdSessionId });
-        showSuccess('Signed in successfully. Redirecting…');
-        setTimeout(() => window.location.href = 'landing.html', 800);
+        showSuccess('authSuccess', 'Signed in. Redirecting\u2026');
+        setTimeout(function() { window.location.href = 'landing.html'; }, 800);
+
       } else if (signInAttempt.status === 'needs_second_factor') {
+        await signInAttempt.prepareSecondFactor({ strategy: 'email_code' });
+        document.getElementById('codeInfoMsg').textContent =
+          'You are signing in from a new device. A 6-digit code has been sent to ' + email + '. Enter it below.';
         showStep('stepCode');
         setLoading('signInBtn', false, 'Sign In');
+        document.getElementById('codeInput').focus();
+
+      } else if (signInAttempt.status === 'needs_first_factor') {
+        await signInAttempt.prepareFirstFactor({ strategy: 'email_code' });
+        showStep('stepCode');
+        setLoading('signInBtn', false, 'Sign In');
+        document.getElementById('codeInput').focus();
+
       } else {
-        showError('Sign in failed. Please try again.');
+        showError('authError', 'Unexpected response. Please try again.');
         setLoading('signInBtn', false, 'Sign In');
       }
     } catch (err) {
       setLoading('signInBtn', false, 'Sign In');
-      handleClerkError(err);
+      handleClerkError(err, 'authError');
     }
   }
 
+  // Step 2 — verify code
   async function handleVerifyCode() {
-    hideMessages();
-    const code = document.getElementById('codeInput').value.trim();
-    if (!code) { showError('Please enter the verification code.'); return; }
-    setLoading('verifyBtn', true, 'Verifying…');
+    hideMessages(['authError', 'authSuccess']);
+    var code = document.getElementById('codeInput').value.trim();
+    if (!code || code.length < 6) { showError('authError', 'Please enter the complete 6-digit code.'); return; }
+
+    setLoading('verifyBtn', true, 'Verifying\u2026');
     try {
-      const result = await signInAttempt.attemptSecondFactor({
-        strategy: 'email_code',
-        code:     code,
-      });
+      var result;
+      if (signInAttempt.status === 'needs_second_factor') {
+        result = await signInAttempt.attemptSecondFactor({ strategy: 'email_code', code: code });
+      } else {
+        result = await signInAttempt.attemptFirstFactor({ strategy: 'email_code', code: code });
+      }
       if (result.status === 'complete') {
         await window.Clerk.setActive({ session: result.createdSessionId });
-        showSuccess('Verified. Redirecting…');
-        setTimeout(() => window.location.href = 'landing.html', 800);
+        showSuccess('authSuccess', 'Verified. Redirecting\u2026');
+        setTimeout(function() { window.location.href = 'landing.html'; }, 800);
       } else {
-        showError('Verification failed. Please try again.');
-        setLoading('verifyBtn', false, 'Verify & Sign In');
+        showError('authError', 'Verification incomplete. Please try again.');
+        setLoading('verifyBtn', false, 'Verify &amp; Sign In');
       }
     } catch (err) {
-      setLoading('verifyBtn', false, 'Verify & Sign In');
-      handleClerkError(err);
+      setLoading('verifyBtn', false, 'Verify &amp; Sign In');
+      document.getElementById('codeInput').value = '';
+      handleClerkError(err, 'authError');
     }
   }
 
-  function showStep(id) {
-    document.querySelectorAll('.auth-step').forEach(el => el.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+  // Resend code
+  async function handleResendCode() {
+    hideMessages(['authError', 'authSuccess']);
+    try {
+      if (signInAttempt.status === 'needs_second_factor') {
+        await signInAttempt.prepareSecondFactor({ strategy: 'email_code' });
+      } else {
+        await signInAttempt.prepareFirstFactor({ strategy: 'email_code' });
+      }
+      showSuccess('authSuccess', 'A new code has been sent to your email.');
+      document.getElementById('codeInput').value = '';
+      document.getElementById('codeInput').focus();
+    } catch (err) { showError('authError', 'Could not resend. Please refresh the page.'); }
   }
 
-  function setLoading(btnId, loading, label) {
-    const btn = document.getElementById(btnId);
-    btn.disabled = loading;
-    btn.innerHTML = loading ? `<span class="btn-spinner"></span>${label}` : label;
-  }
-
-  function showError(msg) {
-    const el = document.getElementById('authError');
-    el.textContent = msg;
-    el.style.display = 'block';
-    document.getElementById('authSuccess').style.display = 'none';
-  }
-
-  function showSuccess(msg) {
-    const el = document.getElementById('authSuccess');
-    el.textContent = msg;
-    el.style.display = 'block';
-    document.getElementById('authError').style.display = 'none';
-  }
-
-  function hideMessages() {
-    document.getElementById('authError').style.display   = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-  }
-
-  function handleClerkError(err) {
-    const msg = err?.errors?.[0]?.longMessage
-             || err?.errors?.[0]?.message
-             || err?.message
-             || 'Sign in failed. Please try again.';
-    if (msg.toLowerCase().includes('password') || msg.toLowerCase().includes('identifier')) {
-      showError('Incorrect email or password. Please try again.');
-    } else if (msg.toLowerCase().includes('too many')) {
-      showError('Too many attempts. Please wait a moment and try again.');
-    } else if (msg.toLowerCase().includes('not found')) {
-      showError('No account found with that email address. Please register first.');
-    } else {
-      showError(msg);
-    }
+  // Go back
+  function goBack() {
+    signInAttempt = null;
+    hideMessages(['authError', 'authSuccess']);
+    document.getElementById('codeInput').value = '';
+    showStep('stepCredentials');
+    document.getElementById('emailInput').focus();
   }
 </script>
-
 </body>
 </html>

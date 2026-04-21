@@ -606,3 +606,19 @@ async def global_exception_handler(request: Request, exc: Exception):
             "detail": "An unexpected error occurred. Please try again or contact the administrator."
         },
     )
+
+
+@app.get("/auth/check-domain", tags=["Auth"])
+async def check_domain(domain: str, db: Session = Depends(get_db)):
+    """
+    Public endpoint — checks if an email domain is in the allowed list.
+    Used by the register page to give instant feedback before creating an account.
+    """
+    from backend.models import AllowedDomain
+    allowed = db.query(AllowedDomain).filter_by(domain=domain.lower().strip()).first()
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Domain @{domain} is not authorised."
+        )
+    return {"ok": True, "domain": domain}

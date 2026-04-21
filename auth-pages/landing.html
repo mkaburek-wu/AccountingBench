@@ -8,269 +8,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
 
-<!-- Clerk JavaScript SDK — replace YOUR_PUBLISHABLE_KEY with your actual key -->
+<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
 <script
   async
   crossorigin="anonymous"
-  data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
+   data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
   src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
   type="text/javascript">
 </script>
 
-<style>
-  /* ── Page layout ── */
-  .private-page {
-    padding-top: 140px;
-    min-height: 100vh;
-    background: var(--bg);
-  }
-
-  /* ── Welcome hero ── */
-  .landing-hero {
-    background: var(--wu-blue);
-    padding: 44px 40px 48px;
-  }
-
-  .landing-hero-eyebrow {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.5);
-    margin-bottom: 10px;
-  }
-
-  .landing-hero-title {
-    font-size: clamp(24px, 4vw, 36px);
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: -0.8px;
-    margin-bottom: 8px;
-  }
-
-  .landing-hero-title span {
-    font-weight: 300;
-    color: rgba(255,255,255,0.75);
-  }
-
-  .landing-hero-sub {
-    font-family: 'Source Serif 4', serif;
-    font-style: italic;
-    font-size: 15px;
-    color: rgba(255,255,255,0.6);
-    max-width: 520px;
-    line-height: 1.7;
-    margin-bottom: 28px;
-  }
-
-  .landing-hero-actions {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-  }
-
-  .btn-sign-out {
-    background: transparent;
-    border: 1.5px solid rgba(255,255,255,0.3);
-    color: rgba(255,255,255,0.7);
-    padding: 9px 18px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-sign-out:hover {
-    border-color: rgba(255,255,255,0.6);
-    color: #fff;
-  }
-
-  /* ── Main content ── */
-  .landing-content {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 52px 40px;
-  }
-
-  /* ── Submission cards grid ── */
-  .submissions-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid var(--wu-blue);
-    flex-wrap: wrap;
-  }
-
-  .submissions-header-left {
-    display: flex;
-    align-items: baseline;
-    gap: 14px;
-  }
-
-  .submissions-count {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: var(--wu-blue);
-    letter-spacing: 0.15em;
-    opacity: 0.45;
-  }
-
-  .submissions-title {
-    font-weight: 700;
-    font-size: 22px;
-    letter-spacing: -0.5px;
-    color: var(--wu-blue);
-  }
-
-  .submissions-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
-  }
-
-  /* ── Individual submission card ── */
-  .submission-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--wu-blue);
-    padding: 20px 22px;
-    transition: box-shadow 0.2s;
-    position: relative;
-  }
-
-  .submission-card:hover {
-    box-shadow: 0 4px 16px rgba(0,60,120,0.1);
-  }
-
-  .submission-card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    gap: 10px;
-  }
-
-  .submission-date {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.04em;
-  }
-
-  .submission-status {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 3px 9px;
-  }
-
-  .status-done       { background: var(--green-bg);  color: var(--green); }
-  .status-processing { background: var(--amber-bg);  color: var(--amber); }
-  .status-pending    { background: var(--surface2);  color: var(--text-dim); }
-  .status-error      { background: var(--red-bg);    color: var(--red); }
-  .status-rejected   { background: var(--red-bg);    color: var(--red); }
-
-  .submission-category {
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    font-family: 'IBM Plex Mono', monospace;
-    margin-bottom: 8px;
-  }
-
-  .submission-prompt {
-    font-family: 'Source Serif 4', serif;
-    font-size: 13px;
-    color: var(--text);
-    line-height: 1.6;
-    margin-bottom: 14px;
-  }
-
-  /* Empty state */
-  .submissions-empty {
-    background: var(--surface);
-    border: 1.5px dashed var(--border2);
-    padding: 52px 28px;
-    text-align: center;
-    grid-column: 1 / -1;
-  }
-
-  .submissions-empty-icon {
-    font-size: 32px;
-    opacity: 0.3;
-    margin-bottom: 14px;
-  }
-
-  .submissions-empty-title {
-    font-weight: 700;
-    font-size: 16px;
-    color: var(--wu-blue);
-    margin-bottom: 8px;
-  }
-
-  .submissions-empty-text {
-    font-family: 'Source Serif 4', serif;
-    font-style: italic;
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 24px;
-    line-height: 1.6;
-  }
-
-  /* Loading skeleton */
-  .skeleton {
-    background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-    border-radius: 2px;
-  }
-
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  .skeleton-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--border);
-    padding: 20px 22px;
-  }
-
-  .skeleton-line {
-    height: 12px;
-    margin-bottom: 10px;
-  }
-
-  /* User name in hero */
-  #userName { color: rgba(255,255,255,0.85); }
-
-  @media (max-width: 768px) {
-    .landing-hero  { padding: 32px 16px 36px; }
-    .landing-content { padding: 28px 16px; }
-    .submissions-grid { grid-template-columns: 1fr; }
-  }
-</style>
+<!-- Shared auth utilities -->
+<script src="auth-pages.js"></script>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
   <div class="nav-left">
     <div class="nav-partners">
-      <a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank" title="WU Accounting &amp; Auditing">
+      <a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank">
         <img alt="WU Accounting &amp; Auditing" class="nav-partner-logo-wu" src="../public/img/wu-logo.png"/>
       </a>
-      <a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank" title="Board Service Center">
+      <a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank">
         <img alt="Board Service Center" class="nav-partner-logo-bsc" src="../public/img/bsc-logo.png"/>
       </a>
     </div>
@@ -282,7 +40,6 @@
   <span class="m-page-label">My Submissions</span>
 </nav>
 
-<!-- PAGE TABS -->
 <div class="page-tabs">
   <button class="page-tab" onclick="window.location.href='../public/index.html'">Overview</button>
   <button class="page-tab" onclick="window.location.href='../public/leaderboard.html'">Leaderboard</button>
@@ -292,26 +49,17 @@
   <button class="page-tab active">Portal</button>
 </div>
 
-<!-- PRIVATE PAGE -->
 <div class="private-page">
-
-  <!-- Welcome hero -->
   <div class="landing-hero">
     <div class="landing-hero-eyebrow">Submission Portal</div>
-    <div class="landing-hero-title">
-      Welcome back<span id="userName">.</span>
-    </div>
-    <div class="landing-hero-sub">
-      Contribute new accounting benchmark tasks and track their results below.
-      Each approved submission is averaged into the public leaderboard.
-    </div>
+    <div class="landing-hero-title">Welcome back<span id="userName">.</span></div>
+    <div class="landing-hero-sub">Contribute new accounting benchmark tasks and track their results below. Each approved submission is averaged into the public leaderboard.</div>
     <div class="landing-hero-actions">
       <a href="upload.html" class="btn-primary">+ Contribute New Task</a>
-      <button class="btn-sign-out" id="signOutBtn" onclick="handleSignOut()">Sign Out</button>
+      <button class="btn-sign-out" onclick="handleSignOut()">Sign Out</button>
     </div>
   </div>
 
-  <!-- Submissions list -->
   <div class="landing-content">
     <div class="submissions-header">
       <div class="submissions-header-left">
@@ -319,26 +67,21 @@
         <span class="submissions-title">Your Submissions</span>
       </div>
     </div>
-
     <div class="submissions-grid" id="submissionsGrid">
-      <!-- Skeleton loading cards -->
       <div class="skeleton-card">
-        <div class="skeleton skeleton-line" style="width:40%; margin-bottom:14px;"></div>
+        <div class="skeleton skeleton-line" style="width:40%;margin-bottom:14px;"></div>
         <div class="skeleton skeleton-line" style="width:100%;"></div>
         <div class="skeleton skeleton-line" style="width:80%;"></div>
-        <div class="skeleton skeleton-line" style="width:60%; margin-top:4px;"></div>
       </div>
       <div class="skeleton-card">
-        <div class="skeleton skeleton-line" style="width:40%; margin-bottom:14px;"></div>
+        <div class="skeleton skeleton-line" style="width:40%;margin-bottom:14px;"></div>
         <div class="skeleton skeleton-line" style="width:100%;"></div>
         <div class="skeleton skeleton-line" style="width:70%;"></div>
       </div>
     </div>
   </div>
-
 </div>
 
-<!-- FOOTER -->
 <footer>
   <div class="footer-top">
     <div>
@@ -352,135 +95,71 @@
 </footer>
 
 <script>
-  const API = 'http://localhost:8000';
-
-  // ── Session check and page load ──────────────────────────────────────────
-  window.addEventListener('load', async () => {
-    try {
+  window.addEventListener('load', function() {
+    waitForClerk(async function() {
       await window.Clerk.load();
-
-      // Redirect to sign-in if not authenticated
-      if (!window.Clerk.user) {
-        window.location.href = 'sign-in.html';
-        return;
-      }
-
-      // Show user's first name in the hero
-      const firstName = window.Clerk.user.firstName;
-      if (firstName) {
-        document.getElementById('userName').textContent = `, ${firstName}.`;
-      }
-
-      // Load submissions
+      // Only redirect if Clerk confirms no user — never redirect on API errors
+      if (!window.Clerk.user) { window.location.href = 'sign-in.html'; return; }
+      var firstName = window.Clerk.user.firstName;
+      if (firstName) { document.getElementById('userName').textContent = ', ' + firstName + '.'; }
       await loadSubmissions();
-
-    } catch (err) {
-      console.error('Error:', err);
-      window.location.href = 'sign-in.html';
-    }
+    });
   });
 
-  // ── Sign out ──────────────────────────────────────────────────────────────
   async function handleSignOut() {
-    await window.Clerk.signOut();
+    try { await window.Clerk.signOut(); } catch (e) { /* ignore */ }
     window.location.href = 'sign-in.html';
   }
 
-  // ── Fetch and render submissions ─────────────────────────────────────────
   async function loadSubmissions() {
-    const grid = document.getElementById('submissionsGrid');
-    const countEl = document.getElementById('submissionCount');
-
+    var grid    = document.getElementById('submissionsGrid');
+    var countEl = document.getElementById('submissionCount');
     try {
-      // Get the Clerk session token to send to the API
-      const token = await window.Clerk.session.getToken();
-
-      const res = await fetch(`${API}/submissions/mine`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include',
+      var token = await window.Clerk.session.getToken();
+      var res   = await fetch(API + '/submissions/mine', {
+        headers: { 'Authorization': 'Bearer ' + token }, credentials: 'include',
       });
 
-      if (res.status === 401 || res.status === 403) {
-        window.location.href = 'sign-in.html';
+      // Show error inline — never redirect on API errors
+      if (!res.ok) {
+        grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-title">Could not load submissions</div><div class="submissions-empty-text">Server returned ' + res.status + '. Make sure the server is running and refresh.</div></div>';
+        countEl.textContent = '0 submissions';
         return;
       }
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const submissions = await res.json();
-      countEl.textContent = `${submissions.length} submission${submissions.length !== 1 ? 's' : ''}`;
+      var submissions = await res.json();
+      countEl.textContent = submissions.length + ' submission' + (submissions.length !== 1 ? 's' : '');
 
       if (submissions.length === 0) {
-        grid.innerHTML = `
-          <div class="submissions-empty">
-            <div class="submissions-empty-icon">📋</div>
-            <div class="submissions-empty-title">No submissions yet</div>
-            <div class="submissions-empty-text">
-              Contribute your first accounting benchmark task to get started.
-            </div>
-            <a href="upload.html" class="btn-primary">Contribute New Task</a>
-          </div>`;
+        grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-icon">\uD83D\uDCCB</div><div class="submissions-empty-title">No submissions yet</div><div class="submissions-empty-text">Contribute your first accounting benchmark task to get started.</div><a href="upload.html" class="btn-primary">Contribute New Task</a></div>';
         return;
       }
 
-      grid.innerHTML = submissions.map(s => buildCard(s)).join('');
+      grid.innerHTML = submissions.map(buildCard).join('');
 
     } catch (err) {
       console.error('Failed to load submissions:', err);
-      grid.innerHTML = `
-        <div class="submissions-empty">
-          <div class="submissions-empty-title">Could not load submissions</div>
-          <div class="submissions-empty-text">Please refresh the page.</div>
-        </div>`;
+      grid.innerHTML = '<div class="submissions-empty"><div class="submissions-empty-title">Could not reach the server</div><div class="submissions-empty-text">Make sure the FastAPI server is running and refresh.</div></div>';
+      countEl.textContent = '0 submissions';
     }
   }
 
-  // ── Build a single submission card ────────────────────────────────────────
   function buildCard(s) {
-    const date = s.submitted_at
-      ? new Date(s.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-      : '—';
-
-    const statusLabels = {
-      pending:    'Pending',
-      processing: 'Processing',
-      done:       'Done',
-      error:      'Error',
-      rejected:   'Rejected',
-    };
-
-    const statusClass = `status-${s.status}`;
-    const statusLabel = statusLabels[s.status] || s.status;
-
-    const category = s.task_category
-      ? s.task_category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-      : '—';
-
-    const prompt = s.task_preview || 'Task details not available.';
-
-    const viewBtn = s.status === 'done'
-      ? `<a href="upload.html?submission=${s.id}" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>`
-      : '';
-
-    return `
-      <div class="submission-card">
-        <div class="submission-card-meta">
-          <span class="submission-date">${date}</span>
-          <span class="submission-status ${statusClass}">${statusLabel}</span>
-        </div>
-        <div class="submission-category">${category}</div>
-        <div class="submission-prompt">${escapeHtml(prompt)}</div>
-        ${viewBtn}
-      </div>`;
-  }
-
-  // ── Escape HTML to prevent XSS ────────────────────────────────────────────
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    var date = s.submitted_at
+      ? new Date(s.submitted_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+      : '\u2014';
+    var labels  = { pending:'Pending', processing:'Processing', done:'Done', error:'Error', rejected:'Rejected' };
+    var category = s.task_category ? s.task_category.replace(/_/g,' ').replace(/\b\w/g,function(l){return l.toUpperCase();}) : '\u2014';
+    var viewBtn  = s.status === 'done' ? '<a href="upload.html?submission=' + s.id + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>' : '';
+    return '<div class="submission-card">' +
+      '<div class="submission-card-meta">' +
+        '<span class="submission-date">' + escHtml(date) + '</span>' +
+        '<span class="submission-status status-' + escHtml(s.status) + '">' + escHtml(labels[s.status] || s.status) + '</span>' +
+      '</div>' +
+      '<div class="submission-category">' + escHtml(category) + '</div>' +
+      '<div class="submission-prompt">' + escHtml(s.task_preview || 'Task details not available.') + '</div>' +
+      viewBtn + '</div>';
   }
 </script>
-
 </body>
 </html>
