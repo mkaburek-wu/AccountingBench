@@ -1,11 +1,11 @@
-# AccountingBench — Developer Documentation
-
+# AccountingBench - Developer Documentation
 
 A Structured Benchmark for Systematic Evaluation of Large Language Models in Accounting Education and Professional Tasks
 
 Vienna University of Economics and Business (WU Vienna)
 
 Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and Information Systems
+
 
 
 ---
@@ -566,16 +566,60 @@ Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key. The `unpkg.com` CDN 
 
 ## 10. Remaining Implementation
 
-### Phase 4 — Admin Review Page
+### Phase 4 — Admin Task Review (via SQL)
 
-Build `auth-pages/admin.html` that:
+A dedicated admin UI page is planned for a later phase. In the meantime, tasks can be approved and rejected directly in the database using **DB Browser for SQLite** (free download at [sqlitebrowser.org](https://sqlitebrowser.org)).
 
-- Calls `GET /admin/tasks?status=pending` to list tasks awaiting review
-- Shows task details: question, answer type, gold answer, grading criteria, category
-- Shows model scores from `benchmark_outputs`
-- Has **Approve** and **Reject** buttons that call `POST /admin/tasks/{id}/approve` or `/reject`
-- Approved tasks have `is_public` set to `True` and appear in the public leaderboard
-- Add a link to `admin.html` in `landing.html` that only shows for the admin user
+Open `backend/accountingbench.db` in DB Browser, click the **Execute SQL** tab, and use the queries below.
+
+#### Find pending submissions
+
+```sql
+SELECT bt.question_id, bt.prompt, bt.category, bt.answer_type, s.status, s.submitted_at
+FROM submissions s
+JOIN benchmark_tasks bt ON bt.id = s.task_id
+WHERE bt.validation_status = 'pending'
+ORDER BY s.submitted_at DESC;
+```
+
+#### Approve a single task
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 1,
+    validation_status = 'approved',
+    validated_by = 'admin@wu.ac.at'
+WHERE question_id = 'usr_3a9f12';
+```
+
+Replace `usr_3a9f12` with the actual `question_id` from the query above, and `admin@wu.ac.at` with your email address.
+
+#### Reject a single task
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 0,
+    validation_status = 'rejected',
+    validated_by = 'admin@wu.ac.at'
+WHERE question_id = 'usr_3a9f12';
+```
+
+#### Approve all pending user submissions at once
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 1,
+    validation_status = 'approved',
+    validated_by = 'admin@wu.ac.at'
+WHERE source = 'user_submitted'
+AND validation_status = 'pending';
+```
+
+After running any query, click **Write Changes** in DB Browser to save.
+
+> **Effect of approval:** Setting `is_public = 1` causes the task to be included in the `GET /api/leaderboard` endpoint calculations automatically. No server restart is needed — the leaderboard query reads from the database on every request.
+
+> **Planned:** A proper `auth-pages/admin.html` page with Approve/Reject buttons will be built in a later phase. It will call the existing `POST /admin/tasks/{id}/approve` and `/reject` endpoints which are already implemented in `main.py`.
 
 ---
 
