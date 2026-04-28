@@ -32,7 +32,11 @@ from sqlalchemy.orm import sessionmaker
 from backend.models import Base
 
 # ── Load environment variables from .env ─────────────────────────────────────
-load_dotenv()
+#load_dotenv()
+
+from pathlib import Path
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 

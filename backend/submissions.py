@@ -305,8 +305,10 @@ async def prepare_submission(
     # ── 11. Trigger the pipeline as a background task ─────────────────────────
     # ⚠️  TESTING: uses dummy_pipeline which always returns 100%.
     # ⚠️  PRODUCTION: change this import to backend.processing.pipeline
-    from backend.processing.dummy_pipeline import run_pipeline
-  #  from backend.processing.pipeline import run_pipeline
+  #  from backend.processing.dummy_pipeline import run_pipeline
+    from backend.processing.pipeline import run_pipeline
+
+
     background_tasks.add_task(run_pipeline, submission.id)
 
     return {

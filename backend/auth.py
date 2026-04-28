@@ -42,7 +42,11 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import AllowedDomain, User
 
-load_dotenv()
+#load_dotenv()
+from pathlib import Path
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
 
 logger = logging.getLogger(__name__)
 

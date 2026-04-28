@@ -249,9 +249,12 @@
         } else if (data.status === 'error') {
           clearInterval(pollInterval);
           showError(data.error_message || null);
-        } else if (attempts >= 40) {
+        } else if (attempts >= 100) {
           clearInterval(pollInterval);
-          showError('The benchmark is taking longer than expected. Please check back later.');
+          showError(
+            'The benchmark is taking longer than expected. One or more models may still be running.' +
+            '<br><br><button class="btn-secondary" onclick="location.reload()" style="margin-top:8px;">Refresh to check again</button>'
+                  );
         }
 
       } catch (err) {
@@ -316,7 +319,7 @@
     document.getElementById('heroSub').textContent          =
       'Something went wrong while processing your task.';
     if (msg) {
-      document.getElementById('errorMsg').textContent = msg;
+      document.getElementById('errorMsg').innerHTML = msg;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }

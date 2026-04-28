@@ -40,13 +40,19 @@ from backend.models import Base, Settings
 from backend.auth import get_current_user, require_admin
 
 
-load_dotenv()
+#load_dotenv()
+from pathlib import Path
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
+# Show DEBUG logs only for the pipeline so we can see prompts and raw responses
+logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # ── Allowed origins for CORS ──────────────────────────────────────────────────

@@ -320,74 +320,102 @@
     }
     return true;
   }
-
+//
   // ── Submit — navigates to results.html on success ─────────────────────────
-  async function handleSubmit() {
-    hideMessages(['formError']);
-    if (!validateForm()) return;
+ async function handleSubmit() {
+  console.log('API =', typeof API, API);  // ← ADD THIS LINE
+  hideMessages(['formError']);
+  if (!validateForm()) return;
 
-    var btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    btn.textContent = 'Submitting\u2026';
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
 
-    try {
-      clerkToken = await window.Clerk.session.getToken();
-
-      var fd = new FormData();
-      fd.append('prompt',               document.getElementById('prompt').value.trim());
-      fd.append('answer_type',          document.getElementById('answerType').value);
-      fd.append('task_type',            document.getElementById('taskType').value);
-      fd.append('gold_answer',          document.getElementById('goldAnswer').value.trim());
-      fd.append('category',             document.getElementById('category').value);
-      fd.append('regulatory_framework', document.getElementById('regulatoryFramework').value);
-      fd.append('applicable_regulatory_year', document.getElementById('regulatoryYear').value);
-      fd.append('education_level',      document.getElementById('educationLevel').value);
-
-      var opts = {
-        options:          'options',
-        gradingCriteria:  'grading_criteria',
-        numericTolerance: 'numeric_tolerance',
-        context:          'context',
-        subcategory:      'subcategory',
-        notes:            'notes',
-      };
-      Object.keys(opts).forEach(function(elId) {
-        var el = document.getElementById(elId);
-        if (el && el.value && el.value.trim()) fd.append(opts[elId], el.value.trim());
-      });
-
-      var pdfFile   = document.getElementById('pdfFile').files[0];
-      var excelFile = document.getElementById('excelFile').files[0];
-      if (pdfFile)   fd.append('pdf_file',   pdfFile);
-      if (excelFile) fd.append('excel_file', excelFile);
-
-      var res = await fetch(API + '/submissions/prepare', {
-        method:      'POST',
-        headers:     { 'Authorization': 'Bearer ' + clerkToken },
-        body:        fd,
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        var err = await res.json().catch(function() { return {}; });
-        showError('formError', err.detail || 'Submission failed. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'Submit & Run Benchmark';
-        return;
-      }
-
-      var data = await res.json();
-
-      // Navigate to the dedicated results page — the script runs in the background
-      window.location.href = 'results.html?submission=' + data.submission_id;
-
-    } catch (err) {
-      console.error('Submit error:', err);
-      showError('formError', 'A network error occurred. Please check your connection and try again.');
+  try {
+    // Always refresh the token immediately before using it
+    if (!window.Clerk || !window.Clerk.session) {
+      showError('formError', 'Authentication not ready. Please wait a moment and try again.');
       btn.disabled = false;
       btn.textContent = 'Submit & Run Benchmark';
+      return;
     }
+
+    clerkToken = await window.Clerk.session.getToken();
+
+    if (!clerkToken) {
+      showError('formError', 'Could not get authentication token. Please refresh the page.');
+      btn.disabled = false;
+      btn.textContent = 'Submit & Run Benchmark';
+      return;
+    }
+
+    var fd = new FormData();
+    fd.append('prompt',               document.getElementById('prompt').value.trim());
+    fd.append('answer_type',          document.getElementById('answerType').value);
+    fd.append('task_type',            document.getElementById('taskType').value);
+    fd.append('gold_answer',          document.getElementById('goldAnswer').value.trim());
+    fd.append('category',             document.getElementById('category').value);
+    fd.append('regulatory_framework', document.getElementById('regulatoryFramework').value);
+    fd.append('applicable_regulatory_year', document.getElementById('regulatoryYear').value);
+    fd.append('education_level',      document.getElementById('educationLevel').value);
+
+    var opts = {
+      options:          'options',
+      gradingCriteria:  'grading_criteria',
+      numericTolerance: 'numeric_tolerance',
+      context:          'context',
+      subcategory:      'subcategory',
+      notes:            'notes',
+    };
+    Object.keys(opts).forEach(function(elId) {
+      var el = document.getElementById(elId);
+      if (el && el.value && el.value.trim()) fd.append(opts[elId], el.value.trim());
+    });
+
+    var pdfFile   = document.getElementById('pdfFile').files[0];
+    var excelFile = document.getElementById('excelFile').files[0];
+    if (pdfFile)   fd.append('pdf_file',   pdfFile);
+    if (excelFile) fd.append('excel_file', excelFile);
+
+    var res = await fetch(API + '/submissions/prepare', {
+      method:      'POST',
+      headers:     { 'Authorization': 'Bearer ' + clerkToken },
+      body:        fd,
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      var err = await res.json().catch(function() { return {}; });
+      showError('formError', 'Server error ' + res.status + ': ' + (err.detail || 'Submission failed. Please try again.'));
+      btn.disabled = false;
+      btn.textContent = 'Submit & Run Benchmark';
+      return;
+    }
+
+    var data = await res.json();
+    console.log('Submission response:', data);  // visible in DevTools console
+
+    if (!data.submission_id) {
+      showError('formError', 'Server did not return a submission ID. Response: ' + JSON.stringify(data));
+      btn.disabled = false;
+      btn.textContent = 'Submit & Run Benchmark';
+      return;
+    }
+
+    // Navigate to results page
+    window.location.replace('results.html?submission=' + data.submission_id);
+
+  } catch (err) {
+    console.error('Submit error:', err);
+    showError('formError', 'Error: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Submit & Run Benchmark';
   }
+}
+
+
+
+
 </script>
 </body>
 </html>
