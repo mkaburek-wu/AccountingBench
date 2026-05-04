@@ -123,7 +123,8 @@ function renderTicker() {
   const inner = document.getElementById('ticker-inner');
   if (!inner) return;
   // Build items once, then duplicate for seamless CSS loop
-  const items = BENCHMARK_RESULTS.map(m =>
+  const sorted = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
+  const items = sorted.map(m =>
     `<div class="ticker-item"><span class="ticker-dot" style="background:${m.color};"></span>` +
     `<span class="ticker-model">${m.name}</span> ` +
     `<span class="ticker-score">${m.overall}%</span> ` +
@@ -136,7 +137,8 @@ function renderTicker() {
 function renderOverviewLeaderboard() {
   const el = document.getElementById('overview-leaderboard');
   if (!el) return;
-  const rows = BENCHMARK_RESULTS.map((m, i) => {
+  const sorted = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
+  const rows = sorted.map((m, i) => {
     const rank = i + 1;
     const rc   = _rankColor(rank);
     const cls  = _rankClass(rank);
@@ -168,7 +170,8 @@ function renderOverviewLeaderboard() {
 function renderMobileLeaderboard() {
   const el = document.getElementById('mobile-leaderboard');
   if (!el) return;
-  el.innerHTML = BENCHMARK_RESULTS.map((m, i) => {
+  const sorted = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
+  el.innerHTML = sorted.map((m, i) => {
     const rank = i + 1;
     const rc   = _rankColor(rank);
     const rankCls = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
@@ -246,7 +249,8 @@ function renderHolisticMatrix() {
   ];
 
   // ── Rows ──────────────────────────────────────────────────
-  tbody.innerHTML = BENCHMARK_RESULTS.map(m => {
+  const sortedRows = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
+  tbody.innerHTML = sortedRows.map(m => {
     const cells = COL_KEYS.map(k => {
       const v = m[k];
       return `<td class="hm-cell"><span class="score-pill ${_scorePillClass(v)}">${v}%</span></td>`;
@@ -300,4 +304,104 @@ function renderTokenBars() {
       <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:${hex};text-align:right;">${m.tokTask.toLocaleString()}</div>
     </div>`;
   }).join('');
+}
+
+// ── Question Distribution donut + legend (dashboard) ─────────
+function renderQuestionDistribution() {
+  const donut  = document.getElementById('distDonut');
+  const legend = document.getElementById('dist-legend');
+  const center = document.getElementById('dist-center');
+  if (!donut || !legend) return;
+
+  const cats  = BENCHMARK_META.categories;
+  const total = cats.reduce((s, c) => s + c.tasks, 0);
+  const CIRC  = 352; // circumference of r=56 circle (2π×56 ≈ 352)
+  const GAP   = 2;   // gap between segments
+
+  // Update center label
+  if (center) center.textContent = total;
+
+  // Build donut segments
+  let offset = 0;
+  donut.querySelectorAll('.donut-seg').forEach(el => el.remove()); // clear old
+  cats.forEach((c, i) => {
+    const pct  = c.tasks / total;
+    const arc  = Math.round(pct * CIRC) - GAP;
+    const rest = CIRC - arc;
+    const seg  = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    seg.setAttribute('class', 'donut-seg');
+    seg.setAttribute('cx', '80');
+    seg.setAttribute('cy', '80');
+    seg.setAttribute('r', '56');
+    seg.setAttribute('fill', 'none');
+    seg.setAttribute('stroke', c.color);
+    seg.setAttribute('stroke-width', '28');
+    seg.setAttribute('stroke-dasharray', `${arc} ${rest + GAP}`);
+    seg.setAttribute('stroke-dashoffset', String(-offset));
+    seg.setAttribute('data-full', arc);
+    seg.setAttribute('data-offset', -offset);
+    seg.style.transition = `stroke-dasharray 1.1s cubic-bezier(0.4,0,0.2,1) ${i * 0.15}s`;
+    donut.insertBefore(seg, donut.lastElementChild); // insert before gap ring
+    offset += arc + GAP;
+  });
+
+  // Build legend
+  legend.innerHTML = cats.map(c => {
+    const pct = ((c.tasks / total) * 100).toFixed(1);
+    const nameHtml = c.labelShort
+      ? `<span class="dist-name-full">${c.label}</span><span class="dist-name-abbr">${c.labelShort}</span>`
+      : c.label;
+    return `<div class="dist-legend-item" style="--c:${c.color};">
+      <div class="dist-legend-bar" data-final-width="${pct}%" style="background:${c.color};width:${pct}%;"></div>
+      <div class="dist-legend-row">
+        <div class="dist-legend-dot" style="background:${c.color};"></div>
+        <span class="dist-legend-name">${nameHtml}</span>
+        <span class="dist-legend-count">${c.tasks}</span>
+      </div>
+      <div class="dist-legend-pct" style="color:${c.color};">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Dataset Composition tables (dashboard) ───────────────────
+function renderDatasetTables() {
+  const NOTE_MARKER = `<sup style="color:var(--wu-blue);font-weight:700;">*</sup>`;
+
+  function buildRows(items, total) {
+    return items.map(r => {
+      const pct = ((r.tasks / total) * 100).toFixed(1) + '%';
+      const lbl = r.note ? `${r.label} ${NOTE_MARKER}` : r.label;
+      return `<tr><td>${lbl}</td><td>${r.tasks}</td><td>${pct}</td></tr>`;
+    }).join('');
+  }
+
+  const T = BENCHMARK_META.totalTasks;
+
+  // Category table
+  const catTbody = document.getElementById('ds-category-tbody');
+  if (catTbody) catTbody.innerHTML = buildRows(BENCHMARK_META.categories, T);
+
+  // Task type table
+  const ttTbody = document.getElementById('ds-tasktype-tbody');
+  if (ttTbody) ttTbody.innerHTML = buildRows(BENCHMARK_META.taskTypes, T);
+
+  // Journal entry note
+  const noteEl = document.getElementById('ds-journal-note');
+  if (noteEl) noteEl.textContent = BENCHMARK_META.journalEntryNote;
+
+  // Question format table
+  const qfTbody = document.getElementById('ds-questionformat-tbody');
+  if (qfTbody) qfTbody.innerHTML = buildRows(BENCHMARK_META.questionFormats, T);
+
+  // Education level table
+  const eduTbody = document.getElementById('ds-education-tbody');
+  if (eduTbody) eduTbody.innerHTML = buildRows(BENCHMARK_META.educationLevels, T);
+
+  // Regulatory framework table
+  const regTbody = document.getElementById('ds-regulatory-tbody');
+  if (regTbody) regTbody.innerHTML = buildRows(BENCHMARK_META.regulatoryFrameworks_data, T);
+
+  // Dataset description text
+  const descEl = document.getElementById('ds-description');
+  if (descEl) descEl.textContent = `The dataset contains ${T} tasks curated from professional examination materials and university coursework. Each task is tagged by category, regulatory framework, education level, and answer type.`;
 }

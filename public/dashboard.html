@@ -81,23 +81,23 @@
 <div class="dashboard-grid">
 <div class="kpi-card kpi-card-v2">
 <div class="kpi-label">Top Overall Score</div>
-<div class="kpi-value" style="color:var(--gold);">72.2%</div>
-<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" style="width:72.2%;background:var(--gold);"></div></div>
+<div class="kpi-value" id="kpi-top-score" style="color:var(--gold);">—</div>
+<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" id="kpi-top-gauge" style="background:var(--gold);"></div></div>
 </div>
 <div class="kpi-card kpi-card-v2">
 <div class="kpi-label">Avg. Score (all models)</div>
-<div class="kpi-value" style="color:var(--wu-blue2);">56.5%</div>
-<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" style="width:56.5%;background:var(--wu-blue2);"></div></div>
+<div class="kpi-value" id="kpi-avg-score" style="color:var(--wu-blue2);">—</div>
+<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" id="kpi-avg-gauge" style="background:var(--wu-blue2);"></div></div>
 </div>
 <div class="kpi-card kpi-card-v2">
 <div class="kpi-label">Tasks in Benchmark</div>
-<div class="kpi-value" style="color:var(--wu-blue);">520</div>
+<div class="kpi-value" id="kpi-tasks" style="color:var(--wu-blue);">—</div>
 <div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" style="width:100%;background:var(--wu-blue);"></div></div>
 </div>
 <div class="kpi-card kpi-card-v2">
 <div class="kpi-label">Models Evaluated</div>
-<div class="kpi-value" style="color:var(--wu-blue);">10</div>
-<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" style="width:100%;background:var(--wu-blue2);"></div></div>
+<div class="kpi-value" id="kpi-models" style="color:var(--wu-blue);">—</div>
+<div class="kpi-gauge-wrap"><div class="kpi-gauge-fill" id="kpi-models-gauge" style="background:var(--wu-blue2);"></div></div>
 </div>
 </div>
 <!-- Question distribution -->
@@ -108,51 +108,17 @@
 <div class="donut-row" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-top:8px;">
 <div style="flex-shrink:0; position:relative; width:160px; height:160px;">
 <svg height="160" id="distDonut" style="transform:rotate(-90deg);" viewbox="0 0 160 160" width="160">
-<!-- Tax: 67.1% = 241.6° of 352 circumference -->
-<circle class="donut-seg" cx="80" cy="80" data-full="242" data-offset="0" fill="none" r="56" stroke="#003c78" stroke-dasharray="242 110" stroke-dashoffset="0" stroke-width="28" style="transition:stroke-dasharray 1.1s cubic-bezier(0.4,0,0.2,1);"></circle>
-<!-- Financial: 23.5% = 84.6° -->
-<circle class="donut-seg" cx="80" cy="80" data-full="83" data-offset="-242" fill="none" r="56" stroke="#0d7a4e" stroke-dasharray="83 269" stroke-dashoffset="-242" stroke-width="28" style="transition:stroke-dasharray 1.1s cubic-bezier(0.4,0,0.2,1) 0.15s;"></circle>
-<!-- Mgmt: 9.4% = 33.8° -->
-<circle class="donut-seg" cx="80" cy="80" data-full="33" data-offset="-325" fill="none" r="56" stroke="#166534" stroke-dasharray="33 319" stroke-dashoffset="-325" stroke-width="28" style="transition:stroke-dasharray 1.1s cubic-bezier(0.4,0,0.2,1) 0.3s;"></circle>
-<!-- Gap rings for clean separation -->
+<!-- Gap ring for clean separation — always last -->
 <circle cx="80" cy="80" fill="none" opacity="0.9" r="56" stroke="#fff" stroke-dasharray="1 5.9" stroke-width="2"></circle>
 </svg>
 <!-- Center label -->
 <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
-<div style="font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:700; color:var(--wu-blue); letter-spacing:-1px; line-height:1;">520</div>
+<div id="dist-center" style="font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:700; color:var(--wu-blue); letter-spacing:-1px; line-height:1;">—</div>
 <div style="font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-top:2px;">Tasks</div>
 </div>
 </div>
 <!-- Legend -->
-<div style="flex:1; min-width:120px; display:flex; flex-direction:column; gap:12px;">
-<div class="dist-legend-item" style="--c:#003c78;">
-<div class="dist-legend-bar" data-final-width="67.1%" style="background:#003c78; width:67.1%;"></div>
-<div class="dist-legend-row">
-<div class="dist-legend-dot" style="background:#003c78;"></div>
-<span class="dist-legend-name">Tax</span>
-<span class="dist-legend-count">349</span>
-</div>
-<div class="dist-legend-pct" style="color:#003c78;">67.1%</div>
-</div>
-<div class="dist-legend-item" style="--c:#0d7a4e;">
-<div class="dist-legend-bar" data-final-width="23.5%" style="background:#0d7a4e; width:23.5%;"></div>
-<div class="dist-legend-row">
-<div class="dist-legend-dot" style="background:#0d7a4e;"></div>
-<span class="dist-legend-name"><span class="dist-name-full">Financial Accounting</span><span class="dist-name-abbr">Fin. Acc.</span></span>
-<span class="dist-legend-count">122</span>
-</div>
-<div class="dist-legend-pct" style="color:#0d7a4e;">23.5%</div>
-</div>
-<div class="dist-legend-item" style="--c:#166534;">
-<div class="dist-legend-bar" data-final-width="9.4%" style="background:#166534; width:9.4%;"></div>
-<div class="dist-legend-row">
-<div class="dist-legend-dot" style="background:#166534;"></div>
-<span class="dist-legend-name"><span class="dist-name-full">Management Accounting</span><span class="dist-name-abbr">Mgmt. Acc.</span></span>
-<span class="dist-legend-count">49</span>
-</div>
-<div class="dist-legend-pct" style="color:#166534;">9.4%</div>
-</div>
-</div>
+<div id="dist-legend" style="flex:1; min-width:120px; display:flex; flex-direction:column; gap:12px;"></div>
 </div>
 </div>
 </div>
@@ -204,6 +170,8 @@
 <!-- CONFIDENCE CALIBRATION CHART -->
 <div class="dashboard-full"><div class="dash-card">
 <div class="dash-card-title">Confidence–Performance Calibration</div>
+<div class="dash-card-sub">AccountingBench score versus model confidence · bins with fewer than three observations are omitted.</div>
+
 
 
 <div style="position:relative; width:100%; overflow:hidden;">
@@ -221,47 +189,29 @@
 
 <!-- DATASET COMPOSITION TABLES -->
 <div class="section-header dash-section-mt"><span class="section-num">—</span><h2 class="section-title">Dataset Composition</h2></div>
-<p style="font-family:'Source Serif 4',serif; font-size:14px; color:var(--text-muted); line-height:1.8; max-width:720px; margin-bottom:28px;">The dataset contains 520 tasks curated from professional examination materials and university coursework. Each task is tagged by category, regulatory framework, education level, and answer type.</p>
+<p id="ds-description" style="font-family:'Source Serif 4',serif; font-size:14px; color:var(--text-muted); line-height:1.8; max-width:720px; margin-bottom:28px;"></p>
 <div class="dashboard-2col dashboard-2col-mb">
 <div class="dash-card">
 <div class="dash-card-title">Category &amp; Task Type</div>
 <table class="meth-table data-table">
 <thead><tr><th>Category</th><th>Tasks</th><th>Share</th></tr></thead>
-<tbody>
-<tr><td>Tax</td><td>349</td><td>67.1%</td></tr>
-<tr><td>Financial Accounting</td><td>122</td><td>23.5%</td></tr>
-<tr><td>Management Accounting</td><td>49</td><td>9.4%</td></tr>
-</tbody>
+<tbody id="ds-category-tbody"></tbody>
 </table>
 <table class="meth-table data-table" style="margin-top:16px;">
 <thead><tr><th>Task Type</th><th>Tasks</th><th>Share</th></tr></thead>
-<tbody>
-<tr><td>Interpretation of Law</td><td>441</td><td>84.8%</td></tr>
-<tr><td>Calculation</td><td>54</td><td>10.4%</td></tr>
-<tr><td>Journal Entry <sup style="color:var(--wu-blue);font-weight:700;">*</sup></td><td>25</td><td>4.8%</td></tr>
-</tbody>
+<tbody id="ds-tasktype-tbody"></tbody>
 </table>
-<div style="font-size:10px;color:var(--text-dim);margin-top:8px;font-family:'Source Serif 4',serif;font-style:italic;line-height:1.6;"><sup style="color:var(--wu-blue);font-weight:700;">*</sup> Of the 25 journal-entry tasks, 16 use a structured journal-entry question format; the remaining 9 are presented as open-text questions — hence the lower count (16) in the Question Format table.</div>
+<div style="font-size:10px;color:var(--text-dim);margin-top:8px;font-family:'Source Serif 4',serif;font-style:italic;line-height:1.6;"><sup style="color:var(--wu-blue);font-weight:700;">*</sup> <span id="ds-journal-note"></span></div>
 </div>
 <div class="dash-card">
 <div class="dash-card-title">Question Format &amp; Education Level</div>
 <table class="meth-table data-table">
 <thead><tr><th>Question Format</th><th>Tasks</th><th>Share</th></tr></thead>
-<tbody>
-<tr><td>Open Text</td><td>300</td><td>57.7%</td></tr>
-<tr><td>Multi-Choice</td><td>155</td><td>29.8%</td></tr>
-<tr><td>Single-Choice</td><td>41</td><td>7.9%</td></tr>
-<tr><td>Journal Entry <sup style="color:var(--wu-blue);font-weight:700;">*</sup></td><td>16</td><td>3.1%</td></tr>
-<tr><td>Open Numeric</td><td>8</td><td>1.5%</td></tr>
-</tbody>
+<tbody id="ds-questionformat-tbody"></tbody>
 </table>
 <table class="meth-table data-table" style="margin-top:16px;">
 <thead><tr><th>Education Level</th><th>Tasks</th><th>Share</th></tr></thead>
-<tbody>
-<tr><td>Professional Examinations</td><td>348</td><td>66.9%</td></tr>
-<tr><td>University Master's</td><td>116</td><td>22.3%</td></tr>
-<tr><td>Secondary Vocational</td><td>56</td><td>10.8%</td></tr>
-</tbody>
+<tbody id="ds-education-tbody"></tbody>
 </table>
 </div>
 </div>
@@ -269,15 +219,8 @@
 <div class="dash-card-title">Regulatory Framework Distribution</div>
 <table class="meth-table data-table">
 <thead><tr><th>Regulatory Framework</th><th>Tasks</th><th>Share</th></tr></thead>
-<tbody>
-<tr><td>Tax (Austrian Tax Law)</td><td>388</td><td>74.6%</td></tr>
-<tr><td>Mixed Accounting Framework</td><td>62</td><td>11.9%</td></tr>
-<tr><td>National GAAP</td><td>34</td><td>6.5%</td></tr>
-<tr><td>IFRS</td><td>25</td><td>4.8%</td></tr>
-<tr><td>Mixed: Accounting + Tax</td><td>11</td><td>2.1%</td></tr>
-</tbody>
+<tbody id="ds-regulatory-tbody"></tbody>
 </table>
-</div>
 </div>
 </div>
 
@@ -296,8 +239,24 @@
 <script src="data.js"></script>
 <script src="main.js"></script>
 <script>
+  // KPI cards — derived from BENCHMARK_RESULTS
+  const _scored = BENCHMARK_RESULTS.filter(m => m.overall > 0);
+  const _top    = [..._scored].sort((a, b) => b.overall - a.overall)[0];
+  const _avg    = _scored.reduce((s, m) => s + m.overall, 0) / _scored.length;
+  const _avgPct = Math.round(_avg * 10) / 10;
+
+  document.getElementById('kpi-top-score').textContent  = _top ? _top.overall + '%' : '—';
+  document.getElementById('kpi-top-gauge').style.width  = _top ? _top.overall + '%' : '0%';
+  document.getElementById('kpi-avg-score').textContent  = _avgPct + '%';
+  document.getElementById('kpi-avg-gauge').style.width  = _avgPct + '%';
+  document.getElementById('kpi-tasks').textContent      = BENCHMARK_META.totalTasks;
+  document.getElementById('kpi-models').textContent     = BENCHMARK_RESULTS.length;
+  document.getElementById('kpi-models-gauge').style.width = '100%';
+
   renderCostTable();
   renderTokenBars();
+  renderQuestionDistribution();
+  renderDatasetTables();
 </script>
 </body>
 </html>

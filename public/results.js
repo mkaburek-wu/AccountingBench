@@ -55,7 +55,48 @@ const BENCHMARK_META = {
   date:                 'March 2026',
   totalTasks:           520,
   regulatoryFrameworks: 5,
+
+  // ── Dataset composition ───────────────────────────────────
+  // Edit tasks counts only — percentages are computed automatically.
+
+  categories: [
+    { label: 'Tax',                   labelShort: null,         color: '#003c78', tasks: 349 },
+    { label: 'Financial Accounting',  labelShort: 'Fin. Acc.',  color: '#0d7a4e', tasks: 122 },
+    { label: 'Management Accounting', labelShort: 'Mgmt. Acc.', color: '#166534', tasks: 49  },
+  ],
+
+  taskTypes: [
+    { label: 'Interpretation of Law', tasks: 441 },
+    { label: 'Calculation',           tasks: 54  },
+    { label: 'Journal Entry',         tasks: 25, note: true },
+  ],
+
+  questionFormats: [
+    { label: 'Open Text',     tasks: 300 },
+    { label: 'Multi-Choice',  tasks: 155 },
+    { label: 'Single-Choice', tasks: 41  },
+    { label: 'Journal Entry', tasks: 16, note: true },
+    { label: 'Open Numeric',  tasks: 8   },
+  ],
+
+  educationLevels: [
+    { label: 'Professional Examinations', tasks: 348 },
+    { label: "University Master's",       tasks: 116 },
+    { label: 'Secondary Vocational',      tasks: 56  },
+  ],
+
+  regulatoryFrameworks_data: [
+    { label: 'Tax (Austrian Tax Law)',      tasks: 388 },
+    { label: 'Mixed Accounting Framework', tasks: 62  },
+    { label: 'National GAAP',              tasks: 34  },
+    { label: 'IFRS',                       tasks: 25  },
+    { label: 'Mixed: Accounting + Tax',    tasks: 11  },
+  ],
+
+  journalEntryNote: 'Of the 25 journal-entry tasks, 16 use a structured journal-entry question format; the remaining 9 are presented as open-text questions — hence the lower count (16) in the Question Format table.',
 };
+
+
 
 // ── Models — keep sorted by overall score descending ─────────
 const BENCHMARK_RESULTS = [
@@ -91,7 +132,7 @@ const BENCHMARK_RESULTS = [
     ],
   },
 
-  // ── 3. gpt-5.5 — TODO: fill in actual results ────────────────
+  // ── 3. gpt-5.5 — 
   {
     name: 'gpt-5.5', org: 'OpenAI', color: '#14532d',
     overall: 78.8, tax: 76.3, financial: 82.8, management: 86.2,
@@ -99,8 +140,12 @@ const BENCHMARK_RESULTS = [
     multiChoice: 93.2, openText: 71.9, singleChoice: 78.5, journalEntry: 75.3,
     austrianTax: 75.2, mixedAcc: 89.4, ugb: 81.9, ifrs: 100,
     eduProf: 75.9, eduMaster: 92.2, eduVoc: 69.0,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 0, speed: 0,
-    calib: [],
+    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 2128, speed: 82,
+    calib: [
+        {x:0.45,y:23.3,n:3},{x:0.55,y:35.0,n:14},{x:0.65,y:39.0,n:16},
+        {x:0.75,y:66.7,n:107},{x:0.85,y:79.9,n:213},{x:0.95,y:95.1,n:152},
+
+    ],
   },
 
   // ── 4. claude-opus-4-6 ───────────────────────────────────────
@@ -136,7 +181,7 @@ const BENCHMARK_RESULTS = [
     ],
   },
 
-  // ── 6. claude-opus-4-7 — TODO: fill in actual results ────────
+  // ── 6. claude-opus-4-7 — ─
   {
     name: 'claude-opus-4-7', org: 'Anthropic', color: '#1d4ed8',
     overall: 73.5, tax: 69.7, financial: 77.6, management: 91.6,
@@ -144,8 +189,13 @@ const BENCHMARK_RESULTS = [
     multiChoice: 91.5, openText: 63.7, singleChoice: 82.1, journalEntry: 74.5,
     austrianTax: 68.4, mixedAcc: 91.8, ugb: 80.4, ifrs: 99,
     eduProf: 70.0, eduMaster: 91.2, eduVoc: 60.2,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 0, speed: 0,
-    calib: [],
+    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 1917, speed: 50,
+    calib: [
+      {x:0.35,y:15.7,n:14},{x:0.45,y:31.8,n:11},{x:0.55,y:27.3,n:28},
+      {x:0.65,y:59.1,n:42},{x:0.75,y:67.5,n:116},{x:0.85,y:83.0,n:186},
+      {x:0.95,y:97.8,n:97},
+
+    ],
   },
 
   // ── 7. gpt-5-mini ────────────────────────────────────────────
@@ -228,7 +278,7 @@ const BENCHMARK_RESULTS = [
     ],
   },
 
-  // ── 12. Kimi-K2.6 — TODO: fill in actual results ─────────────
+  // ── 12. Kimi-K2.6 — 
   {
     name: 'Kimi-K2.6', org: 'Moonshot AI', color: '#7e22ce',
     overall: 55.6, tax: 45.6, financial: 71.5, management: 85.3,
@@ -236,8 +286,11 @@ const BENCHMARK_RESULTS = [
     multiChoice: 87.2, openText: 35.4, singleChoice: 76.9, journalEntry: 60.8,
     austrianTax: 45.6, mixedAcc: 85.2, ugb: 72.9, ifrs: 96.3,
     eduProf: 45.5, eduMaster: 87.4, eduVoc: 50.6,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 0, speed: 0,
-    calib: [],
+    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 26118, speed: 34,
+    calib: [
+      {x:0.55,y:17.0,n:5},{x:0.65,y:26,n:7},{x:0.75,y:18.4,n:19},
+      {x:0.85,y:37.2,n:218},{x:0.95,y:77.5,n:250},
+    ],
   },
 
   // ── 13. mercury-2 ────────────────────────────────────────────
