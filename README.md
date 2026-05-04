@@ -18,10 +18,11 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 4. [Authentication](#4-authentication)
 5. [Backend API Endpoints](#5-backend-api-endpoints)
 6. [Submission Pipeline](#6-submission-pipeline)
-7. [Frontend Pages](#7-frontend-pages)
-8. [Environment Setup](#8-environment-setup)
-9. [Clerk Configuration](#9-clerk-configuration)
-10. [Remaining Implementation](#10-remaining-implementation)
+7. [Batch Runner (`batch_run.py`)](#7-batch-runner-batch_runpy)
+8. [Frontend Pages](#8-frontend-pages)
+9. [Environment Setup](#9-environment-setup)
+10. [Clerk Configuration](#10-clerk-configuration)
+11. [Remaining Implementation](#11-remaining-implementation)
 
 ---
 
@@ -68,6 +69,9 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Upload form | ✅ Done | All task fields, file uploads, validation |
 | Results page | ✅ Done | Dedicated page, pulls from database, no re-run |
 | Dummy pipeline | ✅ Done | Always returns 100%, saves to database |
+| Real benchmark pipeline | ✅ Done | `pipeline.py` — parallel models, LLM judge, per-model timeouts |
+| Batch import + runner | ✅ Done | `batch_run.py` — Excel → DB → pipeline, parallelism control |
+| Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Admin review page | ⏳ Planned | Phase 4 |
 | Real benchmark script | ⏳ Planned | Phase 5 |
 | Live leaderboard | ⏳ Planned | Phase 5 |
@@ -82,6 +86,9 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 
 ```
 accountingbench/
+├── .env                           ← Environment variables (never commit)
+├── reset_db.py                    ← Utility: wipe all tasks/submissions from DB
+│
 ├── public/                        ← Public static site (served as-is)
 │   ├── index.html                 ← Overview / home page
 │   ├── leaderboard.html           ← Public leaderboard
@@ -94,7 +101,7 @@ accountingbench/
 │   └── img/                       ← Logos and images
 │
 ├── auth-pages/                    ← Private authenticated pages
-│   ├── auth-pages.js              ← Shared JS utilities
+│   ├── auth-pages.js              ← Shared JS utilities (API base URL here)
 │   ├── sign-in.html               ← Login page
 │   ├── register.html              ← Registration page
 │   ├── landing.html               ← User's submission history
@@ -108,7 +115,9 @@ accountingbench/
     ├── models.py                  ← 7 database table definitions
     ├── submissions.py             ← POST /submissions/prepare endpoint
     ├── import_tasks.py            ← One-time Excel → database migration
+    ├── batch_run.py               ← Batch import + pipeline runner (see §7)
     ├── processing/
+    │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
     │   └── dummy_pipeline.py      ← Test pipeline (always returns 100%)
     ├── migrations/                ← Alembic migration files
     │   └── versions/              ← Auto-generated migration scripts
@@ -326,28 +335,174 @@ When a user submits a task on `upload.html`, the following happens:
 
 ---
 
-### 6.3 Fixed Model List
+### 6.3 Pipeline Architecture (`pipeline.py`)
 
-The following 10 models are benchmarked for every submitted task:
+The real benchmark pipeline in `backend/processing/pipeline.py`:
+
+- Reads the task from `benchmark_tasks` by `submission.task_id`
+- Extracts attached PDF/file content and injects it into the prompt
+- Calls all models listed in `OPENAI_MODEL_LIST` in parallel via `ThreadPoolExecutor`
+- Each model runs 3 independent trials, then a consolidation call, then a judge call
+- Scoring: `single_choice`/`multi_choice` → SC/MC formula; `open_text`/`open_numeric`/`journal_entry` → LLM-as-judge
+- Writes one `benchmark_outputs` row per model
+- Handles timeouts, 404s (model not found), 429/500/503 (retried once after 5s)
+
+### 6.4 Model Configuration
+
+Models are configured via two `.env` variables:
+
+```
+OPENAI_MODEL_LIST=claude-opus-4-6,claude-sonnet-4-6,gpt-5.2,...
+MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_key": "...", "timeout": 300}, ...}
+```
+
+Supported `api_type` values: `openai_v1`, `anthropic_foundry`, `responses_api`.
+
+Each model entry can include a `"timeout"` key (seconds) to override the default 240s. This is important for slow models:
+
+```json
+"Kimi-K2.6": {
+    "api_type": "openai_v1",
+    "base_url": "https://...",
+    "api_key": "...",
+    "timeout": 600
+}
+```
+
+### 6.5 Fixed Model List
+
+The following models are benchmarked for every submitted task (configured via `OPENAI_MODEL_LIST` in `.env`):
 
 | Model |
 |---|
 | gpt-5.4 |
 | gpt-5.2 |
+| gpt-5.5 |
+| gpt-5-mini |
+| gpt-4o |
 | claude-opus-4-6 |
 | claude-sonnet-4-6 |
-| gpt-5-mini |
+| claude-opus-4-7 |
 | Mistral-Large-3 |
-| grok-4-fast |
-| gpt-4o |
-| DeepSeek-V3.2-2 |
+| grok-4-fast-reasoning |
+| DeepSeek-V3.2 |
+| Kimi-K2.6 |
 | mercury-2 |
 
 ---
 
-## 7. Frontend Pages
+## 7. Batch Runner (`batch_run.py`)
 
-### 7.1 Public Site (`public/`)
+`backend/batch_run.py` is a command-line tool for importing tasks from an Excel file and running the full benchmark pipeline on them. It is the primary tool for large-scale data ingestion during development and evaluation.
+
+### 7.1 Basic Usage
+
+Always run from the project root (`accountingbench/`):
+
+```bash
+python -m backend.batch_run --file backend\tasks.xlsx [options]
+```
+
+### 7.2 All Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--file` | *(required)* | Path to Excel file (must have a `Questions` sheet) |
+| `--sheet` | `Questions` | Sheet name to read from |
+| `--approved` | off | Mark tasks as `validation_status=approved` and `is_public=True` immediately |
+| `--skip-existing` | off | Skip tasks whose `question_id` is already in the database |
+| `--sequential` | off | Run tasks one at a time instead of in parallel |
+| `--max-workers` | `10` | Maximum number of tasks to run in parallel |
+| `--dry-run` | off | Parse the Excel file and print what would happen — no DB writes |
+| `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
+| `--user` | `batch_admin` | User ID to attribute submissions to |
+
+### 7.3 Common Commands
+
+```bash
+# Preview what would be imported (no writes)
+python -m backend.batch_run --file backend\tasks.xlsx --dry-run
+
+# Import and run all tasks, mark as approved, skip already-imported ones
+python -m backend.batch_run --file backend\tasks.xlsx --approved --skip-existing
+
+# Run sequentially (safest, lowest DB load)
+python -m backend.batch_run --file backend\tasks.xlsx --approved --sequential
+
+# Control parallelism explicitly
+python -m backend.batch_run --file backend\tasks.xlsx --approved --max-workers 4
+```
+
+### 7.4 Parallelism and DB Connection Limits
+
+The batch runner processes multiple tasks simultaneously. Each task runs all its models in parallel internally, so the total number of simultaneous DB connections is:
+
+```
+max_workers × number_of_models = simultaneous DB connections
+```
+
+The SQLite connection pool in `database.py` is configured with a maximum of **60 connections** (pool_size=20, max_overflow=40). Choose `--max-workers` accordingly:
+
+| Models | Recommended max-workers | Connections used |
+|---|---|---|
+| 3 | 15 | 45 |
+| 13 | 4 | 52 |
+
+> ⚠️ Never pass `--max-workers` higher than these values or you will hit connection pool timeouts. Never run 500+ tasks fully in parallel — use `--max-workers` to throttle throughput.
+
+### 7.5 Progress Logging
+
+The script logs `[X/N]` counters on every line so you can track exactly which task is running:
+
+```
+────────────────────────────────────────────────────────────
+  Task 3/20: 12008933_0003
+────────────────────────────────────────────────────────────
+[3/20]  ── Task: 12008933_0003 ──────────────────────────
+[3/20]  [RUN] 12008933_0003 → submission 42 — starting pipeline...
+[3/20]  [DONE] 12008933_0003 → submission 42 — pipeline complete.
+```
+
+In parallel mode the `[X/N]` prefix appears on every log line, making it possible to follow individual tasks even when output is interleaved.
+
+### 7.6 Debug Logging
+
+To see the full prompt sent to each model and the raw response, enable DEBUG logging by adding this line after the logger setup in `batch_run.py`:
+
+```python
+logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
+```
+
+This shows `[LLM→]` (prompt sent) and `[LLM←]` (raw response) lines for every model call. Remove or comment out this line to return to normal INFO logging.
+
+### 7.7 Attached Files
+
+If a task references a PDF, the script searches for it in this order:
+
+1. URLs — passed through unchanged
+2. Absolute paths — used as-is if the file exists
+3. Relative path under `--uploads-dir`
+4. Bare filename under `--uploads-dir`
+5. Recursive search under `--uploads-dir`
+6. Not found — warns and keeps the raw string
+
+PDF content is extracted and injected into the prompt as `DOKUMENT-INHALT (extrahiert):` before the question text.
+
+### 7.8 Resetting the Database
+
+During development, use `reset_db.py` to wipe all tasks, submissions, runs and outputs:
+
+```bash
+python reset_db.py
+```
+
+The script asks for confirmation before deleting anything. It preserves `settings`, `allowed_domains`, and `users` tables untouched.
+
+---
+
+## 8. Frontend Pages
+
+### 8.1 Public Site (`public/`)
 
 Five static HTML pages served directly. No authentication required. Navigation uses a blue page-tabs bar that switches between in-page sections using `showPage()` JavaScript calls. All five pages have a **Sign In** button added to the page-tabs bar that navigates to `auth-pages/sign-in.html`.
 
@@ -361,7 +516,7 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ---
 
-### 7.2 Auth Pages (`auth-pages/`)
+### 8.2 Auth Pages (`auth-pages/`)
 
 | File | Purpose |
 |---|---|
@@ -373,7 +528,7 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ---
 
-### 7.3 Shared JavaScript (`auth-pages.js`)
+### 8.3 Shared JavaScript (`auth-pages.js`)
 
 All shared utilities used across multiple auth pages are in `auth-pages/auth-pages.js`. This file is included in every auth page with a `<script src="auth-pages.js"></script>` tag.
 
@@ -392,9 +547,9 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 
 ---
 
-## 8. Environment Setup
+## 9. Environment Setup
 
-### 8.1 Prerequisites
+### 9.1 Prerequisites
 
 - Python 3.11 or newer
 - Node.js (for VS Code Live Server extension)
@@ -403,7 +558,7 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 
 ---
 
-### 8.2 Python Dependencies
+### 9.2 Python Dependencies
 
 Install all packages with:
 
@@ -415,7 +570,7 @@ python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
 
 ---
 
-### 8.3 Environment Variables (`.env`)
+### 9.3 Environment Variables (`.env`)
 
 Create `backend/.env` with the following variables:
 
@@ -428,7 +583,10 @@ Create `backend/.env` with the following variables:
 | `CLERK_JWKS_URL` | Optional. Set to override the auto-derived JWKS URL. |
 | `ADMIN_EMAIL` | Your own email address. Required for admin endpoints. |
 | `UPLOAD_DIR` | Path where uploaded files are saved. Default: `./uploads` |
-| `OPENAI_API_KEY` | OpenAI API key (needed by the real benchmark script). |
+| `OPENAI_MODEL_LIST` | Comma-separated list of model names to benchmark. |
+| `MODEL_REGISTRY_JSON` | JSON object mapping model names to API config (base_url, api_key, api_type, timeout). |
+| `BATCH_USER_ID` | User ID used for batch-imported submissions. Default: `batch_admin`. |
+| `BATCH_USER_EMAIL` | Email for the batch user. Default: `admin@wu.ac.at`. |
 | `STRIPE_SECRET_KEY` | Stripe secret key — Phase 7 only, leave blank for now. |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret — Phase 7 only, leave blank for now. |
 
@@ -450,7 +608,7 @@ STRIPE_WEBHOOK_SECRET=
 
 ---
 
-### 8.4 Database Initialisation (run once)
+### 9.4 Database Initialisation (run once)
 
 Run these commands from the root `accountingbench/` folder:
 
@@ -476,7 +634,7 @@ print('Done')
 
 ---
 
-### 8.5 Running the Server
+### 9.5 Running the Server
 
 Always run from the root `accountingbench/` folder — never from inside `backend/`:
 
@@ -490,7 +648,7 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
 
 ---
 
-### 8.6 Running the Frontend
+### 9.6 Running the Frontend
 
 1. Open the root `accountingbench/` folder in VS Code (not a subfolder).
 2. In the VS Code file explorer, navigate to `auth-pages/sign-in.html`.
@@ -501,7 +659,7 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
 
 ---
 
-### 8.7 Windows-Specific Notes
+### 9.7 Windows-Specific Notes
 
 - Always use `python -m uvicorn` and `python -m alembic` instead of bare `uvicorn` and `alembic`.
 - If your path contains spaces (e.g. `OneDrive - WU Wien`), use an absolute path in `DATABASE_URL` with forward slashes:
@@ -513,9 +671,9 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
 
 ---
 
-## 9. Clerk Configuration
+## 10. Clerk Configuration
 
-### 9.1 Dashboard Settings
+### 10.1 Dashboard Settings
 
 In the Clerk dashboard at [clerk.com](https://clerk.com), configure the following settings:
 
@@ -531,7 +689,7 @@ In the Clerk dashboard at [clerk.com](https://clerk.com), configure the followin
 
 ---
 
-### 9.2 JWT Template (Required)
+### 10.2 JWT Template (Required)
 
 Without the email claim in the JWT, the domain check in `auth.py` fails with a 403 error.
 
@@ -545,7 +703,7 @@ In the Clerk dashboard → **JWT Templates** → **session token**, add this cla
 
 ---
 
-### 9.3 HTML Page Configuration
+### 10.3 HTML Page Configuration
 
 Every auth page has two Clerk placeholders that must be replaced with actual values:
 
@@ -564,7 +722,7 @@ Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key. The `unpkg.com` CDN 
 
 ---
 
-## 10. Remaining Implementation
+## 11. Remaining Implementation
 
 ### Phase 4 — Admin Task Review (via SQL)
 
@@ -623,28 +781,11 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 ---
 
-### Phase 5 — Real Benchmark Script
-
-Replace `dummy_pipeline.py` with `backend/processing/pipeline.py` that:
-
-- Reads the task from the `benchmark_tasks` table instead of an Excel file
-- Calls all 10 model APIs with 3 trials each using the existing prompt templates
-- Scores using the SC/MC formula for `single_choice` and `multi_choice` tasks
-- Calls the LLM judge (`gpt-5-mini`) for `open_text`, `open_numeric`, and `journal_entry` tasks
-- Writes results to `benchmark_runs` and `benchmark_outputs` tables
-- Keeps the same function signature: `run_pipeline(submission_id: int, db: Session = None) -> None`
-
-Then in `submissions.py`, change one import line to activate the real script:
-
-```python
-from backend.processing.pipeline import run_pipeline
-```
-
----
-
 ### Phase 5 — Live Leaderboard
 
 Update `public/main.js` to fetch from `GET /api/leaderboard` instead of reading from `data.js`. The endpoint is already implemented in `main.py` and returns data in the same format as the existing `lbData` array.
+
+> **Note:** The real benchmark pipeline (`pipeline.py`) and batch runner (`batch_run.py`) are already implemented. See §6 and §7 for details.
 
 ---
 
@@ -673,5 +814,5 @@ Add Stripe integration between form submission and pipeline triggering:
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.0 · April 2026*
+*AccountingBench Developer Documentation · Version 1.1 · April 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*
