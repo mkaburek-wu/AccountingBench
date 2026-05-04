@@ -554,7 +554,9 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
         api_key  = cfg.get("api_key")
         if not base_url or not api_key:
             raise RuntimeError(f"MODEL_REGISTRY entry for '{model}' missing base_url/api_key")
-        c = OpenAI(api_key=api_key, base_url=base_url, timeout=240.0)
+        # Allow per-model timeout override via MODEL_REGISTRY_JSON "timeout" key
+        timeout  = float(cfg.get("timeout", 240.0))
+        c = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0)
         CLIENT_CACHE[cache_key] = (c, "openai_v1")
         return CLIENT_CACHE[cache_key]
     if api_type == "anthropic_foundry":
@@ -568,6 +570,14 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
         CLIENT_CACHE[cache_key] = (c, "anthropic_foundry")
         return CLIENT_CACHE[cache_key]
     raise RuntimeError(f"Unsupported api_type for model '{model}': {api_type}")
+
+
+def _get_timeout_for_model(model: str) -> float:
+    """Return the configured timeout for a model (from MODEL_REGISTRY) or the default 240s."""
+    if MODEL_REGISTRY and model in MODEL_REGISTRY:
+        cfg = MODEL_REGISTRY.get(model) or {}
+        return float(cfg.get("timeout", 240.0))
+    return 240.0
 
 
 def usage_to_tokens(usage_obj: Any) -> Tuple[Optional[int], Optional[int], Optional[int]]:
@@ -615,13 +625,14 @@ def call_llm_json(
     logger.debug(f"[LLM→] model={model} | prompt ({len(prompt)} chars):\n{prompt}")
 
     # Anthropic via Azure Foundry
+    _timeout = _get_timeout_for_model(model)
     if api_mode == "anthropic_foundry":
         resp     = resolved_client.messages.create(
             model=model,
             system="Gib strikt nur JSON aus. Kein anderer Text.",
-            max_tokens=2048,
+            max_tokens=30000,
             messages=[{"role": "user", "content": prompt}],
-            timeout=120.0,
+            timeout=_timeout,
         )
         raw_text = resp.content[0].text if getattr(resp, "content", None) else ""
         text     = extract_json_object(raw_text)
@@ -667,14 +678,14 @@ def call_llm_json(
         }
         if reasoning_cfg:
             kwargs["reasoning"] = reasoning_cfg
-        resp     = resolved_client.responses.create(**kwargs, timeout=120.0)
+        resp     = resolved_client.responses.create(**kwargs, timeout=_timeout)
         raw_text = getattr(resp, "output_text", "") or ""
     else:
         # Chat completions
         if model == "gpt-5.2-chat":
             resp = resolved_client.chat.completions.create(
                 model=model,
-                timeout=120.0,
+                timeout=_timeout,
                 messages=[
                     {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
                     {"role": "user",   "content": prompt},
@@ -684,7 +695,7 @@ def call_llm_json(
             resp = resolved_client.chat.completions.create(
                 model=model,
                 temperature=temperature,
-                timeout=120.0,
+                timeout=_timeout,
                 messages=[
                     {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
                     {"role": "user",   "content": prompt},

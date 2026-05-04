@@ -60,6 +60,13 @@ if DATABASE_URL.startswith("sqlite"):
         DATABASE_URL,
         connect_args={"check_same_thread": False},
         echo=False,         # Set echo=True to print every SQL statement (useful for debugging)
+        # Increase pool limits for parallel batch runs.
+        # With N tasks × M models running in parallel, each thread needs its own
+        # DB connection. pool_size + max_overflow must exceed N × M.
+        # Default is pool_size=5, max_overflow=10 (max 15) — way too low.
+        pool_size=20,
+        max_overflow=80,    # Total max = 60 connections
+        pool_timeout=60,    # Wait up to 60s for a connection before failing
     )
 else:
     engine = create_engine(
