@@ -286,7 +286,7 @@ const BENCHMARK_RESULTS = [
     multiChoice: 87.2, openText: 35.4, singleChoice: 76.9, journalEntry: 60.8,
     austrianTax: 45.6, mixedAcc: 85.2, ugb: 72.9, ifrs: 96.3,
     eduProf: 45.5, eduMaster: 87.4, eduVoc: 50.6,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 26118, speed: 34,
+    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 13583, speed: 34,
     calib: [
       {x:0.55,y:17.0,n:5},{x:0.65,y:26,n:7},{x:0.75,y:18.4,n:19},
       {x:0.85,y:37.2,n:218},{x:0.95,y:77.5,n:250},
