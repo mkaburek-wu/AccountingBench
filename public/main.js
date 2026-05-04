@@ -519,8 +519,9 @@ function drawSpeedScatter() {
   const ml = 52, mr = 28, mt = 28, mb = 50;
   const pw = W - ml - mr, ph = H - mt - mb;
 
-  const validSpeeds = SPEED_MODELS_CLEAN.map(m => m.speed);
-  const validScores = SPEED_MODELS_CLEAN.map(m => m.score);
+  const validSpeeds = SPEED_MODELS_CLEAN.filter(m => m.speed > 0).map(m => m.speed);
+  const validScores = SPEED_MODELS_CLEAN.filter(m => m.speed > 0).map(m => m.score);
+  if (validSpeeds.length === 0) return; // no data yet
   const minSpeedLog = Math.log10(Math.min(...validSpeeds)) - 0.15;
   const maxSpeedLog = Math.log10(Math.max(...validSpeeds)) + 0.15;
   const minScore    = Math.min(...validScores) - 5;
@@ -568,7 +569,7 @@ function drawSpeedScatter() {
   ctx.fillText('Output Speed (tokens/sec, log scale)', ml + pw / 2, H - 3);
 
   speedPositions = [];
-  SPEED_MODELS_CLEAN.forEach(m => speedPositions.push({ m, x: toX(m.speed), y: toY(m.score) }));
+  SPEED_MODELS_CLEAN.filter(m => m.speed > 0).forEach(m => speedPositions.push({ m, x: toX(m.speed), y: toY(m.score) }));
 
   speedPositions.forEach(({ m, x, y }) => {
     ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);

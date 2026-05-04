@@ -332,7 +332,7 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 .heatmap-table tbody tr td:nth-child(5),
 .heatmap-table tbody tr td:nth-child(8),
 .heatmap-table tbody tr td:nth-child(12),
-.heatmap-table tbody tr td:nth-child(17) { border-right: 3px solid #7a90aa; }
+.heatmap-table tbody tr td:nth-child(16) { border-right: 3px solid #7a90aa; }
 
 .heatmap-table thead tr:first-child th:nth-child(2),
 .heatmap-table thead tr:first-child th:nth-child(3),
@@ -344,7 +344,7 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 .heatmap-table thead tr:last-child th:nth-child(4),
 .heatmap-table thead tr:last-child th:nth-child(7),
 .heatmap-table thead tr:last-child th:nth-child(11),
-.heatmap-table thead tr:last-child th:nth-child(16) { border-right: 3px solid #4a6a8a; }
+.heatmap-table thead tr:last-child th:nth-child(15) { border-right: 3px solid #4a6a8a; }
 
 /* Calc tooltip on heatmap header cells */
 .hm-calc-tip { cursor: help; }
@@ -416,9 +416,32 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 .dashboard-3col      { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 28px; }
 .dashboard-3col-single { grid-template-columns: minmax(0, 480px); justify-content: center; }
 .dash-card           { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--wu-blue); padding: 22px; }
+.dash-card-last      { margin-bottom: 28px; }
 .dash-card-title     { font-weight: 600; font-size: 13px; color: var(--wu-blue); margin-bottom: 3px; }
 .dash-card-sub       { font-size: 11px; color: var(--text-muted); margin-bottom: 18px; font-family: 'Source Serif 4', serif; font-style: italic; }
 .dash-card-question-distribution { width: 100%; }
+
+/* Holistic matrix caption */
+#hm-caption { font-size: 11px; color: var(--text-muted); font-style: italic; font-family: 'Source Serif 4', serif; margin-bottom: 10px; padding: 0 4px; }
+
+/* Token bar fills */
+.tok-bar-fill { height: 100%; transition: width 0.9s cubic-bezier(0.4,0,0.2,1) var(--tok-delay, 0s); }
+
+/* Mobile leaderboard container */
+#mobile-leaderboard { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+
+/* Heatmap wrap */
+.heatmap-wrap-inner { margin-top: 28px; overflow-x: auto; }
+.heatmap-table      { min-width: 1200px; }
+
+/* Dashboard spacing helpers */
+.dash-section-mt    { margin-top: 48px; }
+.dashboard-2col-mb  { margin-bottom: 20px; }
+.dashboard-full     { margin-bottom: 28px; } /* full-width chart card wrapper */
+.dash-section       { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizing: border-box; display: block; }
+
+/* Ensure dashboard section matches all other sections exactly */
+#page-dashboard > section { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
 
 .placeholder-card  { background: var(--surface); border: 1.5px dashed var(--border2); padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 180px; gap: 12px; }
 .placeholder-icon  { font-size: 28px; opacity: 0.4; }
@@ -723,7 +746,7 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 .ctrl-btn.active { background: var(--wu-blue); color: #fff; border-color: var(--wu-blue); }
 
 /* Sections */
-section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; }
+section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
 .full-sep      { border: none; border-top: 1px solid var(--border); margin: 0; }
 .section-header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 40px; padding-bottom: 16px; border-bottom: 2px solid var(--wu-blue); }
 .section-num   { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--wu-blue); letter-spacing: 0.15em; opacity: 0.45; }
@@ -1040,7 +1063,8 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; }
   #page-about .person-card .person-photo { width: 80px !important; flex-shrink: 0 !important; aspect-ratio: auto !important; height: 96px !important; }
   #page-about .person-card .person-info  { padding: 14px !important; flex: 1 !important; }
   #page-about .affil-inline { flex-direction: column !important; gap: 12px !important; padding: 18px 16px !important; }
-  #page-dashboard > section { padding-top: 24px !important; }
+  #page-dashboard > section,
+  #page-dashboard .dash-section { padding-top: 24px !important; }
   #page-home > section:nth-of-type(2) { padding: 24px 16px 28px !important; }
   section[style*="padding-top:36px"],
   section[style*="padding-top: 36px"],

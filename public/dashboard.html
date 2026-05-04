@@ -75,7 +75,7 @@
 <div class="mobile-page-hero">
 <h2>Analytics Dashboard</h2>
 </div>
-<section style="padding-top:36px;">
+<div class="dash-section">
 <div class="section-header"><span class="section-num">—</span><h2 class="section-title">Analytics Dashboard</h2></div>
 <!-- KPI row -->
 <div class="dashboard-grid">
@@ -156,7 +156,7 @@
 </div>
 </div>
 </div>
-<div class="dashboard-2col" style="margin-bottom:20px;">
+<div class="dashboard-2col dashboard-2col-mb">
 <div class="dash-card">
 <div class="dash-card-title">API Cost Analysis</div>
 <div class="dash-card-sub">Prices as of March 2026 · sorted by cost/task</div>
@@ -169,18 +169,7 @@
 <th style="text-align:right;font-size:11px;">Cost/Task</th>
 </tr>
 </thead>
-<tbody>
-<tr><td style="font-weight:600;font-size:13px;">claude-opus-4-6</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$5.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$25.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--red);">$0.0282</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">gpt-5.4</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$2.50</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$15.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--red);">$0.0239</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">gpt-5.2</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$1.75</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$14.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--red);">$0.0179</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">claude-sonnet-4-6</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$3.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$15.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--amber);">$0.0156</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">gpt-4o</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$2.50</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$10.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--amber);">$0.0032</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">gpt-5-mini</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.25</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$2.00</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--amber);">$0.0031</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">grok-4-fast</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.20</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.50</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--green);">$0.0012</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">Mistral-Large-3</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.50</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$1.50</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--green);">$0.0014</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">mercury-2</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.25</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.75</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--green);">$0.0009</td></tr>
-<tr><td style="font-weight:600;font-size:13px;">DeepSeek-V3.2-2</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.28</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;">$0.42</td><td style="font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;font-weight:700;color:var(--green);">$0.0003</td></tr>
-</tbody>
+<tbody id="cost-table-tbody"></tbody>
 </table>
 
 </div>
@@ -189,113 +178,22 @@
 <div class="dash-card-title">Avg. Token Usage per Task</div>
 <div class="dash-card-sub">Total input + output tokens · 1 trial per task</div>
 
-<div style="margin-top:16px;display:flex;flex-direction:column;gap:9px;">
+<div id="token-bars" style="margin-top:16px;display:flex;flex-direction:column;gap:9px;"></div>
 
-<!-- grok-4-fast: 2797 = 100% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">grok-4-fast</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:100%;height:100%;background:linear-gradient(90deg,#0f766e,rgba(15,118,110,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#0f766e;text-align:right;">2,797</div>
-</div>
-
-<!-- gpt-5.4: 1997 = 71.4% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">gpt-5.4</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:71.4%;height:100%;background:linear-gradient(90deg,#0d4a2a,rgba(13,74,42,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#0d4a2a;text-align:right;">1,997</div>
-</div>
-
-<!-- gpt-5-mini: 1975 = 70.6% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">gpt-5-mini</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:70.6%;height:100%;background:linear-gradient(90deg,#15803d,rgba(21,128,61,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#15803d;text-align:right;">1,975</div>
-</div>
-
-<!-- gpt-5.2: 1699 = 60.7% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">gpt-5.2</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:60.7%;height:100%;background:linear-gradient(90deg,#166534,rgba(22,101,52,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#166534;text-align:right;">1,699</div>
-</div>
-
-<!-- claude-opus-4-6: 1668 = 59.6% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">claude-opus-4-6</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:59.6%;height:100%;background:linear-gradient(90deg,#1e40af,rgba(30,64,175,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#1e40af;text-align:right;">1,668</div>
-</div>
-
-<!-- claude-sonnet: 1577 = 56.4% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">claude-sonnet-4-6</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:56.4%;height:100%;background:linear-gradient(90deg,#3b82f6,rgba(59,130,246,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#3b82f6;text-align:right;">1,577</div>
-</div>
-
-<!-- mercury-2: 1492 = 53.3% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">mercury-2</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:53.3%;height:100%;background:linear-gradient(90deg,#7c3aed,rgba(124,58,237,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#7c3aed;text-align:right;">1,492</div>
-</div>
-
-<!-- Mistral: 1272 = 45.5% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">Mistral-Large-3</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:45.5%;height:100%;background:linear-gradient(90deg,#c2410c,rgba(194,65,12,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#c2410c;text-align:right;">1,272</div>
-</div>
-
-<!-- DeepSeek: 904 = 32.3% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">DeepSeek-V3.2-2</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:32.3%;height:100%;background:linear-gradient(90deg,#4338ca,rgba(67,56,202,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#4338ca;text-align:right;">904</div>
-</div>
-
-<!-- gpt-4o: 681 = 24.3% -->
-<div style="display:flex;align-items:center;gap:12px;">
-  <div style="width:clamp(80px,28%,160px);flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);text-align:right;">gpt-4o</div>
-  <div style="flex:1;height:26px;background:var(--surface2);border-radius:2px;overflow:hidden;position:relative;">
-    <div class="tok-bar-fill" style="width:24.3%;height:100%;background:linear-gradient(90deg,#16a34a,rgba(22,163,74,0.5))"></div>
-  </div>
-  <div style="width:44px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#16a34a;text-align:right;">681</div>
-</div>
-
-</div>
 </div>
 </div>
 
 <!-- COST vs SCORE CHART -->
-<div class="dash-card" style="margin-bottom:28px;">
+<div class="dashboard-full"><div class="dash-card">
 <div class="dash-card-title">Cost-Efficiency: Score vs. Avg. Cost per Task</div>
 <div id="costScatterWrap" style="position:relative; width:100%; background:var(--surface2); border:1px solid var(--border); overflow:hidden;">
 <canvas id="costScatterCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
 <!-- results available: scatter renders automatically -->
 </div>
-</div>
+</div></div>
 
 <!-- SPEED vs SCORE CHART -->
-<div class="dash-card" style="margin-bottom:28px;">
+<div class="dashboard-full"><div class="dash-card">
 <div class="dash-card-title">Score vs. Output Speed</div>
 <div class="dash-card-sub">AccountingBench score vs. output tokens per second · Source: Artificial Analysis (March 2026)</div>
 <div id="speedScatterWrap" style="position:relative; width:100%; background:var(--surface2); border:1px solid var(--border); overflow:hidden;">
@@ -304,7 +202,7 @@
 
 </div>
 <!-- CONFIDENCE CALIBRATION CHART -->
-<div class="dash-card" style="margin-bottom:28px;">
+<div class="dashboard-full"><div class="dash-card">
 <div class="dash-card-title">Confidence–Performance Calibration</div>
 
 
@@ -318,13 +216,13 @@
 
 <!-- Hover tooltip -->
 <div id="calibTip" style="position:fixed;pointer-events:none;display:none;background:#1a1f2e;color:#fff;border-radius:4px;padding:9px 13px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;line-height:1.6;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:9999;border-top:3px solid #fff;"></div>
-</div>
+</div></div>
 <!-- FUTURE CHARTS PLACEHOLDER -->
 
 <!-- DATASET COMPOSITION TABLES -->
-<div class="section-header" style="margin-top:48px;"><span class="section-num">—</span><h2 class="section-title">Dataset Composition</h2></div>
+<div class="section-header dash-section-mt"><span class="section-num">—</span><h2 class="section-title">Dataset Composition</h2></div>
 <p style="font-family:'Source Serif 4',serif; font-size:14px; color:var(--text-muted); line-height:1.8; max-width:720px; margin-bottom:28px;">The dataset contains 520 tasks curated from professional examination materials and university coursework. Each task is tagged by category, regulatory framework, education level, and answer type.</p>
-<div class="dashboard-2col" style="margin-bottom:16px;">
+<div class="dashboard-2col dashboard-2col-mb">
 <div class="dash-card">
 <div class="dash-card-title">Category &amp; Task Type</div>
 <table class="meth-table data-table">
@@ -380,7 +278,7 @@
 </tbody>
 </table>
 </div>
-</section>
+</div>
 </div>
 
 <footer>
@@ -397,5 +295,9 @@
 <script src="results.js"></script>
 <script src="data.js"></script>
 <script src="main.js"></script>
+<script>
+  renderCostTable();
+  renderTokenBars();
+</script>
 </body>
 </html>
