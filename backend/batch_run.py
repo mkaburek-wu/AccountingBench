@@ -40,7 +40,6 @@ import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -52,6 +51,13 @@ load_dotenv(os.path.join(_root, ".env"))
 from backend.database import SessionLocal
 from backend.models import BenchmarkTask, Submission, User
 from backend.processing.pipeline import run_pipeline
+from backend.batch_utils import (
+    ensure_batch_user,
+    create_submission,
+    log_summary,
+    BATCH_USER_ID,
+    BATCH_USER_EMAIL,
+)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -62,10 +68,6 @@ logging.basicConfig(
 logger = logging.getLogger("batch_run")
 # Enable DEBUG logging for the pipeline (same as main.py does for the web server)
 #logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
-
-# ── Constants ─────────────────────────────────────────────────────────────────
-BATCH_USER_ID = os.environ.get("BATCH_USER_ID", "batch_admin")
-BATCH_USER_EMAIL = os.environ.get("BATCH_USER_EMAIL", "batch@accountingbench.local")
 
 # Default uploads folder — same as the web upload path
 DEFAULT_UPLOADS_DIR = os.path.join(_root, "backend", "uploads")
@@ -326,22 +328,6 @@ def upsert_task(db, row: pd.Series, approved: bool, user_id: str, uploads_dir: s
     return task
 
 
-def create_submission(db, task: BenchmarkTask, user_id: str) -> Submission:
-    """Create a new pending submission for the task."""
-    sub = Submission(
-        user_id      = user_id,
-        task_id      = task.id,
-        status       = "pending",
-        payment_status = "unpaid",
-        submitted_at = datetime.utcnow(),
-    )
-    db.add(sub)
-    db.commit()
-    db.refresh(sub)
-    logger.info(f"  Created submission {sub.id} for task {task.question_id}")
-    return sub
-
-
 def process_row(row: pd.Series, args, user_id: str, index: int = 0, total: int = 0) -> dict:
     """
     Full lifecycle for one Excel row:
@@ -456,34 +442,7 @@ def main():
             for future in as_completed(futures):
                 results.append(future.result())
 
-    # ── Summary ───────────────────────────────────────────────────────────────
-    logger.info("")
-    logger.info("=" * 60)
-    logger.info("BATCH RUN SUMMARY")
-    logger.info("=" * 60)
-
-    done     = [r for r in results if r["status"] == "done"]
-    skipped  = [r for r in results if r["status"] == "skipped"]
-    errors   = [r for r in results if r["status"] == "error"]
-
-    logger.info(f"  Total:   {len(results)}")
-    logger.info(f"  Done:    {len(done)}")
-    logger.info(f"  Skipped: {len(skipped)}")
-    logger.info(f"  Errors:  {len(errors)}")
-
-    if done:
-        logger.info("")
-        logger.info("Completed submissions:")
-        for r in done:
-            logger.info(f"  {r['question_id']} → submission {r['submission_id']}")
-
-    if errors:
-        logger.info("")
-        logger.info("Errors:")
-        for r in errors:
-            logger.info(f"  {r['question_id']}: {r['error']}")
-
-    logger.info("=" * 60)
+    log_summary(results, title="BATCH RUN SUMMARY")
 
 
 if __name__ == "__main__":
