@@ -55,7 +55,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # ── Path setup ────────────────────────────────────────────────────────────────
-_ROOT = Path(__file__).resolve().parent
+_ROOT     = Path(__file__).resolve().parent.parent  # accountingbench/ root
+_BACKEND  = Path(__file__).resolve().parent          # accountingbench/backend/
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -162,6 +163,10 @@ def main():
         help="Print what would run without writing to DB or calling APIs.",
     )
     parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Only process the first N tasks (useful for testing, e.g. --limit 1).",
+    )
+    parser.add_argument(
         "--user", default=os.environ.get("BATCH_USER_ID", "batch_admin"),
         help="User ID for created submissions (default: batch_admin).",
     )
@@ -202,6 +207,10 @@ def main():
 
     logger.info(f"Tasks to process:  {len(work_items)}")
     logger.info(f"Tasks skipped:     {skipped} (outputs already exist for all requested models)")
+
+    if args.limit:
+        work_items = work_items[:args.limit]
+        logger.info(f"Limiting to first:  {len(work_items)} task(s) (--limit {args.limit})")
 
     if not work_items:
         logger.info("Nothing to do — all requested models already have outputs for all tasks.")

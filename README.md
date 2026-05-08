@@ -19,10 +19,11 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 5. [Backend API Endpoints](#5-backend-api-endpoints)
 6. [Submission Pipeline](#6-submission-pipeline)
 7. [Batch Runner (`batch_run.py`)](#7-batch-runner-batch_runpy)
-8. [Frontend Pages](#8-frontend-pages)
-9. [Environment Setup](#9-environment-setup)
-10. [Clerk Configuration](#10-clerk-configuration)
-11. [Remaining Implementation](#11-remaining-implementation)
+8. [Model Re-run (`rerun_model.py`)](#8-model-re-run-rerun_modelpy)
+9. [Frontend Pages](#9-frontend-pages)
+10. [Environment Setup](#10-environment-setup)
+11. [Clerk Configuration](#11-clerk-configuration)
+12. [Remaining Implementation](#12-remaining-implementation)
 
 ---
 
@@ -71,9 +72,11 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Dummy pipeline | ✅ Done | Always returns 100%, saves to database |
 | Real benchmark pipeline | ✅ Done | `pipeline.py` — parallel models, LLM judge, per-model timeouts |
 | Batch import + runner | ✅ Done | `batch_run.py` — Excel → DB → pipeline, parallelism control |
+| Model re-run script | ✅ Done | `rerun_model.py` — run new models on existing DB tasks |
+| Shared batch utilities | ✅ Done | `batch_utils.py` — shared helpers for batch scripts |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
+| Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
 | Admin review page | ⏳ Planned | Phase 4 |
-| Real benchmark script | ⏳ Planned | Phase 5 |
 | Live leaderboard | ⏳ Planned | Phase 5 |
 | Deployment to Render | ⏳ Planned | Phase 6 |
 | Stripe payments | ⏳ Planned | Phase 7 |
@@ -90,14 +93,15 @@ accountingbench/
 ├── reset_db.py                    ← Utility: wipe all tasks/submissions from DB
 │
 ├── public/                        ← Public static site (served as-is)
-│   ├── index.html                 ← Overview / home page
+│   ├── index.html                 ← Overview / home page (fully dynamic)
 │   ├── leaderboard.html           ← Public leaderboard
-│   ├── dashboard.html             ← Analytics dashboard
+│   ├── dashboard.html             ← Analytics dashboard (fully dynamic)
 │   ├── methodology.html           ← Methodology explanation
-│   ├── about.html                 ← About the project
-│   ├── styles.css                 ← Global CSS (public + auth pages)
+│   ├── about.html                 ← About the project (5 team members)
+│   ├── styles.css                 ← Global CSS — all styles centralised here
 │   ├── main.js                    ← Public site JavaScript
-│   ├── data.js                    ← Hardcoded leaderboard data (temporary)
+│   ├── results.js                 ← Single source of truth for ALL benchmark data
+│   ├── data.js                    ← Derived data + DOM render functions
 │   └── img/                       ← Logos and images
 │
 ├── auth-pages/                    ← Private authenticated pages
@@ -116,6 +120,8 @@ accountingbench/
     ├── submissions.py             ← POST /submissions/prepare endpoint
     ├── import_tasks.py            ← One-time Excel → database migration
     ├── batch_run.py               ← Batch import + pipeline runner (see §7)
+    ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §8)
+    ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
     │   └── dummy_pipeline.py      ← Test pipeline (always returns 100%)
@@ -125,7 +131,6 @@ accountingbench/
     ├── uploads/                   ← User-uploaded files
     │   └── {user_id}/{sub_id}/    ← Per-submission file storage
     ├── alembic.ini                ← Alembic configuration
-    ├── .env                       ← Environment variables (never commit)
     └── requirements.txt           ← Python dependencies
 ```
 
@@ -500,9 +505,81 @@ The script asks for confirmation before deleting anything. It preserves `setting
 
 ---
 
-## 8. Frontend Pages
+## 8. Model Re-run (`rerun_model.py`)
 
-### 8.1 Public Site (`public/`)
+`backend/rerun_model.py` runs one or more **new** models against all tasks already in the database. Use this when you add a new model to your Azure deployment and want to benchmark it without re-importing everything from Excel.
+
+### 8.1 Key Differences from `batch_run.py`
+
+| | `batch_run.py` | `rerun_model.py` |
+|---|---|---|
+| Input | Excel file | DB directly (no file needed) |
+| Task selection | All rows in Excel | All tasks in DB |
+| Skip logic | Skips tasks already in DB | Skips tasks where model output already exists |
+| Model selection | All models in `OPENAI_MODEL_LIST` | Only the models you specify |
+| Use case | Initial import + full run | Add a new model to existing results |
+
+### 8.2 All Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--models` | *(required)* | Comma-separated model name(s) from `MODEL_REGISTRY_JSON` |
+| `--max-workers` | `10` | Max parallel tasks. Rule of thumb: `floor(50 / num_models)` |
+| `--sequential` | off | Run one task at a time |
+| `--dry-run` | off | Print plan without writing to DB or calling APIs |
+| `--limit` | off | Only process first N tasks (useful for testing) |
+| `--user` | `batch_admin` | User ID for created submissions |
+
+### 8.3 Common Commands
+
+```bash
+# Step 1 — always dry-run first to see what would happen (no API calls, no DB writes)
+python -m backend.rerun_model --models "Kimi-K2.6" --dry-run
+
+# Step 2 — test on exactly 1 task to verify the pipeline works end-to-end
+python -m backend.rerun_model --models "Kimi-K2.6" --limit 1 --sequential
+
+# Step 3 — run on all tasks (choose max-workers based on model count)
+python -m backend.rerun_model --models "Kimi-K2.6" --max-workers 15
+
+# Multiple models at once
+python -m backend.rerun_model --models "Kimi-K2.6,gpt-5.5" --max-workers 4
+
+# Safest option for large datasets
+python -m backend.rerun_model --models "Kimi-K2.6" --sequential
+```
+
+### 8.4 Recommended max-workers by model count
+
+| Models being re-run | Recommended max-workers | Connections used |
+|---|---|---|
+| 1 | 15 | 15 |
+| 3 | 15 | 45 |
+| 13 | 4 | 52 |
+
+### 8.5 How outputs are linked
+
+The script creates a new `Submission` row for each task with `task_id` pointing to the existing task. The pipeline then writes `benchmark_outputs` rows linked to that `task_id` — exactly the same as a normal run. The new model's results are fully integrated with all existing results in the database.
+
+### 8.6 Skip logic
+
+Before creating any submission, the script queries `benchmark_outputs` for existing rows matching the requested model(s). If all requested models already have outputs for a task, that task is skipped. Running the script twice for the same model is completely safe — the second run does nothing.
+
+### 8.7 Shared utilities (`batch_utils.py`)
+
+Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/batch_utils.py`:
+
+- `create_submission()` — creates a pending Submission row
+- `ensure_batch_user()` — creates the batch user in DB if missing
+- `get_existing_model_outputs()` — checks which models already have outputs for a task
+- `log_summary()` — standardised run summary
+- `BATCH_USER_ID` / `BATCH_USER_EMAIL` — shared constants
+
+---
+
+## 9. Frontend Pages
+
+### 9.1 Public Site (`public/`)
 
 Five static HTML pages served directly. No authentication required. Navigation uses a blue page-tabs bar that switches between in-page sections using `showPage()` JavaScript calls. All five pages have a **Sign In** button added to the page-tabs bar that navigates to `auth-pages/sign-in.html`.
 
@@ -516,7 +593,7 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ---
 
-### 8.2 Auth Pages (`auth-pages/`)
+### 9.2 Auth Pages (`auth-pages/`)
 
 | File | Purpose |
 |---|---|
@@ -528,7 +605,54 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ---
 
-### 8.3 Shared JavaScript (`auth-pages.js`)
+### 9.4 Public Site Data Layer (`results.js` + `data.js`)
+
+The public site is fully dynamic — all numbers, charts, tables, and leaderboards are driven from two files. **Never edit numbers directly in the HTML files.**
+
+#### `results.js` — single source of truth
+
+Contains `BENCHMARK_RESULTS` (one object per model) and `BENCHMARK_META` (dataset composition). To add a new model or update scores, edit only this file.
+
+**To add a new model:**
+1. Copy any existing model block
+2. Fill in all fields (see field reference at top of file)
+3. Insert at the correct position (sorted by `overall` descending)
+4. Everything updates automatically — ticker, leaderboard, holistic matrix, cost table, token bars, all charts
+
+**Key fields per model:**
+
+| Field | Description |
+|---|---|
+| `overall`, `tax`, `financial`, `management` | Category scores (%) |
+| `interpLaw`, `calculation`, `journal` | Task type scores (%) |
+| `multiChoice`, `openText`, `singleChoice`, `journalEntry` | Answer type scores (%) |
+| `austrianTax`, `mixedAcc`, `ugb`, `ifrs` | Regulatory framework scores (%) |
+| `eduProf`, `eduMaster`, `eduVoc` | Education level scores (%) |
+| `n` | Tasks completed, e.g. `'520'` or `'465/520'` |
+| `priceIn`, `priceOut` | Token prices in USD per 1M tokens |
+| `cost` | Pre-calculated avg cost per task in USD |
+| `tokTask` | Average tokens per task |
+| `speed` | Output tokens/sec |
+| `calib` | Confidence calibration points `[{x, y, n}]` |
+| `note` | Optional warning shown in leaderboard |
+
+**To update dataset composition** (`BENCHMARK_META.categories`, `taskTypes`, `questionFormats`, `educationLevels`, `regulatoryFrameworks_data`): change the `tasks` count — percentages recalculate automatically.
+
+#### `data.js` — render functions
+
+Contains all DOM render functions. These are called once on page load and build the entire UI from `BENCHMARK_RESULTS`. Do not edit unless changing layout or adding new visualisations.
+
+| Function | What it renders |
+|---|---|
+| `renderTicker()` | Scrolling score bar at the top |
+| `renderOverviewLeaderboard()` | Desktop leaderboard table (sorted by overall) |
+| `renderHolisticMatrix()` | Full results matrix with grouped headers |
+| `renderCostTable()` | API Cost Analysis table |
+| `renderTokenBars()` | Avg. Token Usage bar chart |
+| `renderQuestionDistribution()` | Donut chart + legend |
+| `renderDatasetTables()` | All dataset composition tables |
+
+---
 
 All shared utilities used across multiple auth pages are in `auth-pages/auth-pages.js`. This file is included in every auth page with a `<script src="auth-pages.js"></script>` tag.
 
@@ -547,9 +671,9 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 
 ---
 
-## 9. Environment Setup
+## 10. Environment Setup
 
-### 9.1 Prerequisites
+### 10.1 Prerequisites
 
 - Python 3.11 or newer
 - Node.js (for VS Code Live Server extension)
@@ -558,7 +682,7 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 
 ---
 
-### 9.2 Python Dependencies
+### 10.2 Python Dependencies
 
 Install all packages with:
 
@@ -570,7 +694,7 @@ python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
 
 ---
 
-### 9.3 Environment Variables (`.env`)
+### 10.3 Environment Variables (`.env`)
 
 Create `backend/.env` with the following variables:
 
@@ -608,7 +732,7 @@ STRIPE_WEBHOOK_SECRET=
 
 ---
 
-### 9.4 Database Initialisation (run once)
+### 10.4 Database Initialisation (run once)
 
 Run these commands from the root `accountingbench/` folder:
 
@@ -634,7 +758,7 @@ print('Done')
 
 ---
 
-### 9.5 Running the Server
+### 10.5 Running the Server
 
 Always run from the root `accountingbench/` folder — never from inside `backend/`:
 
@@ -648,7 +772,7 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
 
 ---
 
-### 9.6 Running the Frontend
+### 10.6 Running the Frontend
 
 1. Open the root `accountingbench/` folder in VS Code (not a subfolder).
 2. In the VS Code file explorer, navigate to `auth-pages/sign-in.html`.
@@ -659,21 +783,28 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
 
 ---
 
-### 9.7 Windows-Specific Notes
+### 10.7 Windows-Specific and macOS Notes
 
+**Windows:**
 - Always use `python -m uvicorn` and `python -m alembic` instead of bare `uvicorn` and `alembic`.
 - If your path contains spaces (e.g. `OneDrive - WU Wien`), use an absolute path in `DATABASE_URL` with forward slashes:
   ```
   DATABASE_URL=sqlite:///C:/Users/yourname/OneDrive - WU Wien/Dokumente/AccountingBench/backend/accountingbench.db
   ```
-- If SQLAlchemy cannot parse the URL due to spaces, use `database.py` to build the path with `os.path.join(__file__)` instead.
 - Always run Python commands from the root `accountingbench/` folder, not from inside `backend/`.
+
+**macOS:**
+- Use `python -m pip install <package>` instead of `pip install` to ensure packages install for the correct Python version (especially important if using pyenv).
+- For an absolute SQLite path, use 4 slashes: `sqlite:////Users/yourname/Documents/AccountingBench/backend/accountingbench.db`
+- To create a `.env` file (dotfiles are hidden in Finder), use Terminal: `touch .env` then edit in VS Code.
+- If you get `ModuleNotFoundError` for any package, always use `python -m pip install <package>` to guarantee it installs for the Python version returned by `python --version`.
+- Install all dependencies in one command: `python -m pip install fastapi uvicorn sqlalchemy alembic python-dotenv pyjwt cryptography httpx anthropic openai pandas openpyxl pymupdf python-multipart stripe requests`
 
 ---
 
-## 10. Clerk Configuration
+## 11. Clerk Configuration
 
-### 10.1 Dashboard Settings
+### 11.1 Dashboard Settings
 
 In the Clerk dashboard at [clerk.com](https://clerk.com), configure the following settings:
 
@@ -689,7 +820,7 @@ In the Clerk dashboard at [clerk.com](https://clerk.com), configure the followin
 
 ---
 
-### 10.2 JWT Template (Required)
+### 11.2 JWT Template (Required)
 
 Without the email claim in the JWT, the domain check in `auth.py` fails with a 403 error.
 
@@ -703,7 +834,7 @@ In the Clerk dashboard → **JWT Templates** → **session token**, add this cla
 
 ---
 
-### 10.3 HTML Page Configuration
+### 11.3 HTML Page Configuration
 
 Every auth page has two Clerk placeholders that must be replaced with actual values:
 
@@ -722,7 +853,7 @@ Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key. The `unpkg.com` CDN 
 
 ---
 
-## 11. Remaining Implementation
+## 12. Remaining Implementation
 
 ### Phase 4 — Admin Task Review (via SQL)
 
@@ -814,5 +945,5 @@ Add Stripe integration between form submission and pipeline triggering:
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.1 · April 2026*
+*AccountingBench Developer Documentation · Version 1.2 · May 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*
