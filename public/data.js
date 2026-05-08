@@ -286,7 +286,7 @@ function renderHolisticMatrix(eduKey) {
                   eduKey === 'prof' ? 'Professional Exams only' :
                   eduKey === 'master' ? "University Exams only" :
                   'Secondary Vocational only';
-    const nullNote = eduKey !== 'all' ? ' · — indicates no tasks in this combination' : '';
+    const nullNote = eduKey !== 'all' ? ' · Blank spaces indicate that there are no tasks in this combination' : '';
     caption.textContent = `Holistic results matrix · ${BENCHMARK_META.totalTasks} tasks · ${BENCHMARK_RESULTS.length} models · ${BENCHMARK_META.date} · ${label}${nullNote}`;
   }
 }
