@@ -433,9 +433,11 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 /* Mobile leaderboard container */
 #mobile-leaderboard { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 
-/* Heatmap wrap */
-.heatmap-wrap-inner { margin-top: 28px; overflow-x: auto; }
-.heatmap-table      { min-width: 1200px; }
+/* Heatmap filter bar */
+.hm-filter-bar        { display: flex; align-items: center; gap: 8px; padding: 14px 0 10px; flex-wrap: wrap; margin-top: 28px; }
+
+/* Null pill for missing education/category combinations */
+.score-pill.hm-null   { background: var(--surface2); color: var(--text-dim); font-size: 10px; }
 
 /* Dashboard spacing helpers */
 .dash-section-mt    { margin-top: 48px; }

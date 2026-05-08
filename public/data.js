@@ -197,10 +197,12 @@ function renderMobileLeaderboard() {
 }
 
 // ── Holistic matrix table (overview page) ────────────────────
-function renderHolisticMatrix() {
+function renderHolisticMatrix(eduKey) {
   const tbody  = document.getElementById('hm-tbody');
   const thead  = document.getElementById('hm-thead');
   if (!tbody) return;
+
+  eduKey = eduKey || 'all';
 
   // ── 2-row grouped header ──────────────────────────────────
   if (thead) {
@@ -235,12 +237,12 @@ function renderHolisticMatrix() {
           <div class="hm-calc-popup">The IFRS subset of the dataset is comparatively small (n = 25 tasks) and was drawn primarily from university-level teaching material. The near-ceiling performance reported should therefore not be read as evidence that LLMs handle IFRS reasoning reliably in general; the result is consistent with the high standardization and broad international documentation of IFRS, but the present item pool does not capture the full complexity of IFRS application in practice and has limited discriminative power for cross-model comparison. Expanding the IFRS subset with practice-grade items is a priority for the next iteration.</div>
         </th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Prof. Exams</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Master</th>
+        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">University Exams</th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Sec. Voc. School</th>
       </tr>`;
   }
 
-  // ── Column order matching the header above ────────────────
+  // ── Column order ─────────────────────────────────────────
   const COL_KEYS = [
     'overall',
     'tax', 'financial', 'management',
@@ -251,10 +253,27 @@ function renderHolisticMatrix() {
   ];
 
   // ── Rows ──────────────────────────────────────────────────
-  const sortedRows = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
-  tbody.innerHTML = sortedRows.map(m => {
+  const sorted = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
+  tbody.innerHTML = sorted.map(m => {
+    // Get source data — byEdu subset or full model
+    const src = (eduKey !== 'all' && m.byEdu && m.byEdu[eduKey]) ? m.byEdu[eduKey] : null;
+
     const cells = COL_KEYS.map(k => {
-      const v = m[k];
+      let v;
+      if (eduKey === 'all') {
+        // Use top-level fields
+        v = m[k];
+      } else {
+        // For edu columns always use top-level
+        if (k === 'eduProf')   v = m.eduProf;
+        else if (k === 'eduMaster') v = m.eduMaster;
+        else if (k === 'eduVoc')    v = m.eduVoc;
+        else v = src ? src[k] : null;
+      }
+
+      if (v === null || v === undefined) {
+        return `<td class="hm-cell"><span class="score-pill hm-null">—</span></td>`;
+      }
       return `<td class="hm-cell"><span class="score-pill ${_scorePillClass(v)}">${v}%</span></td>`;
     }).join('');
     return `<tr><td class="hm-model">${m.name}</td>${cells}</tr>`;
@@ -263,7 +282,12 @@ function renderHolisticMatrix() {
   // ── Caption ───────────────────────────────────────────────
   const caption = document.getElementById('hm-caption');
   if (caption) {
-    caption.textContent = `Holistic results matrix · ${BENCHMARK_META.totalTasks} tasks · ${BENCHMARK_RESULTS.length} models · ${BENCHMARK_META.date}`;
+    const label = eduKey === 'all' ? 'All tasks' :
+                  eduKey === 'prof' ? 'Professional Exams only' :
+                  eduKey === 'master' ? "University Exams only" :
+                  'Secondary Vocational only';
+    const nullNote = eduKey !== 'all' ? ' · — indicates no tasks in this combination' : '';
+    caption.textContent = `Holistic results matrix · ${BENCHMARK_META.totalTasks} tasks · ${BENCHMARK_RESULTS.length} models · ${BENCHMARK_META.date} · ${label}${nullNote}`;
   }
 }
 

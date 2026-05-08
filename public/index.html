@@ -117,6 +117,13 @@
 </div>
 <!-- HEATMAP merged -->
 <div class="heatmap-section-wrap">
+<div class="hm-filter-bar">
+  <span class="ctrl-label">Filter by Education Level:</span>
+  <button class="ctrl-btn active" onclick="setHmFilter('all', this)">All</button>
+  <button class="ctrl-btn" onclick="setHmFilter('prof', this)">Professional Exams</button>
+  <button class="ctrl-btn" onclick="setHmFilter('master', this)">University Exams</button>
+  <button class="ctrl-btn" onclick="setHmFilter('voc', this)">Secondary Vocational</button>
+</div>
 <div class="heatmap-wrap animate-on-scroll heatmap-wrap-inner">
 <div id="hm-caption"></div>
 <table class="heatmap-table">
@@ -173,7 +180,13 @@
   // Render all dynamic sections from data.js
   renderTicker();
   renderOverviewLeaderboard();
-  renderHolisticMatrix();
+  renderHolisticMatrix('all');
+
+  function setHmFilter(eduKey, btn) {
+    document.querySelectorAll('.hm-filter-bar .ctrl-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderHolisticMatrix(eduKey);
+  }
 </script>
 </body>
 </html>
