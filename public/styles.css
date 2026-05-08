@@ -424,6 +424,9 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
 /* Holistic matrix caption */
 #hm-caption { font-size: 11px; color: var(--text-muted); font-style: italic; font-family: 'Source Serif 4', serif; margin-bottom: 10px; padding: 0 4px; }
 
+/* Full-width lim-item spanning both columns (e.g. item 07) */
+.lim-item-full { grid-column: 1 / -1; border-right: none !important; padding-left: 0 !important; }
+
 /* Token bar fills */
 .tok-bar-fill { height: 100%; transition: width 0.9s cubic-bezier(0.4,0,0.2,1) var(--tok-delay, 0s); }
 

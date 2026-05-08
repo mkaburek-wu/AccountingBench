@@ -140,7 +140,7 @@ const BENCHMARK_RESULTS = [
     multiChoice: 93.2, openText: 71.9, singleChoice: 78.5, journalEntry: 75.3,
     austrianTax: 75.2, mixedAcc: 89.4, ugb: 81.9, ifrs: 100,
     eduProf: 75.9, eduMaster: 92.2, eduVoc: 69.0,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 2128, speed: 82,
+    n: '520', priceIn: 5.0, priceOut: 30.0, cost: 0.033763, tokTask: 1562, speed: 57,
     calib: [
         {x:0.45,y:23.3,n:3},{x:0.55,y:35.0,n:14},{x:0.65,y:39.0,n:16},
         {x:0.75,y:66.7,n:107},{x:0.85,y:79.9,n:213},{x:0.95,y:95.1,n:152},
@@ -189,7 +189,7 @@ const BENCHMARK_RESULTS = [
     multiChoice: 91.5, openText: 63.7, singleChoice: 82.1, journalEntry: 74.5,
     austrianTax: 68.4, mixedAcc: 91.8, ugb: 80.4, ifrs: 99,
     eduProf: 70.0, eduMaster: 91.2, eduVoc: 60.2,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 1917, speed: 50,
+    n: '520', priceIn: 5, priceOut: 25, cost: 0.028438, tokTask: 1917, speed: 37,
     calib: [
       {x:0.35,y:15.7,n:14},{x:0.45,y:31.8,n:11},{x:0.55,y:27.3,n:28},
       {x:0.65,y:59.1,n:42},{x:0.75,y:67.5,n:116},{x:0.85,y:83.0,n:186},
@@ -263,7 +263,7 @@ const BENCHMARK_RESULTS = [
 
   // ── 11. DeepSeek-V3.2-2 ──────────────────────────────────────
   {
-    name: 'DeepSeek-V3.2-2', org: 'DeepSeek', color: '#4338ca',
+    name: 'DeepSeek-V3.2', org: 'DeepSeek', color: '#4338ca',
     overall: 44.8, tax: 35.8, financial: 58.9, management: 74.1,
     interpLaw: 49.5, calculation: 12.4, journal: 32.7,
     multiChoice: 80.1, openText: 25.2, singleChoice: 65.0, journalEntry: 25.3,
@@ -286,7 +286,8 @@ const BENCHMARK_RESULTS = [
     multiChoice: 87.2, openText: 35.4, singleChoice: 76.9, journalEntry: 60.8,
     austrianTax: 45.6, mixedAcc: 85.2, ugb: 72.9, ifrs: 96.3,
     eduProf: 45.5, eduMaster: 87.4, eduVoc: 50.6,
-    n: '520', priceIn: null, priceOut: null, cost: 0, tokTask: 13583, speed: 34,
+    n: '517/520', priceIn: 0.95, priceOut: 4, cost: 0, tokTask: 0, speed: 41.7,
+    note: "3 task excluded (no final_answer). Scored on 517/520 tasks.",
     calib: [
       {x:0.55,y:17.0,n:5},{x:0.65,y:26,n:7},{x:0.75,y:18.4,n:19},
       {x:0.85,y:37.2,n:218},{x:0.95,y:77.5,n:250},

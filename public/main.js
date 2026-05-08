@@ -81,7 +81,6 @@ function renderLeaderboard(sortKey) {
       <div class="score-cat">${finVal}</div>
       <div class="score-cat">${mgmtVal}</div>
       <div class="score-cat">${taxVal}</div>
-      <div class="score-cat" style="font-size:10px;color:var(--text-dim);">${m.best}</div>
       <div class="score-cat" style="${nStyle}">${m.n}</div>
     </div>`;
   }).join('');

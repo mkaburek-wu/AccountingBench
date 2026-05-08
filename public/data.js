@@ -231,7 +231,9 @@ function renderHolisticMatrix() {
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Austrian Tax</th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Mixed Acc.</th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">National GAAP</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">IFRS</th>
+        <th style="background:#1a4f8a;font-size:9px;font-weight:400;position:relative;cursor:help;" class="hm-calc-tip">IFRS
+          <div class="hm-calc-popup">The IFRS subset of the dataset is comparatively small (n = 25 tasks) and was drawn primarily from university-level teaching material. The near-ceiling performance reported should therefore not be read as evidence that LLMs handle IFRS reasoning reliably in general; the result is consistent with the high standardization and broad international documentation of IFRS, but the present item pool does not capture the full complexity of IFRS application in practice and has limited discriminative power for cross-model comparison. Expanding the IFRS subset with practice-grade items is a priority for the next iteration.</div>
+        </th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Prof. Exams</th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Master</th>
         <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Sec. Voc. School</th>
