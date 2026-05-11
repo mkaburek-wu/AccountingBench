@@ -211,35 +211,35 @@ function renderHolisticMatrix(eduKey) {
       `<tr style="border-bottom:none;">
         <th rowspan="2" style="width:140px;vertical-align:bottom;">Model</th>
         <th style="text-align:center;">Overall</th>
-        <th colspan="3" style="text-align:center;background:#1a4f8a;">Category</th>
-        <th colspan="3" style="text-align:center;background:#1a4f8a;">Task Type</th>
-        <th colspan="4" style="text-align:center;background:#1a4f8a;">Answer Type</th>
-        <th colspan="4" style="text-align:center;background:#1a4f8a;">Reg. Framework</th>
-        <th colspan="3" style="text-align:center;background:#1a4f8a;">Education</th>
+        <th class="hm-th-group" colspan="3">Category</th>
+        <th class="hm-th-group" colspan="3">Task Type</th>
+        <th class="hm-th-group" colspan="4">Answer Type</th>
+        <th class="hm-th-group" colspan="4">Reg. Framework</th>
+        <th class="hm-th-group" colspan="3">Education</th>
       </tr>
       <tr>
         <th style="font-size:9px;"></th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Tax</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Fin. Acc.</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Mgmt. Acc.</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Interp. of Law</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;position:relative;cursor:help;" class="hm-calc-tip">Calculation
+        <th class="hm-th-sub">Tax</th>
+        <th class="hm-th-sub">Fin. Acc.</th>
+        <th class="hm-th-sub">Mgmt. Acc.</th>
+        <th class="hm-th-sub">Interp. of Law</th>
+        <th class="hm-th-sub hm-calc-tip">Calculation
           <div class="hm-calc-popup">The low calculation score is driven by task composition: 45 of 54 calculation items are open_text, which models struggle with. Performance is strong on multi_choice (~95%) and moderate on open_numeric (~59%).</div>
         </th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Journal Entry</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Multi Choice</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Open Text</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Single Choice</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Journal Entry</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Austrian Tax</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Mixed Acc.</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">National GAAP</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;position:relative;cursor:help;" class="hm-calc-tip">IFRS
+        <th class="hm-th-sub">Journal Entry</th>
+        <th class="hm-th-sub">Multi Choice</th>
+        <th class="hm-th-sub">Open Text</th>
+        <th class="hm-th-sub">Single Choice</th>
+        <th class="hm-th-sub">Journal Entry</th>
+        <th class="hm-th-sub">Austrian Tax</th>
+        <th class="hm-th-sub">Mixed Acc.</th>
+        <th class="hm-th-sub">National GAAP</th>
+        <th class="hm-th-sub hm-calc-tip">IFRS
           <div class="hm-calc-popup">The IFRS subset of the dataset is comparatively small (n = 25 tasks) and was drawn primarily from university-level teaching material. The near-ceiling performance reported should therefore not be read as evidence that LLMs handle IFRS reasoning reliably in general; the result is consistent with the high standardization and broad international documentation of IFRS, but the present item pool does not capture the full complexity of IFRS application in practice and has limited discriminative power for cross-model comparison. Expanding the IFRS subset with practice-grade items is a priority for the next iteration.</div>
         </th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Prof. Exams</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">University Exams</th>
-        <th style="background:#1a4f8a;font-size:9px;font-weight:400;">Sec. Voc. School</th>
+        <th class="hm-th-sub">Prof. Exams</th>
+        <th class="hm-th-sub">University Exams</th>
+        <th class="hm-th-sub">Sec. Voc. School</th>
       </tr>`;
   }
 

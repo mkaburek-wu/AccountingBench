@@ -92,10 +92,9 @@ function sortLeaderboard(key, btn) {
 
   const headers = document.querySelectorAll('#full-leaderboard .lh-cell');
   const colMap  = { overall:2, financial:3, management:4, tax:5 };
-  headers.forEach(h => { h.style.color = 'rgba(255,255,255,0.65)'; h.style.fontWeight = '500'; });
+  headers.forEach(h => h.classList.remove('lh-cell-active'));
   if (colMap[key] !== undefined && headers[colMap[key]]) {
-    headers[colMap[key]].style.color      = '#fff';
-    headers[colMap[key]].style.fontWeight = '700';
+    headers[colMap[key]].classList.add('lh-cell-active');
   }
   renderLeaderboard(key);
 }
@@ -257,29 +256,6 @@ function updateLegend() {
 
 // ===== DASHBOARD CHARTS =====
 
-function drawFrameworkChart() {
-  // Replaced by CSS/SVG fw-chart — no canvas needed
-}
-
-function drawDistChart() {
-  initDonutChart();
-}
-
-function initDonutChart() {
-  const segs = document.querySelectorAll('.donut-seg');
-  if (!segs.length) return;
-  segs.forEach(s => {
-    const dash = s.dataset.origDash || s.getAttribute('stroke-dasharray');
-    s.dataset.origDash = dash;
-    s.setAttribute('stroke-dasharray', dash);
-  });
-  document.querySelectorAll('.dist-legend-bar').forEach(b => {
-    const w = b.dataset.finalWidth || b.style.width;
-    b.dataset.finalWidth = w;
-    b.style.width = w;
-  });
-}
-
 // ===== SCROLL ANIMATIONS =====
 
 const observer = new IntersectionObserver(entries => {
@@ -288,6 +264,21 @@ const observer = new IntersectionObserver(entries => {
 document.querySelectorAll('.animate-on-scroll').forEach(el => observer.observe(el));
 
 window.addEventListener('DOMContentLoaded', () => {
+  // KPI gauge widths — must be set before the animation loop below reads el.style.width
+  if (document.getElementById('kpi-top-gauge')) {
+    const _scored = BENCHMARK_RESULTS.filter(m => m.overall > 0);
+    const _top    = [..._scored].sort((a, b) => b.overall - a.overall)[0];
+    const _avg    = _scored.reduce((s, m) => s + m.overall, 0) / _scored.length;
+    const _avgPct = Math.round(_avg * 10) / 10;
+    document.getElementById('kpi-top-score').textContent    = _top ? _top.overall + '%' : '—';
+    document.getElementById('kpi-top-gauge').style.width    = _top ? _top.overall + '%' : '0%';
+    document.getElementById('kpi-avg-score').textContent    = _avgPct + '%';
+    document.getElementById('kpi-avg-gauge').style.width    = _avgPct + '%';
+    document.getElementById('kpi-tasks').textContent        = BENCHMARK_META.totalTasks;
+    document.getElementById('kpi-models').textContent       = BENCHMARK_RESULTS.length;
+    document.getElementById('kpi-models-gauge').style.width = '100%';
+  }
+
   // fw-fills
   document.querySelectorAll('.fw-fill').forEach(el => {
     const w = el.style.getPropertyValue('--fw-w');
@@ -346,14 +337,11 @@ document.querySelectorAll('.chart-card, .leaderboard-container').forEach(el => b
 
 // ===== COST-EFFICIENCY SCATTER CHART =====
 
-let scatterTooltip  = null;
-let scatterPositions = [];
+// ── Shared scatter helpers ────────────────────────────────────
 
-function drawCostScatter() {
-  const canvas = document.getElementById('costScatterCanvas');
-  if (!canvas) return;
-  if (!SCATTER_MODELS.some(m => m.score !== null && m.cost !== null)) return;
-
+function _setupScatterCanvas(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -361,24 +349,11 @@ function drawCostScatter() {
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
-
   const ml = 52, mr = 28, mt = 28, mb = 50;
-  const pw = W - ml - mr, ph = H - mt - mb;
+  return { ctx, W, H, ml, mr, mt, mb, pw: W - ml - mr, ph: H - mt - mb };
+}
 
-  const validCosts  = SCATTER_MODELS.filter(m => m.cost).map(m => m.cost);
-  const validScores = SCATTER_MODELS.filter(m => m.score).map(m => m.score);
-  const minCostLog  = Math.log10(Math.min(...validCosts)) - 0.2;
-  const maxCostLog  = Math.log10(Math.max(...validCosts)) + 0.2;
-  const minScore    = Math.min(...validScores) - 5;
-  const maxScore    = Math.max(...validScores) + 6;
-
-  const toX = c => ml + ((Math.log10(c) - minCostLog) / (maxCostLog - minCostLog)) * pw;
-  const toY = s => mt + ((maxScore - s) / (maxScore - minScore)) * ph;
-
-  ctx.fillStyle = '#f0f2f6';
-  ctx.fillRect(ml, mt, pw, ph);
-
-  // Y gridlines
+function _drawScatterYGridlines(ctx, toY, minScore, maxScore, ml, pw) {
   [45, 50, 55, 60, 65, 70, 75].forEach(s => {
     if (s < minScore || s > maxScore) return;
     const y = toY(s), isMajor = (s === 50 || s === 70);
@@ -390,19 +365,19 @@ function drawCostScatter() {
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.fillText(s + '%', ml - 6, y);
   });
+}
 
-  // Y axis label
+function _drawScatterYLabel(ctx, mt, ph) {
   ctx.save(); ctx.translate(16, mt + ph / 2); ctx.rotate(-Math.PI / 2);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 12px IBM Plex Sans,sans-serif'; ctx.fillStyle = '#003c78';
   ctx.fillText('Score (%)', 0, 0); ctx.restore();
+}
 
-  // X ticks
-  const ticks  = [0.0003, 0.001, 0.003, 0.01, 0.03];
-  const tickL  = ['$0.0003', '$0.001', '$0.003', '$0.01', '$0.03'];
+function _drawScatterXTicks(ctx, ticks, tickLabels, toX, minLogX, maxLogX, mt, ph) {
   ticks.forEach((v, i) => {
     const logV = Math.log10(v);
-    if (logV < minCostLog || logV > maxCostLog) return;
+    if (logV < minLogX || logV > maxLogX) return;
     const x = toX(v);
     ctx.strokeStyle = 'rgba(0,60,120,0.13)'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(x, mt); ctx.lineTo(x, mt + ph); ctx.stroke();
@@ -410,30 +385,92 @@ function drawCostScatter() {
     ctx.beginPath(); ctx.moveTo(x, mt + ph); ctx.lineTo(x, mt + ph + 5); ctx.stroke();
     ctx.fillStyle = '#4a5568'; ctx.font = 'bold 9px IBM Plex Mono,monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(tickL[i], x, mt + ph + 8);
+    ctx.fillText(tickLabels[i], x, mt + ph + 8);
   });
+}
 
-  ctx.fillStyle = '#003c78'; ctx.font = 'bold 12px IBM Plex Sans,sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText('Cost per Task (USD, log scale)', ml + pw / 2, H - 3);
-
-  // Dot positions
-  scatterPositions = [];
-  SCATTER_MODELS.forEach(m => {
-    if (m.score === null || m.cost === null) return;
-    scatterPositions.push({ m, x: toX(m.cost), y: toY(m.score) });
-  });
-
-  // Dots
-  scatterPositions.forEach(({ m, x, y }) => {
+function _drawScatterDots(ctx, positions) {
+  positions.forEach(({ m, x, y }) => {
     ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fill();
     ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2);
     ctx.fillStyle = m.color; ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   });
+}
 
-  // Smart overlap-free labels
+function _initScatterTooltip({ wrapId, tipId, getPositions, getMeta, buildContent, tipHeight }) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const tip = document.createElement('div');
+  tip.id = tipId;
+  tip.className = 'chart-tip';
+  wrap.appendChild(tip);
+  wrap.addEventListener('mousemove', e => {
+    const rect = wrap.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let closest = null, minDist = 20;
+    getPositions().forEach(p => {
+      const dist = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2);
+      if (dist < minDist) { minDist = dist; closest = p; }
+    });
+    if (closest) {
+      const m = closest.m, meta = getMeta(m.name);
+      tip.style.borderTopColor = m.color;
+      tip.innerHTML = buildContent(m, meta);
+      let tx = mx + 14, ty = my - 10;
+      if (tx + 200 > rect.width)  tx = mx - 214;
+      if (ty + tipHeight > rect.height) ty = my - (tipHeight + 10);
+      tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+      tip.style.display = 'block'; wrap.style.cursor = 'crosshair';
+    } else {
+      tip.style.display = 'none'; wrap.style.cursor = 'default';
+    }
+  });
+  wrap.addEventListener('mouseleave', () => {
+    tip.style.display = 'none'; wrap.style.cursor = 'default';
+  });
+}
+
+// ===== COST vs SCORE SCATTER CHART =====
+
+let scatterPositions = [];
+
+function drawCostScatter() {
+  const c = _setupScatterCanvas('costScatterCanvas');
+  if (!c) return;
+  if (!SCATTER_MODELS.some(m => m.score !== null && m.cost !== null)) return;
+  const { ctx, W, H, ml, mt, pw, ph } = c;
+
+  const validCosts  = SCATTER_MODELS.filter(m => m.cost).map(m => m.cost);
+  const validScores = SCATTER_MODELS.filter(m => m.score).map(m => m.score);
+  const minCostLog  = Math.log10(Math.min(...validCosts)) - 0.2;
+  const maxCostLog  = Math.log10(Math.max(...validCosts)) + 0.2;
+  const minScore    = Math.min(...validScores) - 5;
+  const maxScore    = Math.max(...validScores) + 6;
+
+  const toX = v => ml + ((Math.log10(v) - minCostLog) / (maxCostLog - minCostLog)) * pw;
+  const toY = s => mt + ((maxScore - s) / (maxScore - minScore)) * ph;
+
+  ctx.fillStyle = '#f0f2f6'; ctx.fillRect(ml, mt, pw, ph);
+  _drawScatterYGridlines(ctx, toY, minScore, maxScore, ml, pw);
+  _drawScatterYLabel(ctx, mt, ph);
+  _drawScatterXTicks(ctx,
+    [0.0003, 0.001, 0.003, 0.01, 0.03],
+    ['$0.0003', '$0.001', '$0.003', '$0.01', '$0.03'],
+    toX, minCostLog, maxCostLog, mt, ph);
+
+  ctx.fillStyle = '#003c78'; ctx.font = 'bold 12px IBM Plex Sans,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('Cost per Task (USD, log scale)', ml + pw / 2, H - 3);
+
+  scatterPositions = [];
+  SCATTER_MODELS.forEach(m => {
+    if (m.score === null || m.cost === null) return;
+    scatterPositions.push({ m, x: toX(m.cost), y: toY(m.score) });
+  });
+  _drawScatterDots(ctx, scatterPositions);
+
   const SHORT = {
     'grok-4-fast-reasoning': 'grok-4-fast',
     'claude-opus-4-6':       'claude-opus-4-6',
@@ -444,35 +481,15 @@ function drawCostScatter() {
 }
 
 function initScatterTooltip() {
-  const wrap = document.getElementById('costScatterWrap');
-  if (!wrap) return;
-
-  const tip = document.createElement('div');
-  tip.id = 'scatterTip';
-  tip.style.cssText = `
-    position:absolute;pointer-events:none;display:none;
-    background:#1a1f2e;color:#fff;border-radius:4px;
-    padding:10px 14px;font-family:'IBM Plex Sans',sans-serif;
-    font-size:12px;line-height:1.6;min-width:180px;
-    box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:100;
-    border-top:3px solid #fff;
-  `;
-  wrap.appendChild(tip);
-  scatterTooltip = tip;
-
-  wrap.addEventListener('mousemove', e => {
-    const rect = wrap.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    let closest = null, minDist = 20;
-    scatterPositions.forEach(p => {
-      const dist = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2);
-      if (dist < minDist) { minDist = dist; closest = p; }
-    });
-    if (closest) {
-      const m = closest.m, meta = SCATTER_META[m.name] || {};
+  _initScatterTooltip({
+    wrapId:    'costScatterWrap',
+    tipId:     'scatterTip',
+    getPositions: () => scatterPositions,
+    getMeta:   name => SCATTER_META[name] || {},
+    tipHeight: 120,
+    buildContent: (m, meta) => {
       const costFmt = m.cost < 0.001 ? '$' + m.cost.toFixed(5) : '$' + m.cost.toFixed(4);
-      tip.style.borderTopColor = m.color;
-      tip.innerHTML = `
+      return `
         <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:${m.color};">${m.name}</div>
         <div style="color:rgba(255,255,255,0.6);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">${meta.org || ''} · Rank #${meta.rank || '—'}</div>
         <div style="display:grid;grid-template-columns:auto auto;gap:2px 14px;">
@@ -483,85 +500,37 @@ function initScatterTooltip() {
           <span style="color:rgba(255,255,255,0.6);">Tokens / Task</span>
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:700;">${(meta.tokTask || 0).toLocaleString()}</span>
         </div>`;
-      let tx = mx + 14, ty = my - 10;
-      if (tx + 200 > rect.width)  tx = mx - 214;
-      if (ty + 120 > rect.height) ty = my - 130;
-      tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
-      tip.style.display = 'block'; wrap.style.cursor = 'crosshair';
-    } else {
-      tip.style.display = 'none'; wrap.style.cursor = 'default';
-    }
-  });
-  wrap.addEventListener('mouseleave', () => {
-    if (scatterTooltip) scatterTooltip.style.display = 'none';
-    wrap.style.cursor = 'default';
+    },
   });
 }
 
 // ===== SPEED vs SCORE SCATTER CHART =====
 
-let speedTooltip   = null;
 let speedPositions = [];
 
 function drawSpeedScatter() {
-  const canvas = document.getElementById('speedScatterCanvas');
-  if (!canvas) return;
-
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  const W = rect.width, H = rect.height;
-
-  const ml = 52, mr = 28, mt = 28, mb = 50;
-  const pw = W - ml - mr, ph = H - mt - mb;
+  const c = _setupScatterCanvas('speedScatterCanvas');
+  if (!c) return;
+  const { ctx, W, H, ml, mt, pw, ph } = c;
 
   const validSpeeds = SPEED_MODELS_CLEAN.filter(m => m.speed > 0).map(m => m.speed);
   const validScores = SPEED_MODELS_CLEAN.filter(m => m.speed > 0).map(m => m.score);
-  if (validSpeeds.length === 0) return; // no data yet
+  if (validSpeeds.length === 0) return;
   const minSpeedLog = Math.log10(Math.min(...validSpeeds)) - 0.15;
   const maxSpeedLog = Math.log10(Math.max(...validSpeeds)) + 0.15;
   const minScore    = Math.min(...validScores) - 5;
   const maxScore    = Math.max(...validScores) + 6;
 
-  const toX = s => ml + ((Math.log10(s) - minSpeedLog) / (maxSpeedLog - minSpeedLog)) * pw;
+  const toX = v => ml + ((Math.log10(v) - minSpeedLog) / (maxSpeedLog - minSpeedLog)) * pw;
   const toY = s => mt + ((maxScore - s) / (maxScore - minScore)) * ph;
 
   ctx.fillStyle = '#f0f2f6'; ctx.fillRect(ml, mt, pw, ph);
-
-  [45, 50, 55, 60, 65, 70, 75].forEach(s => {
-    if (s < minScore || s > maxScore) return;
-    const y = toY(s), isMajor = (s === 50 || s === 70);
-    ctx.strokeStyle = isMajor ? 'rgba(0,60,120,0.22)' : 'rgba(0,60,120,0.09)';
-    ctx.lineWidth   = isMajor ? 1.2 : 0.7;
-    ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(ml + pw, y); ctx.stroke();
-    ctx.fillStyle = isMajor ? '#4a5568' : '#9aabb8';
-    ctx.font = isMajor ? 'bold 10px IBM Plex Mono,monospace' : '9px IBM Plex Mono,monospace';
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(s + '%', ml - 6, y);
-  });
-
-  ctx.save(); ctx.translate(16, mt + ph / 2); ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = 'bold 12px IBM Plex Sans,sans-serif'; ctx.fillStyle = '#003c78';
-  ctx.fillText('Score (%)', 0, 0); ctx.restore();
-
-  const ticks  = [30, 50, 100, 200, 500, 1000];
-  const tickLs = ['30', '50', '100', '200', '500', '1,000'];
-  ticks.forEach((v, i) => {
-    const logV = Math.log10(v);
-    if (logV < minSpeedLog || logV > maxSpeedLog) return;
-    const x = toX(v);
-    ctx.strokeStyle = 'rgba(0,60,120,0.13)'; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.moveTo(x, mt); ctx.lineTo(x, mt + ph); ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,60,120,0.35)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(x, mt + ph); ctx.lineTo(x, mt + ph + 5); ctx.stroke();
-    ctx.fillStyle = '#4a5568'; ctx.font = 'bold 9px IBM Plex Mono,monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(tickLs[i], x, mt + ph + 8);
-  });
+  _drawScatterYGridlines(ctx, toY, minScore, maxScore, ml, pw);
+  _drawScatterYLabel(ctx, mt, ph);
+  _drawScatterXTicks(ctx,
+    [30, 50, 100, 200, 500, 1000],
+    ['30', '50', '100', '200', '500', '1,000'],
+    toX, minSpeedLog, maxSpeedLog, mt, ph);
 
   ctx.fillStyle = '#003c78'; ctx.font = 'bold 12px IBM Plex Sans,sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
@@ -569,48 +538,20 @@ function drawSpeedScatter() {
 
   speedPositions = [];
   SPEED_MODELS_CLEAN.filter(m => m.speed > 0).forEach(m => speedPositions.push({ m, x: toX(m.speed), y: toY(m.score) }));
-
-  speedPositions.forEach(({ m, x, y }) => {
-    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2);
-    ctx.fillStyle = m.color; ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-  });
-
+  _drawScatterDots(ctx, speedPositions);
   _drawScatterLabels(ctx, speedPositions, { ml, pw, mt, ph, W });
 }
 
 function initSpeedTooltip() {
-  const wrap = document.getElementById('speedScatterWrap');
-  if (!wrap) return;
-
-  const tip = document.createElement('div');
-  tip.id = 'speedTip';
-  tip.style.cssText = `
-    position:absolute;pointer-events:none;display:none;
-    background:#1a1f2e;color:#fff;border-radius:4px;
-    padding:10px 14px;font-family:'IBM Plex Sans',sans-serif;
-    font-size:12px;line-height:1.6;min-width:180px;
-    box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:100;
-    border-top:3px solid #fff;
-  `;
-  wrap.appendChild(tip);
-  speedTooltip = tip;
-
-  wrap.addEventListener('mousemove', e => {
-    const rect = wrap.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    let closest = null, minDist = 20;
-    speedPositions.forEach(p => {
-      const dist = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2);
-      if (dist < minDist) { minDist = dist; closest = p; }
-    });
-    if (closest) {
-      const m = closest.m, meta = SPEED_META[m.name] || {};
+  _initScatterTooltip({
+    wrapId:    'speedScatterWrap',
+    tipId:     'speedTip',
+    getPositions: () => speedPositions,
+    getMeta:   name => SPEED_META[name] || {},
+    tipHeight: 110,
+    buildContent: (m, meta) => {
       const speedFmt = m.speed >= 100 ? m.speed.toFixed(0) : m.speed.toFixed(1);
-      tip.style.borderTopColor = m.color;
-      tip.innerHTML = `
+      return `
         <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:${m.color};">${m.name}</div>
         <div style="color:rgba(255,255,255,0.6);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">${meta.org || ''} · Rank #${meta.rank || '—'}</div>
         <div style="display:grid;grid-template-columns:auto auto;gap:2px 14px;">
@@ -619,17 +560,7 @@ function initSpeedTooltip() {
           <span style="color:rgba(255,255,255,0.6);">Output Speed</span>
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:700;">${speedFmt} t/s</span>
         </div>`;
-      let tx = mx + 14, ty = my - 10;
-      if (tx + 200 > rect.width)  tx = mx - 214;
-      if (ty + 110 > rect.height) ty = my - 120;
-      tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
-      tip.style.display = 'block'; wrap.style.cursor = 'crosshair';
-    } else {
-      tip.style.display = 'none'; wrap.style.cursor = 'default';
-    }
-  });
-  wrap.addEventListener('mouseleave', () => {
-    tip.style.display = 'none'; wrap.style.cursor = 'default';
+    },
   });
 }
 
@@ -712,17 +643,11 @@ function buildCalibSelector() {
     const active = calibSelected.has(m);
     const btn    = document.createElement('button');
     btn.dataset.model = m;
-    btn.style.cssText = `
-      display:inline-flex;align-items:center;gap:5px;
-      padding:4px 10px;border-radius:3px;
-      border:1.5px solid ${active ? CALIB_COLORS[m] : 'var(--border)'};
-      background:${active ? CALIB_COLORS[m] + '18' : 'transparent'};
-      color:${active ? CALIB_COLORS[m] : 'var(--text-dim)'};
-      font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:${active ? '700' : '400'};
-      cursor:pointer;transition:all 0.15s;
-    `;
+    btn.className = 'calib-btn';
+    btn.style.cssText = `border:1.5px solid ${active ? CALIB_COLORS[m] : 'var(--border)'};background:${active ? CALIB_COLORS[m] + '18' : 'transparent'};color:${active ? CALIB_COLORS[m] : 'var(--text-dim)'};font-weight:${active ? '700' : '400'};`;
     const dot = document.createElement('span');
-    dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:${CALIB_COLORS[m]};flex-shrink:0;opacity:${active ? 1 : 0.35};`;
+    dot.className = 'calib-dot';
+    dot.style.cssText = `background:${CALIB_COLORS[m]};opacity:${active ? 1 : 0.35};`;
     btn.appendChild(dot);
     btn.appendChild(document.createTextNode(m));
     btn.addEventListener('click', () => {
@@ -915,7 +840,7 @@ function renderBreakdown() {
       row.innerHTML = `
         <div class="bd-label">${displayName}</div>
         <div class="bd-bar-wrap">
-          <div class="bd-bar-fill" style="width:${score}%;background:linear-gradient(90deg,${color},${color}66);transition:width 0.9s cubic-bezier(0.4,0,0.2,1) ${i * 0.06}s;"></div>
+          <div class="bd-bar-fill" style="width:${score}%;background:linear-gradient(90deg,${color},${color}66);--delay:${i * 0.06}s;"></div>
         </div>
         <div class="bd-val" style="color:${color};">${score.toFixed(1)}%</div>`;
       barsWrap.appendChild(row);
@@ -944,8 +869,6 @@ window.addEventListener('load', () => {
     // Home page: radar chart + heatmap leaderboard preview
     drawChart();
     updateLegend();
-    drawFrameworkChart();
-    drawDistChart();
     renderLeaderboard('overall');
   }
 
@@ -958,8 +881,10 @@ window.addEventListener('load', () => {
   }
 
   if (file === 'dashboard.html') {
-    drawFrameworkChart();
-    drawDistChart();
+    renderCostTable();
+    renderTokenBars();
+    renderQuestionDistribution();
+    renderDatasetTables();
     drawCostScatter();
     initScatterTooltip();
     drawSpeedScatter();

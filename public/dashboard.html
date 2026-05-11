@@ -53,12 +53,6 @@
 </a>
 </div>
 <span class="m-page-label" id="mPageLabel">Analytics</span>
-<ul class="nav-links" style="display:none;">
-<li><a href="#" id="navlink-leaderboard" onclick="showSection('leaderboard');return false;">Leaderboard</a></li>
-<li><a href="#" id="navlink-breakdown" onclick="showSection('breakdown');return false;">Breakdown</a></li>
-<li><a href="#" id="navlink-dashboard" onclick="showSection('dashboard');return false;">Dashboard</a></li>
-<li><a href="#" id="navlink-methodology" onclick="showSection('methodology');return false;">Methodology</a></li>
-</ul>
 </nav>
 <!-- PAGE TABS -->
 <div class="page-tabs">
@@ -184,7 +178,7 @@
 </div>
 
 <!-- Hover tooltip -->
-<div id="calibTip" style="position:fixed;pointer-events:none;display:none;background:#1a1f2e;color:#fff;border-radius:4px;padding:9px 13px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;line-height:1.6;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:9999;border-top:3px solid #fff;"></div>
+<div id="calibTip" class="chart-tip" style="position:fixed;z-index:9999;padding:9px 13px;min-width:170px;"></div>
 </div></div>
 <!-- FUTURE CHARTS PLACEHOLDER -->
 
@@ -239,25 +233,5 @@
 <script src="results.js"></script>
 <script src="data.js"></script>
 <script src="main.js"></script>
-<script>
-  // KPI cards — derived from BENCHMARK_RESULTS
-  const _scored = BENCHMARK_RESULTS.filter(m => m.overall > 0);
-  const _top    = [..._scored].sort((a, b) => b.overall - a.overall)[0];
-  const _avg    = _scored.reduce((s, m) => s + m.overall, 0) / _scored.length;
-  const _avgPct = Math.round(_avg * 10) / 10;
-
-  document.getElementById('kpi-top-score').textContent  = _top ? _top.overall + '%' : '—';
-  document.getElementById('kpi-top-gauge').style.width  = _top ? _top.overall + '%' : '0%';
-  document.getElementById('kpi-avg-score').textContent  = _avgPct + '%';
-  document.getElementById('kpi-avg-gauge').style.width  = _avgPct + '%';
-  document.getElementById('kpi-tasks').textContent      = BENCHMARK_META.totalTasks;
-  document.getElementById('kpi-models').textContent     = BENCHMARK_RESULTS.length;
-  document.getElementById('kpi-models-gauge').style.width = '100%';
-
-  renderCostTable();
-  renderTokenBars();
-  renderQuestionDistribution();
-  renderDatasetTables();
-</script>
 </body>
 </html>
