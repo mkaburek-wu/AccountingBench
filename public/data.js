@@ -167,17 +167,18 @@ function renderOverviewLeaderboard() {
 }
 
 // ── Overview mobile leaderboard cards ────────────────────────
-function renderMobileLeaderboard() {
-  const el = document.getElementById('mobile-leaderboard');
+function renderMobileLeaderboard(containerId) {
+  const el = document.getElementById(containerId || 'mobile-leaderboard');
   if (!el) return;
   const sorted = [...BENCHMARK_RESULTS].sort((a, b) => b.overall - a.overall);
   el.innerHTML = sorted.map((m, i) => {
     const rank = i + 1;
-    const rc   = _rankColor(rank);
+    const rc      = _rankColor(rank);
     const rankCls = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
-    const winner = rank === 1 ? ` <span style="font-size:10px;background:rgba(180,83,9,0.12);color:var(--gold);padding:1px 6px;font-weight:700;">🏆 #1</span>` : '';
+    const cardCls = rank <= 3 ? ` rank-${rank}` : '';
+    const winner  = rank === 1 ? ` <span style="font-size:10px;background:rgba(180,83,9,0.12);color:var(--gold);padding:1px 6px;font-weight:700;">🏆 #1</span>` : '';
     const noteHtml = m.note ? `<div class="m-lb-note">⚠️ ${m.note}</div>` : '';
-    return `<div class="m-lb-card">` +
+    return `<div class="m-lb-card${cardCls}" onclick="toggleMCard(this)">` +
       `<div class="m-lb-card-summary">` +
       `<div class="m-lb-rank ${rankCls}">${rank}</div>` +
       `<div class="m-lb-info"><div class="m-lb-name">${m.name}${winner}</div><div class="m-lb-org">${m.org}</div></div>` +

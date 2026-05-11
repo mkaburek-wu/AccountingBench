@@ -951,6 +951,7 @@ window.addEventListener('load', () => {
 
   if (file === 'leaderboard.html') {
     renderLeaderboard('overall');
+    renderMobileLeaderboard('mLbCardsLeaderboard');
     renderBreakdown();
     drawChart();
     updateLegend();
