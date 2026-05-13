@@ -61,6 +61,19 @@
 
   <div class="upload-content">
     <div class="form-error" id="formError"></div>
+    <div class="form-info" id="cancelledBanner">
+      Payment was cancelled — no charge was made. Fill in your task again to contribute.
+    </div>
+
+    <!-- Shown after form submits successfully while redirecting to Stripe -->
+    <div class="payment-redirect" id="paymentRedirect">
+      <div class="processing-icon"></div>
+      <div class="processing-title">Redirecting to Secure Payment</div>
+      <div class="processing-sub">
+        You are being redirected to our payment page. If it does not open automatically, use the button below.
+      </div>
+      <a class="btn-primary" id="paymentLink" href="#" target="_top">Pay Now →</a>
+    </div>
 
     <!-- Section 1: Task content -->
     <div class="form-card">
@@ -240,6 +253,14 @@
 <script>
   var clerkToken = null;
 
+  // ── Show cancelled payment banner if redirected back from Stripe ──────────
+  (function() {
+    var p = new URLSearchParams(window.location.search);
+    if (p.get('cancelled') === '1') {
+      document.getElementById('cancelledBanner').style.display = 'block';
+    }
+  })();
+
   // ── Auth check ────────────────────────────────────────────────────────────
   window.addEventListener('load', function() {
     waitForClerk(async function() {
@@ -387,6 +408,7 @@
     if (!res.ok) {
       var err = await res.json().catch(function() { return {}; });
       showError('formError', 'Server error ' + res.status + ': ' + (err.detail || 'Submission failed. Please try again.'));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       btn.disabled = false;
       btn.textContent = 'Submit & Run Benchmark';
       return;
@@ -402,12 +424,24 @@
       return;
     }
 
-    // Navigate to results page
-    window.location.replace('results.html?submission=' + data.submission_id);
+    // Redirect to Stripe Checkout, or directly to results in dev mode (no Stripe key)
+    if (data.checkout_url) {
+      // Hide the form, show payment redirect view with manual fallback link
+      document.querySelectorAll('.form-card').forEach(function(el) { el.style.display = 'none'; });
+      document.querySelector('.form-submit-area').style.display = 'none';
+      document.getElementById('paymentLink').href = data.checkout_url;
+      document.getElementById('paymentRedirect').style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Auto-redirect to Stripe (window.top breaks out of any VS Code iframe preview)
+      window.top.location.href = data.checkout_url;
+    } else {
+      window.location.replace('results.html?submission=' + data.submission_id);
+    }
 
   } catch (err) {
     console.error('Submit error:', err);
     showError('formError', 'Error: ' + err.message);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     btn.disabled = false;
     btn.textContent = 'Submit & Run Benchmark';
   }

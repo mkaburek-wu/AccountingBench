@@ -34,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from backend.submissions import router as submissions_router
+from backend.payments import router as payments_router
 
 from backend.database import get_db, check_connection, engine
 from backend.models import Base, Settings
@@ -124,9 +125,14 @@ def _ensure_settings_row():
     try:
         settings = db.query(Settings).filter_by(id=1).first()
         if not settings:
-            db.add(Settings(id=1))
+            db.add(Settings(id=1, price_per_submission=5000, currency="eur"))
             db.commit()
-            logger.info("Settings row created.")
+            logger.info("Settings row created with default price €50.00.")
+        elif settings.price_per_submission is None:
+            settings.price_per_submission = 5000
+            settings.currency = settings.currency or "eur"
+            db.commit()
+            logger.info("Settings price seeded to default €50.00.")
     except Exception as e:
         logger.warning(f"Could not ensure settings row: {e}")
     finally:
@@ -161,6 +167,7 @@ app.add_middleware(
 )
 # 4. Register routers — HERE
 app.include_router(submissions_router)
+app.include_router(payments_router)
 
 
 # ── Root endpoint (health check) ──────────────────────────────────────────────

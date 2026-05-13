@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.models import BenchmarkTask, Submission
+from backend.models import BenchmarkTask, Submission, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +246,9 @@ async def prepare_submission(
     # ── 6. Generate question_id ───────────────────────────────────────────────
     question_id = _generate_question_id(db)
 
+    # Check Stripe availability before creating DB records
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+
     # ── 7. Create the task row ────────────────────────────────────────────────
     task = BenchmarkTask(
         question_id                = question_id,
@@ -267,7 +270,7 @@ async def prepare_submission(
         source                     = "user_submitted",
         submitted_by               = user_id,
         is_public                  = False,          # private until admin approves
-        validation_status          = "pending",
+        validation_status          = "awaiting_payment" if stripe_key else "pending",
         created_at                 = datetime.utcnow(),
     )
     db.add(task)
@@ -302,18 +305,67 @@ async def prepare_submission(
         f"task {task.id} ({question_id}) by user {user_id}"
     )
 
-    # ── 11. Trigger the pipeline as a background task ─────────────────────────
-    # ⚠️  TESTING: uses dummy_pipeline which always returns 100%.
-    # ⚠️  PRODUCTION: change this import to backend.processing.pipeline
-  #  from backend.processing.dummy_pipeline import run_pipeline
-    from backend.processing.pipeline import run_pipeline
+    # ── 11. Create Stripe Checkout Session (or trigger pipeline directly in dev) ─
+    if not stripe_key:
+        # Dev fallback: no Stripe configured → run benchmark immediately
+        # ⚠️  TESTING: uses dummy_pipeline which always returns 100%.
+        # ⚠️  PRODUCTION: change this import to backend.processing.pipeline
+        from backend.processing.dummy_pipeline import run_pipeline
+       # from backend.processing.pipeline import run_pipeline
+        background_tasks.add_task(run_pipeline, submission.id)
+        return {
+            "submission_id": submission.id,
+            "task_id":       task.id,
+            "question_id":   question_id,
+            "checkout_url":  None,
+        }
 
+    import stripe as _stripe
+    _stripe.api_key = stripe_key
 
-    background_tasks.add_task(run_pipeline, submission.id)
+    settings = db.query(Settings).filter_by(id=1).first()
+    price    = settings.price_per_submission if (settings and settings.price_per_submission) else 5000
+    currency = settings.currency             if (settings and settings.currency)             else "eur"
+
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5500").rstrip("/")
+
+    try:
+        checkout = _stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency":     currency,
+                    "product_data": {
+                        "name":        "AccountingBench Task Submission",
+                        "description": f"Task {question_id} — benchmark evaluation across all models",
+                    },
+                    "unit_amount": price,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=(
+                f"{frontend_url}/auth-pages/results.html"
+                f"?submission={submission.id}"
+                f"&stripe_session={{CHECKOUT_SESSION_ID}}"
+            ),
+            cancel_url=f"{frontend_url}/auth-pages/upload.html?cancelled=1",
+            metadata={"submission_id": str(submission.id)},
+        )
+    except Exception as e:
+        logger.error(f"Stripe Checkout Session creation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment service unavailable. Please try again later.",
+        )
+
+    logger.info(
+        f"Checkout Session created for submission {submission.id} ({question_id})"
+    )
 
     return {
         "submission_id": submission.id,
         "task_id":       task.id,
         "question_id":   question_id,
-        "message":       "Submission received. Benchmark is running in the background.",
+        "checkout_url":  checkout.url,
     }

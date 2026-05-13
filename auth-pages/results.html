@@ -62,6 +62,16 @@
 
   <div class="upload-content">
 
+    <!-- CONFIRMING PAYMENT VIEW — shown while verifying with Stripe -->
+    <div id="confirmingView" style="display:none;">
+      <div class="processing-icon"></div>
+      <div class="processing-title">Confirming Payment</div>
+      <div class="processing-sub">
+        Please wait while we verify your payment with Stripe.
+      </div>
+      <div class="processing-status">Verifying with Stripe…</div>
+    </div>
+
     <!-- PROCESSING VIEW — shown while benchmark is still running -->
     <div id="processingView" style="display:block;">
       <div class="processing-icon"></div>
@@ -178,9 +188,15 @@
 
       submissionId = parseInt(sid);
 
-      // Check status immediately — if already done, show results right away
-      // without ever showing the processing spinner
-      await checkOrPoll(submissionId);
+      var stripeSession = params.get('stripe_session');
+      if (stripeSession) {
+        // Returning from Stripe Checkout — confirm payment before polling
+        showConfirmingPayment();
+        await confirmPayment(submissionId, stripeSession);
+      } else {
+        // Direct load (e.g. "View Progress" link) — check status immediately
+        await checkOrPoll(submissionId);
+      }
     });
   });
 
@@ -308,6 +324,55 @@
       );
     }).join('');
 
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Payment confirmation (called after Stripe Checkout redirect) ─────────
+  function showConfirmingPayment() {
+    document.getElementById('confirmingView').style.display  = 'block';
+    document.getElementById('processingView').style.display  = 'none';
+    document.getElementById('resultView').style.display      = 'none';
+    document.getElementById('errorView').style.display       = 'none';
+    document.getElementById('heroTitle').textContent         = 'Confirming Payment';
+    document.getElementById('heroSub').textContent           = 'Please wait while we verify your payment.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function confirmPayment(sid, sessionId) {
+    try {
+      clerkToken = await window.Clerk.session.getToken();
+      var res = await fetch(API + '/submissions/' + sid + '/confirm-payment', {
+        method:      'POST',
+        headers: {
+          'Authorization': 'Bearer ' + clerkToken,
+          'Content-Type':  'application/json',
+        },
+        body:        JSON.stringify({ session_id: sessionId }),
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return {}; });
+        showPaymentError(err.detail || 'Payment could not be confirmed. Please contact support.');
+        return;
+      }
+
+      // Payment confirmed — transition to pipeline processing view
+      await checkOrPoll(sid);
+
+    } catch (err) {
+      showPaymentError('Could not reach the server. Please refresh. (' + err.message + ')');
+    }
+  }
+
+  function showPaymentError(msg) {
+    document.getElementById('confirmingView').style.display = 'none';
+    document.getElementById('processingView').style.display = 'none';
+    document.getElementById('resultView').style.display     = 'none';
+    document.getElementById('errorView').style.display      = 'block';
+    document.getElementById('heroTitle').textContent        = 'Payment Error';
+    document.getElementById('heroSub').textContent          = 'There was a problem confirming your payment.';
+    document.getElementById('errorMsg').textContent         = msg || 'Please contact support.';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
