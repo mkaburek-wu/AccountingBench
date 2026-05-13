@@ -114,7 +114,7 @@ nav {
   font-family: 'IBM Plex Sans', sans-serif;
 }
 .page-tab:hover  { color: rgba(255,255,255,0.85); }
-.page-tab.active { color: #fff; border-bottom: 3px solid rgba(255,255,255,0.7); }
+.page-tab.active { color: #fff; border-bottom: 3px solid rgba(255,255,255,0.7); pointer-events: none; cursor: default; }
 
 /* Page views */
 .page-view        { display: none; padding-top: 112px; }
@@ -895,7 +895,7 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
   -webkit-tap-highlight-color: transparent;
 }
 .m-tab:active { background: var(--wu-light); }
-.m-tab.active { color: var(--wu-blue); border-top-color: var(--wu-blue); background: rgba(0,60,120,0.03); }
+.m-tab.active { color: var(--wu-blue); border-top-color: var(--wu-blue); background: rgba(0,60,120,0.03); pointer-events: none; cursor: default; }
 .m-tab svg    { width: 20px; height: 20px; flex-shrink: 0; }
 
 /* Mobile leaderboard cards (hidden on desktop) */

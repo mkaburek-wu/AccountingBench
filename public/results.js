@@ -112,13 +112,13 @@ const BENCHMARK_RESULTS = [
   // ── 1. gpt-5.4 ───────────────────────────────────────────────
   {
     name: 'gpt-5.4', org: 'OpenAI', color: '#0d4a2a',
-    overall: 72.2, tax: 68.0, financial: 78.1, management: 88.1,
-    interpLaw: 77.8, calculation: 26.4, journal: 72.4,
-    multiChoice: 91.4, openText: 60.7, singleChoice: 85.4, journalEntry: 74.1,
-    austrianTax: 66.7, mixedAcc: 88.2, ugb: 82.4, ifrs: 98.0,
-    eduProf: 68.3, eduMaster: 90.6, eduVoc: 58.3,
+    overall: 72.7, tax: 68.0, financial: 78.0, management: 88.1,
+    interpLaw: 77.9, calculation: 36.2, journal: 73.3,
+    multiChoice: 90.3, openText: 62.3, singleChoice: 86.4, journalEntry: 71.3,
+    austrianTax: 66.7, mixedAcc: 88.2, ugb: 82.4, ifrs: 85.1,
+    eduProf: 69.4, eduMaster: 90.6, eduVoc: 58.3,
     byEdu: {
-      prof:   { overall: 68.3, tax: 68.0, financial: null, management: 76.3, interpLaw: 73.1, calculation: 23.2, journal: null, multiChoice: 92.9, openText: 62.2, singleChoice: 87.0, journalEntry: null, austrianTax: 68.0, mixedAcc: 76.3, ugb: null, ifrs: null },
+      prof:   { overall: 69.4, tax: 68.0, financial: 77.8, management: 76.3, interpLaw: 73.4, calculation: 38.2, journal: 76.4, multiChoice: 89.7, openText: 63.8, singleChoice: 88.5, journalEntry: 63.8, austrianTax: 68.0, mixedAcc: 76.3, ugb: null, ifrs: 77.8 },
       master: { overall: 90.6, tax: 77.8, financial: 91.7, management: 92.9, interpLaw: 90.6, calculation: null, journal: null, multiChoice: 90.6, openText: 100.0, singleChoice: 90.0, journalEntry: null, austrianTax: 75.8, mixedAcc: 91.7, ugb: 88.3, ifrs: 98.0 },
       voc:    { overall: 58.3, tax: 23.3, financial: 60.3, management: null, interpLaw: 79.5, calculation: 31.5, journal: 72.4, multiChoice: 100.0, openText: 48.7, singleChoice: 75.0, journalEntry: 74.1, austrianTax: 54.0, mixedAcc: null, ugb: 72.7, ifrs: null },
     },
@@ -132,13 +132,13 @@ const BENCHMARK_RESULTS = [
   // ── 2. gpt-5.2 ───────────────────────────────────────────────
   {
     name: 'gpt-5.2', org: 'OpenAI', color: '#166534',
-    overall: 68.6, tax: 62.9, financial: 77.3, management: 87.8,
-    interpLaw: 73.6, calculation: 24.9, journal: 76.0,
-    multiChoice: 91.1, openText: 55.2, singleChoice: 80.5, journalEntry: 76.4,
-    austrianTax: 62.0, mixedAcc: 87.1, ugb: 83.1, ifrs: 98.0,
-    eduProf: 63.3, eduMaster: 90.0, eduVoc: 57.2,
+    overall: 69.6, tax: 62.9, financial: 78.3, management: 87.8,
+    interpLaw: 73.8, calculation: 36.6, journal: 76.7,
+    multiChoice: 90.1, openText: 57.6, singleChoice: 81.8, journalEntry: 74.7,
+    austrianTax: 62.0, mixedAcc: 87.1, ugb: 83.1, ifrs: 87.3,
+    eduProf: 65.3, eduMaster: 90.0, eduVoc: 57.2,
     byEdu: {
-      prof:   { overall: 63.3, tax: 62.8, financial: null, management: 75.1, interpLaw: 67.6, calculation: 22.5, journal: null, multiChoice: 91.3, openText: 55.9, singleChoice: 87.0, journalEntry: null, austrianTax: 62.8, mixedAcc: 75.1, ugb: null, ifrs: null },
+      prof:   { overall: 65.3, tax: 62.8, financial: 81.2, management: 75.1, interpLaw: 68.2, calculation: 39.9, journal: 79.3, multiChoice: 88.4, openText: 58.5, singleChoice: 88.5, journalEntry: 70.0, austrianTax: 62.8, mixedAcc: 75.1, ugb: null, ifrs: 81.2 },
       master: { overall: 90.0, tax: 77.8, financial: 90.7, management: 92.9, interpLaw: 90.0, calculation: null, journal: null, multiChoice: 91.0, openText: 95.0, singleChoice: 80.0, journalEntry: null, austrianTax: 75.8, mixedAcc: 90.6, ugb: 88.7, ifrs: 98.0 },
       voc:    { overall: 57.2, tax: 13.3, financial: 59.7, management: null, interpLaw: 70.0, calculation: 28.8, journal: 76.0, multiChoice: 100.0, openText: 49.0, singleChoice: 62.5, journalEntry: 76.4, austrianTax: 52.1, mixedAcc: null, ugb: 74.2, ifrs: null },
     },
@@ -174,13 +174,13 @@ const BENCHMARK_RESULTS = [
   // ── 4. claude-opus-4-6 ───────────────────────────────────────
   {
     name: 'claude-opus-4-6', org: 'Anthropic', color: '#1e40af',
-    overall: 63.3, tax: 57.1, financial: 74.4, management: 88.5,
-    interpLaw: 67.2, calculation: 30.5, journal: 74.3,
-    multiChoice: 91.3, openText: 52.7, singleChoice: 68.3, journalEntry: 77.5,
-    austrianTax: 56.7, mixedAcc: 89.3, ugb: 72.1, ifrs: 100.0,
-    eduProf: 57.8, eduMaster: 90.4, eduVoc: 56.5,
+    overall: 58.2, tax: 53.2, financial: 68.3, management: 59.6,
+    interpLaw: 59.1, calculation: 41.9, journal: 76.7,
+    multiChoice: 58.4, openText: 55.2, singleChoice: 70.5, journalEntry: 76.9,
+    austrianTax: 53.3, mixedAcc: 64.8, ugb: 53.0, ifrs: 82.2,
+    eduProf: 57.0, eduMaster: 90.4, eduVoc: 56.5,
     byEdu: {
-      prof:   { overall: 54.5, tax: 54.3, financial: null, management: 58.8, interpLaw: 57.3, calculation: 27.5, journal: null, multiChoice: 55.8, openText: 52.7, singleChoice: 65.2, journalEntry: null, austrianTax: 54.3, mixedAcc: 58.8, ugb: null, ifrs: null },
+      prof:   { overall: 57.0, tax: 54.3, financial: 76.6, management: 58.8, interpLaw: 57.8, calculation: 44.8, journal: 85.0, multiChoice: 54.9, openText: 55.6, singleChoice: 69.2, journalEntry: 75.0, austrianTax: 54.3, mixedAcc: 58.8, ugb: null, ifrs: 76.6 },
       master: { overall: 63.1, tax: 29.2, financial: 70.7, management: 59.9, interpLaw: 63.1, calculation: null, journal: null, multiChoice: 60.2, openText: 100.0, singleChoice: 90.0, journalEntry: null, austrianTax: 31.8, mixedAcc: 66.6, ugb: 39.7, ifrs: 92.0 },
       voc:    { overall: 56.5, tax: 26.7, financial: 58.2, management: null, interpLaw: 57.0, calculation: 35.1, journal: 74.3, multiChoice: 75.0, openText: 51.0, singleChoice: 50.0, journalEntry: 77.5, austrianTax: 51.1, mixedAcc: null, ugb: 74.5, ifrs: null },
     },
@@ -196,13 +196,13 @@ const BENCHMARK_RESULTS = [
   // ── 5. claude-sonnet-4-6 ─────────────────────────────────────
   {
     name: 'claude-sonnet-4-6', org: 'Anthropic', color: '#3b82f6',
-    overall: 63.1, tax: 54.4, financial: 77.6, management: 88.3,
-    interpLaw: 67.1, calculation: 26.1, journal: 71.8,
-    multiChoice: 89.6, openText: 47.4, singleChoice: 73.2, journalEntry: 76.8,
-    austrianTax: 54.6, mixedAcc: 89.1, ugb: 80.5, ifrs: 99.0,
-    eduProf: 54.5, eduMaster: 90.7, eduVoc: 59.2,
+    overall: 64.0, tax: 54.4, financial: 77.0, management: 88.3,
+    interpLaw: 67.2, calculation: 37.1, journal: 74.4,
+    multiChoice: 87.7, openText: 50.0, singleChoice: 75.0, journalEntry: 79.6,
+    austrianTax: 54.6, mixedAcc: 89.1, ugb: 80.5, ifrs: 84.0,
+    eduProf: 56.8, eduMaster: 90.7, eduVoc: 59.2,
     byEdu: {
-      prof:   { overall: 54.5, tax: 53.5, financial: null, management: 78.1, interpLaw: 57.8, calculation: 23.1, journal: null, multiChoice: 87.4, openText: 47.3, singleChoice: 60.9, journalEntry: null, austrianTax: 53.5, mixedAcc: 78.1, ugb: null, ifrs: null },
+      prof:   { overall: 56.8, tax: 53.5, financial: 75.5, management: 78.1, interpLaw: 58.3, calculation: 39.7, journal: 83.6, multiChoice: 82.5, openText: 50.2, singleChoice: 65.4, journalEntry: 87.5, austrianTax: 53.5, mixedAcc: 78.1, ugb: null, ifrs: 75.5 },
       master: { overall: 90.7, tax: 86.8, financial: 90.6, management: 92.4, interpLaw: 90.7, calculation: null, journal: null, multiChoice: 90.7, openText: 100.0, singleChoice: 90.0, journalEntry: null, austrianTax: 85.6, mixedAcc: 92.4, ugb: 86.1, ifrs: 99.0 },
       voc:    { overall: 59.2, tax: 33.3, financial: 60.6, management: null, interpLaw: 87.0, calculation: 30.9, journal: 71.8, multiChoice: 75.0, openText: 47.1, singleChoice: 87.5, journalEntry: 76.8, austrianTax: 55.4, mixedAcc: null, ugb: 71.5, ifrs: null },
     },
@@ -239,13 +239,13 @@ const BENCHMARK_RESULTS = [
   // ── 7. gpt-5-mini ────────────────────────────────────────────
   {
     name: 'gpt-5-mini', org: 'OpenAI', color: '#15803d',
-    overall: 58.3, tax: 50.6, financial: 70.5, management: 82.7,
-    interpLaw: 62.9, calculation: 19.5, journal: 61.6,
-    multiChoice: 85.6, openText: 43.5, singleChoice: 65.9, journalEntry: 61.4,
-    austrianTax: 50.4, mixedAcc: 80.6, ugb: 75.0, ifrs: 99.0,
-    eduProf: 50.5, eduMaster: 85.7, eduVoc: 50.2,
+    overall: 58.7, tax: 50.6, financial: 68.6, management: 82.7,
+    interpLaw: 63.0, calculation: 27.0, journal: 63.1,
+    multiChoice: 83.7, openText: 45.0, singleChoice: 68.2, journalEntry: 65.3,
+    austrianTax: 50.4, mixedAcc: 80.6, ugb: 75.0, ifrs: 76.2,
+    eduProf: 51.9, eduMaster: 85.7, eduVoc: 50.2,
     byEdu: {
-      prof:   { overall: 50.5, tax: 50.2, financial: null, management: 57.4, interpLaw: 54.0, calculation: 17.0, journal: null, multiChoice: 82.7, openText: 43.7, singleChoice: 60.9, journalEntry: null, austrianTax: 50.2, mixedAcc: 57.4, ugb: null, ifrs: null },
+      prof:   { overall: 51.9, tax: 50.2, financial: 63.3, management: 57.4, interpLaw: 54.5, calculation: 28.5, journal: 68.6, multiChoice: 77.6, openText: 45.4, singleChoice: 65.4, journalEntry: 76.2, austrianTax: 50.2, mixedAcc: 57.4, ugb: null, ifrs: 63.3 },
       master: { overall: 85.7, tax: 70.1, financial: 84.9, management: 92.8, interpLaw: 85.7, calculation: null, journal: null, multiChoice: 87.1, openText: 100.0, singleChoice: 70.0, journalEntry: null, austrianTax: 67.4, mixedAcc: 87.4, ugb: 85.3, ifrs: 99.0 },
       voc:    { overall: 50.2, tax: 21.0, financial: 51.8, management: null, interpLaw: 77.5, calculation: 23.5, journal: 61.6, multiChoice: 75.0, openText: 40.5, singleChoice: 75.0, journalEntry: 61.4, austrianTax: 47.7, mixedAcc: null, ugb: 58.5, ifrs: null },
     },
@@ -261,13 +261,13 @@ const BENCHMARK_RESULTS = [
   // ── 8. Mistral-Large-3 ───────────────────────────────────────
   {
     name: 'Mistral-Large-3', org: 'Mistral AI', color: '#c2410c',
-    overall: 52.7, tax: 42.0, financial: 69.8, management: 85.5,
-    interpLaw: 57.2, calculation: 20.7, journal: 42.9,
-    multiChoice: 88.3, openText: 32.2, singleChoice: 70.7, journalEntry: 40.2,
-    austrianTax: 42.1, mixedAcc: 86.4, ugb: 70.4, ifrs: 99.0,
-    eduProf: 42.0, eduMaster: 89.2, eduVoc: 42.9,
+    overall: 51.5, tax: 41.5, financial: 62.4, management: 85.5,
+    interpLaw: 56.6, calculation: 22.7, journal: 39.4,
+    multiChoice: 86.2, openText: 32.4, singleChoice: 70.5, journalEntry: 36.1,
+    austrianTax: 41.6, mixedAcc: 86.4, ugb: 70.4, ifrs: 62.6,
+    eduProf: 41.6, eduMaster: 89.2, eduVoc: 42.9,
     byEdu: {
-      prof:   { overall: 41.5, tax: 40.5, financial: null, management: 66.9, interpLaw: 44.0, calculation: 17.9, journal: null, multiChoice: 86.2, openText: 31.2, singleChoice: 60.9, journalEntry: null, austrianTax: 40.5, mixedAcc: 66.9, ugb: null, ifrs: null },
+      prof:   { overall: 41.6, tax: 40.5, financial: 41.9, management: 66.9, interpLaw: 44.4, calculation: 21.6, journal: 27.1, multiChoice: 80.6, openText: 31.9, singleChoice: 61.5, journalEntry: 25.0, austrianTax: 40.5, mixedAcc: 66.9, ugb: null, ifrs: 41.9 },
       master: { overall: 89.2, tax: 79.2, financial: 89.0, management: 93.0, interpLaw: 89.2, calculation: null, journal: null, multiChoice: 89.1, openText: 90.0, singleChoice: 90.0, journalEntry: null, austrianTax: 77.3, mixedAcc: 92.1, ugb: 84.8, ifrs: 99.0 },
       voc:    { overall: 42.9, tax: 6.7, financial: 44.9, management: null, interpLaw: 80.0, calculation: 25.2, journal: 42.9, multiChoice: 100.0, openText: 35.0, singleChoice: 75.0, journalEntry: 40.2, austrianTax: 41.6, mixedAcc: null, ugb: 47.1, ifrs: null },
     },
@@ -281,13 +281,13 @@ const BENCHMARK_RESULTS = [
   // ── 9. grok-4-fast-reasoning ─────────────────────────────────
   {
     name: 'grok-4-fast-reasoning', org: 'xAI', color: '#0f766e',
-    overall: 49.1, tax: 38.8, financial: 64.3, management: 84.5,
-    interpLaw: 51.9, calculation: 22.8, journal: 57.5,
-    multiChoice: 84.2, openText: 28.1, singleChoice: 65.9, journalEntry: 63.9,
-    austrianTax: 39.2, mixedAcc: 79.7, ugb: 62.9, ifrs: 97.3,
-    eduProf: 39.1, eduMaster: 80.0, eduVoc: 47.5,
+    overall: 50.3, tax: 38.8, financial: 64.3, management: 84.5,
+    interpLaw: 52.5, calculation: 31.3, journal: 57.1,
+    multiChoice: 83.0, openText: 31.0, singleChoice: 68.2, journalEntry: 62.2,
+    austrianTax: 39.2, mixedAcc: 79.7, ugb: 62.9, ifrs: 76.3,
+    eduProf: 41.9, eduMaster: 80.0, eduVoc: 47.5,
     byEdu: {
-      prof:   { overall: 39.1, tax: 37.9, financial: null, management: 67.7, interpLaw: 40.8, calculation: 22.8, journal: null, multiChoice: 87.6, openText: 26.8, singleChoice: 69.6, journalEntry: null, austrianTax: 37.9, mixedAcc: 67.7, ugb: null, ifrs: null },
+      prof:   { overall: 41.9, tax: 37.9, financial: 64.4, management: 67.7, interpLaw: 42.1, calculation: 35.0, journal: 55.7, multiChoice: 83.5, openText: 30.2, singleChoice: 73.1, journalEntry: 57.5, austrianTax: 37.9, mixedAcc: 67.7, ugb: null, ifrs: 64.4 },
       master: { overall: 80.0, tax: 68.7, financial: 76.3, management: 91.2, interpLaw: 80.0, calculation: null, journal: null, multiChoice: 82.8, openText: 90.0, singleChoice: 50.0, journalEntry: null, austrianTax: 65.9, mixedAcc: 83.2, ugb: 63.4, ifrs: 97.3 },
       voc:    { overall: 47.5, tax: 27.7, financial: 48.6, management: null, interpLaw: 74.5, calculation: 22.7, journal: 57.5, multiChoice: 75.0, openText: 35.6, singleChoice: 75.0, journalEntry: 63.9, austrianTax: 43.0, mixedAcc: null, ugb: 62.2, ifrs: null },
     },
@@ -301,13 +301,13 @@ const BENCHMARK_RESULTS = [
   // ── 10. gpt-4o ───────────────────────────────────────────────
   {
     name: 'gpt-4o', org: 'OpenAI', color: '#16a34a',
-    overall: 48.9, tax: 38.2, financial: 67.1, management: 79.8,
-    interpLaw: 53.9, calculation: 13.0, journal: 38.5,
-    multiChoice: 84.7, openText: 28.8, singleChoice: 65.9, journalEntry: 41.1,
-    austrianTax: 37.8, mixedAcc: 80.8, ugb: 71.9, ifrs: 100.0,
-    eduProf: 37.5, eduMaster: 89.3, eduVoc: 36.1,
+    overall: 47.1, tax: 38.2, financial: 56.2, management: 79.8,
+    interpLaw: 53.3, calculation: 13.3, journal: 34.4,
+    multiChoice: 82.2, openText: 28.3, singleChoice: 63.6, journalEntry: 32.8,
+    austrianTax: 37.8, mixedAcc: 80.8, ugb: 71.9, ifrs: 52.8,
+    eduProf: 36.2, eduMaster: 89.3, eduVoc: 36.1,
     byEdu: {
-      prof:   { overall: 37.5, tax: 36.9, financial: null, management: 49.7, interpLaw: 40.0, calculation: 13.5, journal: null, multiChoice: 72.8, openText: 29.2, singleChoice: 56.5, journalEntry: null, austrianTax: 36.9, mixedAcc: 49.7, ugb: null, ifrs: null },
+      prof:   { overall: 36.2, tax: 36.9, financial: 25.9, management: 49.7, interpLaw: 39.8, calculation: 13.7, journal: 20.0, multiChoice: 67.5, openText: 28.6, singleChoice: 53.8, journalEntry: 10.0, austrianTax: 36.9, mixedAcc: 49.7, ugb: null, ifrs: 25.9 },
       master: { overall: 89.3, tax: 79.9, financial: 89.7, management: 91.8, interpLaw: 89.3, calculation: null, journal: null, multiChoice: 90.1, openText: 100.0, singleChoice: 80.0, journalEntry: null, austrianTax: 78.0, mixedAcc: 89.9, ugb: 90.1, ifrs: 100.0 },
       voc:    { overall: 36.1, tax: 6.7, financial: 37.7, management: null, interpLaw: 80.0, calculation: 12.3, journal: 38.5, multiChoice: 100.0, openText: 24.1, singleChoice: 75.0, journalEntry: 41.1, austrianTax: 34.1, mixedAcc: null, ugb: 42.5, ifrs: null },
     },
@@ -322,13 +322,13 @@ const BENCHMARK_RESULTS = [
   // ── 11. DeepSeek-V3.2-2 ──────────────────────────────────────
   {
     name: 'DeepSeek-V3.2', org: 'DeepSeek', color: '#4338ca',
-    overall: 44.8, tax: 35.8, financial: 58.9, management: 74.1,
-    interpLaw: 49.5, calculation: 12.4, journal: 32.7,
-    multiChoice: 80.1, openText: 25.2, singleChoice: 65.0, journalEntry: 25.3,
-    austrianTax: 35.4, mixedAcc: 76.6, ugb: 53.5, ifrs: 95.7,
-    eduProf: 34.9, eduMaster: 81.2, eduVoc: 31.1,
+    overall: 45.5, tax: 35.7, financial: 57.8, management: 74.1,
+    interpLaw: 50.1, calculation: 20.3, journal: 32.3,
+    multiChoice: 79.1, openText: 27.5, singleChoice: 65.9, journalEntry: 25.2,
+    austrianTax: 35.3, mixedAcc: 76.6, ugb: 53.5, ifrs: 69.6,
+    eduProf: 37.1, eduMaster: 81.2, eduVoc: 31.1,
     byEdu: {
-      prof:   { overall: 34.8, tax: 34.7, financial: null, management: 37.0, interpLaw: 37.1, calculation: 12.6, journal: null, multiChoice: 79.9, openText: 25.0, singleChoice: 52.2, journalEntry: null, austrianTax: 34.7, mixedAcc: 37.0, ugb: null, ifrs: null },
+      prof:   { overall: 37.1, tax: 34.7, financial: 54.8, management: 37.0, interpLaw: 38.6, calculation: 23.9, journal: 30.7, multiChoice: 77.0, openText: 27.6, singleChoice: 57.7, journalEntry: 25.0, austrianTax: 34.7, mixedAcc: 37.0, ugb: null, ifrs: 54.8 },
       master: { overall: 81.2, tax: 66.0, financial: 79.9, management: 89.0, interpLaw: 81.2, calculation: null, journal: null, multiChoice: 80.2, openText: 95.0, singleChoice: 90.0, journalEntry: null, austrianTax: 65.9, mixedAcc: 88.1, ugb: 69.3, ifrs: 95.7 },
       voc:    { overall: 31.1, tax: 21.0, financial: 31.6, management: null, interpLaw: 67.0, calculation: 12.0, journal: 32.7, multiChoice: 75.0, openText: 24.6, singleChoice: 62.5, journalEntry: 25.3, austrianTax: 32.0, mixedAcc: null, ugb: 27.9, ifrs: null },
     },
@@ -365,13 +365,13 @@ const BENCHMARK_RESULTS = [
   // ── 13. mercury-2 ────────────────────────────────────────────
   {
     name: 'mercury-2', org: 'Inception Labs', color: '#7c3aed',
-    overall: 43.8, tax: 32.4, financial: 63.1, management: 77.2,
-    interpLaw: 47.3, calculation: 16.7, journal: 40.1,
-    multiChoice: 79.2, openText: 22.4, singleChoice: 68.3, journalEntry: 46.1,
-    austrianTax: 32.6, mixedAcc: 77.9, ugb: 62.8, ifrs: 99.0,
-    eduProf: 31.9, eduMaster: 82.4, eduVoc: 37.9,
+    overall: 43.5, tax: 32.4, financial: 56.8, management: 77.2,
+    interpLaw: 47.8, calculation: 18.7, journal: 34.3,
+    multiChoice: 78.2, openText: 23.0, singleChoice: 70.5, journalEntry: 37.5,
+    austrianTax: 32.6, mixedAcc: 77.9, ugb: 62.8, ifrs: 60.9,
+    eduProf: 32.7, eduMaster: 82.4, eduVoc: 37.9,
     byEdu: {
-      prof:   { overall: 31.9, tax: 31.3, financial: null, management: 47.1, interpLaw: 33.5, calculation: 16.7, journal: null, multiChoice: 72.3, openText: 21.7, singleChoice: 60.9, journalEntry: null, austrianTax: 31.3, mixedAcc: 47.1, ugb: null, ifrs: null },
+      prof:   { overall: 32.7, tax: 31.3, financial: 39.2, management: 47.1, interpLaw: 34.8, calculation: 19.6, journal: 13.6, multiChoice: 70.5, openText: 22.4, singleChoice: 65.4, journalEntry: 13.8, austrianTax: 31.3, mixedAcc: 47.1, ugb: null, ifrs: 39.2 },
       master: { overall: 82.4, tax: 66.0, financial: 81.8, management: 89.2, interpLaw: 82.4, calculation: null, journal: null, multiChoice: 82.4, openText: 100.0, singleChoice: 80.0, journalEntry: null, austrianTax: 62.9, mixedAcc: 86.9, ugb: 73.0, ifrs: 99.0 },
       voc:    { overall: 37.9, tax: 21.0, financial: 38.9, management: null, interpLaw: 77.0, calculation: 16.7, journal: 40.1, multiChoice: 75.0, openText: 26.1, singleChoice: 75.0, journalEntry: 46.1, austrianTax: 35.4, mixedAcc: null, ugb: 46.3, ifrs: null },
     },

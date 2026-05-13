@@ -235,7 +235,7 @@ function renderHolisticMatrix(eduKey) {
         <th class="hm-th-sub">Mixed Acc.</th>
         <th class="hm-th-sub">National GAAP</th>
         <th class="hm-th-sub hm-calc-tip">IFRS
-          <div class="hm-calc-popup">The IFRS subset of the dataset is comparatively small (n = 25 tasks) and was drawn primarily from university-level teaching material. The near-ceiling performance reported should therefore not be read as evidence that LLMs handle IFRS reasoning reliably in general; the result is consistent with the high standardization and broad international documentation of IFRS, but the present item pool does not capture the full complexity of IFRS application in practice and has limited discriminative power for cross-model comparison. Expanding the IFRS subset with practice-grade items is a priority for the next iteration.</div>
+          <div class="hm-calc-popup">The IFRS scores are not directly comparable across all 13 models: the 25 university-level tasks were evaluated on all 13 models, while the 44 practice-grade tasks were evaluated on 10 models only. For a like-for-like comparison, filter by University Exams or Professional Exams.</div>
         </th>
         <th class="hm-th-sub">Prof. Exams</th>
         <th class="hm-th-sub">University Exams</th>

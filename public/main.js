@@ -3,28 +3,6 @@
 //  Depends on: data.js (must be loaded first)
 // ============================================================
 
-// ===== PAGE NAVIGATION =====
-
-const PAGE_ORDER  = ['home', 'leaderboard', 'dashboard', 'methodology', 'about'];
-const PAGE_LABELS = { home:'Overview', leaderboard:'Results', dashboard:'Analytics', methodology:'Methodology', about:'About' };
-
-// Page-to-file mapping for multi-page navigation
-const PAGE_FILES = {
-  home:        'index.html',
-  leaderboard: 'leaderboard.html',
-  dashboard:   'dashboard.html',
-  methodology: 'methodology.html',
-  about:       'about.html',
-};
-
-function showPage(name) {
-  // If this page's file is already loaded, do nothing (we're already here)
-  const currentFile = window.location.pathname.split('/').pop() || 'index.html';
-  const targetFile  = PAGE_FILES[name] || 'index.html';
-  if (currentFile === targetFile) return;
-  window.location.href = targetFile;
-}
-
 // ===== MOBILE CARD EXPAND / COLLAPSE =====
 
 function toggleMCard(card) {

@@ -15,26 +15,26 @@
 <body>
 <!-- BOTTOM TAB BAR (mobile only) -->
 <div aria-label="Hauptnavigation" class="m-tabs" id="mTabs" role="navigation">
-<button aria-label="Overview" class="m-tab" id="mtab-home" onclick="showPage('home')">
+<a aria-label="Overview" class="m-tab" href="index.html">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><rect height="7" width="7" x="3" y="3"></rect><rect height="7" width="7" x="14" y="3"></rect><rect height="7" width="7" x="3" y="14"></rect><rect height="7" width="7" x="14" y="14"></rect></svg>
     Overview
-  </button>
-<button aria-label="Leaderboard" class="m-tab" id="mtab-leaderboard" onclick="showPage('leaderboard')">
+  </a>
+<a aria-label="Leaderboard" class="m-tab" href="leaderboard.html">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
     Results
-  </button>
-<button aria-label="Dashboard" class="m-tab" id="mtab-dashboard" onclick="showPage('dashboard')">
+  </a>
+<a aria-label="Dashboard" class="m-tab" href="dashboard.html">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg>
     Analytics
-  </button>
-<button aria-label="Methodology" class="m-tab" id="mtab-methodology" onclick="showPage('methodology')">
+  </a>
+<a aria-label="Methodology" class="m-tab" href="methodology.html">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
     Method
-  </button>
-<button aria-label="About" class="m-tab active" id="mtab-about" onclick="showPage('about')">
+  </a>
+<a aria-label="About" class="m-tab active" href="about.html">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
     About
-  </button>
+  </a>
 </div>
 <!-- NAV -->
 <nav>
@@ -47,7 +47,7 @@
 <img alt="Board Service Center" class="nav-partner-logo-bsc" src="img/bsc-logo.png"/>
 </a>
 </div>
-<a class="nav-logo-wrap" href="#" onclick="showPage('home');return false;">
+<a class="nav-logo-wrap" href="index.html">
 <div class="nav-logo-bar"></div>
 <div class="nav-logo">Accounting<span>Bench</span></div>
 </a>
@@ -56,13 +56,12 @@
 </nav>
 <!-- PAGE TABS -->
 <div class="page-tabs">
-<button class="page-tab" onclick="showPage('home')">Overview</button>
-<button class="page-tab" onclick="showPage('leaderboard')">Leaderboard</button>
-<button class="page-tab" onclick="showPage('dashboard')">Dashboard</button>
-<button class="page-tab" onclick="showPage('methodology')">Methodology</button>
-<button class="page-tab active" onclick="showPage('about')">About Us</button>
-<button class="page-tab" onclick="window.location.href='../auth-pages/sign-in.html'">Sign In</button>
-
+<a class="page-tab" href="index.html">Overview</a>
+<a class="page-tab" href="leaderboard.html">Leaderboard</a>
+<a class="page-tab" href="dashboard.html">Dashboard</a>
+<a class="page-tab" href="methodology.html">Methodology</a>
+<a class="page-tab active" href="about.html">About Us</a>
+<a class="page-tab" href="../auth-pages/sign-in.html">Sign In</a>
 </div>
 
 <div class="page-view active" id="page-about">
