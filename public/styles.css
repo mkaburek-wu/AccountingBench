@@ -708,9 +708,6 @@ footer { background: var(--wu-blue); color: rgba(255,255,255,0.85); padding: 44p
     flex: 1 1 auto;
     min-height: 260px;
   }
-  .team-grid > .about-team-card-offset .about-team-info {
-    padding-top: 44px;
-  }
   .team-grid > .about-team-card .about-team-divider {
     margin-top: auto;
     margin-bottom: 18px;
