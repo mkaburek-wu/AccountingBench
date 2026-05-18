@@ -86,12 +86,14 @@ function buildCard(s) {
     ? s.task_category.replace(/_/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); })
     : '—';
 
+  var safeId = encodeURIComponent(s.id);
+
   var viewBtn = s.status === 'done'
-    ? '<a href="results.html?submission=' + s.id + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>'
+    ? '<a href="results.html?submission=' + safeId + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Result</a>'
     : '';
 
   var processingBtn = s.status === 'processing'
-    ? '<a href="results.html?submission=' + s.id + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Progress</a>'
+    ? '<a href="results.html?submission=' + safeId + '" class="btn-secondary" style="font-size:10px;padding:6px 14px;">View Progress</a>'
     : '';
 
   return (

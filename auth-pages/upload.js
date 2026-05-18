@@ -120,8 +120,19 @@ async function pollForCheckout(submissionId) {
       console.log('[poll] data', JSON.stringify(data));
 
       if (data.checkout_url) {
-        // Stripe session is ready — redirect
+        // Stripe session is ready — validate domain before redirect
         console.log('[poll] navigating to', data.checkout_url);
+        var allowedHosts = ['checkout.stripe.com', 'billing.stripe.com'];
+        var urlHost;
+        try { urlHost = new URL(data.checkout_url).hostname; } catch (e) { urlHost = ''; }
+        if (!allowedHosts.some(function(h) { return urlHost === h; })) {
+          console.error('[poll] unexpected checkout_url host:', urlHost);
+          showError('formError', 'Unexpected payment URL. Please contact support.');
+          document.getElementById('preparingPaymentView').style.display = 'none';
+          document.querySelector('.form-submit-area').style.display = 'block';
+          document.querySelectorAll('.form-card').forEach(function(el) { el.style.display = 'block'; });
+          return;
+        }
         var pl = document.getElementById('paymentLink');
         if (pl) pl.href = data.checkout_url;
         document.getElementById('preparingPaymentView').style.display = 'none';

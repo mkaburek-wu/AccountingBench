@@ -63,6 +63,10 @@ async function checkStatus(sid) {
   }
 }
 
+window.addEventListener('beforeunload', function() {
+  if (pollInterval) clearInterval(pollInterval);
+});
+
 function startPolling(sid) {
   var attempts = 0;
   pollInterval = setInterval(async function() {
@@ -87,11 +91,12 @@ function startPolling(sid) {
         showError(data.error_message || null);
       } else if (attempts >= 100) {
         clearInterval(pollInterval);
-        showError(
-          'The benchmark is taking longer than expected. ' +
-          'One or more models may still be running.<br><br>' +
-          '<button class="btn-secondary" onclick="location.reload()">Refresh to check again</button>'
-        );
+        showError('The benchmark is taking longer than expected. One or more models may still be running.');
+        var btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.textContent = 'Refresh to check again';
+        btn.onclick = function() { location.reload(); };
+        document.getElementById('errorMsg').appendChild(btn);
       }
     } catch (err) {
       console.error('Poll error:', err);
@@ -151,6 +156,6 @@ function showError(msg) {
   document.getElementById('heroTitle').textContent        = 'Benchmark Error';
   document.getElementById('heroSub').textContent =
     'Something went wrong while processing your task.';
-  if (msg) document.getElementById('errorMsg').innerHTML = msg;
+  if (msg) document.getElementById('errorMsg').textContent = msg;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

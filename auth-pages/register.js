@@ -23,6 +23,9 @@ async function handleRegister() {
 
   if (!firstName || !lastName) { showError('authError', 'Please enter your first and last name.'); return; }
   if (!email)    { showError('authError', 'Please enter your email address.'); return; }
+  if (!email.includes('@') || !email.split('@')[1]) {
+    showError('authError', 'Please enter a valid email address.'); return;
+  }
   if (!password || password.length < 8) { showError('authError', 'Password must be at least 8 characters long.'); return; }
 
   var emailDomain = email.split('@')[1].toLowerCase();

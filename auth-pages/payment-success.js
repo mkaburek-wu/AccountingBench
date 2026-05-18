@@ -14,6 +14,10 @@ var STATUS_MSGS = [
   'Almost done…',
 ];
 
+window.addEventListener('beforeunload', function() {
+  if (pollInterval) clearInterval(pollInterval);
+});
+
 window.addEventListener('load', function() {
   waitForClerk(async function() {
     await window.Clerk.load();
@@ -98,8 +102,11 @@ function startPolling(sid) {
         clearInterval(pollInterval);
         setView('errorView', 'Taking Longer Than Expected',
           'One or more models may still be running.');
-        document.getElementById('errorMsg').innerHTML =
-          '<button class="btn-secondary" onclick="location.reload()">Refresh to check again</button>';
+        var btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.textContent = 'Refresh to check again';
+        btn.onclick = function() { location.reload(); };
+        document.getElementById('errorMsg').appendChild(btn);
       }
     } catch (err) {
       console.error('Poll error:', err);

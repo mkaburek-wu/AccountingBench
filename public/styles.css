@@ -1522,6 +1522,8 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
 
 /* ── Auth pages — responsive ── */
 @media (max-width: 768px) {
+  .private-page { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .auth-wrapper { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .landing-hero    { padding: 32px 16px 36px; }
   .landing-content { padding: 28px 16px; }
   .submissions-grid { grid-template-columns: 1fr; }
