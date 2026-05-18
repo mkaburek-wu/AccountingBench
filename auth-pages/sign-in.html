@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -8,16 +8,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
 
-<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
-<script
-  async
-  crossorigin="anonymous"
-  data-clerk-publishable-key="pk_test_YW11c2VkLWh5ZW5hLTk5LmNsZXJrLmFjY291bnRzLmRldiQ"
-  src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-  type="text/javascript">
-</script>
 
 <!-- Shared auth utilities -->
+<script src="config.js"></script>
 <script src="auth-pages.js"></script>
 </head>
 <body>
@@ -41,12 +34,12 @@
 </nav>
 
 <div class="page-tabs">
-  <button class="page-tab" onclick="window.location.href='../public/index.html'">Overview</button>
-  <button class="page-tab" onclick="window.location.href='../public/leaderboard.html'">Leaderboard</button>
-  <button class="page-tab" onclick="window.location.href='../public/dashboard.html'">Dashboard</button>
-  <button class="page-tab" onclick="window.location.href='../public/methodology.html'">Methodology</button>
-  <button class="page-tab" onclick="window.location.href='../public/about.html'">About Us</button>
-  <button class="page-tab active">Sign In</button>
+  <a class="page-tab" href="../public/index.html">Overview</a>
+  <a class="page-tab" href="../public/leaderboard.html">Leaderboard</a>
+  <a class="page-tab" href="../public/dashboard.html">Dashboard</a>
+  <a class="page-tab" href="../public/methodology.html">Methodology</a>
+  <a class="page-tab" href="../public/about.html">About Us</a>
+  <a class="page-tab active">Sign In</a>
 </div>
 
 <div class="auth-wrapper">
@@ -112,116 +105,6 @@
   </div>
 </footer>
 
-<script>
-  var signInAttempt = null;
-
-  // Initialise
-  window.addEventListener('load', function() {
-    waitForClerk(async function() {
-      await window.Clerk.load();
-      if (window.Clerk.user) { window.location.href = 'landing.html'; }
-    });
-  });
-
-  // Enter key shortcuts
-  document.getElementById('passwordInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') handleSignIn();
-  });
-  setupCodeInput('codeInput', handleVerifyCode);
-
-  // Step 1 — sign in
-  async function handleSignIn() {
-    hideMessages(['authError', 'authSuccess']);
-    var email    = document.getElementById('emailInput').value.trim();
-    var password = document.getElementById('passwordInput').value;
-    if (!email || !password) { showError('authError', 'Please enter your email address and password.'); return; }
-
-    setLoading('signInBtn', true, 'Signing in\u2026');
-    try {
-      await window.Clerk.load();
-      signInAttempt = await window.Clerk.client.signIn.create({ identifier: email, password: password });
-
-      if (signInAttempt.status === 'complete') {
-        await window.Clerk.setActive({ session: signInAttempt.createdSessionId });
-        showSuccess('authSuccess', 'Signed in. Redirecting\u2026');
-        setTimeout(function() { window.location.href = 'landing.html'; }, 800);
-
-      } else if (signInAttempt.status === 'needs_second_factor') {
-        await signInAttempt.prepareSecondFactor({ strategy: 'email_code' });
-        document.getElementById('codeInfoMsg').textContent =
-          'You are signing in from a new device. A 6-digit code has been sent to ' + email + '. Enter it below.';
-        showStep('stepCode');
-        setLoading('signInBtn', false, 'Sign In');
-        document.getElementById('codeInput').focus();
-
-      } else if (signInAttempt.status === 'needs_first_factor') {
-        await signInAttempt.prepareFirstFactor({ strategy: 'email_code' });
-        showStep('stepCode');
-        setLoading('signInBtn', false, 'Sign In');
-        document.getElementById('codeInput').focus();
-
-      } else {
-        showError('authError', 'Unexpected response. Please try again.');
-        setLoading('signInBtn', false, 'Sign In');
-      }
-    } catch (err) {
-      setLoading('signInBtn', false, 'Sign In');
-      handleClerkError(err, 'authError');
-    }
-  }
-
-  // Step 2 — verify code
-  async function handleVerifyCode() {
-    hideMessages(['authError', 'authSuccess']);
-    var code = document.getElementById('codeInput').value.trim();
-    if (!code || code.length < 6) { showError('authError', 'Please enter the complete 6-digit code.'); return; }
-
-    setLoading('verifyBtn', true, 'Verifying\u2026');
-    try {
-      var result;
-      if (signInAttempt.status === 'needs_second_factor') {
-        result = await signInAttempt.attemptSecondFactor({ strategy: 'email_code', code: code });
-      } else {
-        result = await signInAttempt.attemptFirstFactor({ strategy: 'email_code', code: code });
-      }
-      if (result.status === 'complete') {
-        await window.Clerk.setActive({ session: result.createdSessionId });
-        showSuccess('authSuccess', 'Verified. Redirecting\u2026');
-        setTimeout(function() { window.location.href = 'landing.html'; }, 800);
-      } else {
-        showError('authError', 'Verification incomplete. Please try again.');
-        setLoading('verifyBtn', false, 'Verify &amp; Sign In');
-      }
-    } catch (err) {
-      setLoading('verifyBtn', false, 'Verify &amp; Sign In');
-      document.getElementById('codeInput').value = '';
-      handleClerkError(err, 'authError');
-    }
-  }
-
-  // Resend code
-  async function handleResendCode() {
-    hideMessages(['authError', 'authSuccess']);
-    try {
-      if (signInAttempt.status === 'needs_second_factor') {
-        await signInAttempt.prepareSecondFactor({ strategy: 'email_code' });
-      } else {
-        await signInAttempt.prepareFirstFactor({ strategy: 'email_code' });
-      }
-      showSuccess('authSuccess', 'A new code has been sent to your email.');
-      document.getElementById('codeInput').value = '';
-      document.getElementById('codeInput').focus();
-    } catch (err) { showError('authError', 'Could not resend. Please refresh the page.'); }
-  }
-
-  // Go back
-  function goBack() {
-    signInAttempt = null;
-    hideMessages(['authError', 'authSuccess']);
-    document.getElementById('codeInput').value = '';
-    showStep('stepCredentials');
-    document.getElementById('emailInput').focus();
-  }
-</script>
+<script src="sign-in.js"></script>
 </body>
 </html>

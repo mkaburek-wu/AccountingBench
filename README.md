@@ -106,15 +106,14 @@ accountingbench/
 │   └── img/                       ← Logos and images
 │
 ├── auth-pages/                    ← Private authenticated pages
-│   ├── auth-pages.js              ← Shared JS utilities (API base URL here)
-│   ├── sign-in.html               ← Login page
-│   ├── register.html              ← Registration page
-│   ├── landing.html               ← User's submission history
-│   ├── upload.html                ← Task contribution form
-│   ├── upload.js                  ← Upload form logic + Stripe polling
-│   ├── payment-success.html       ← Post-Stripe redirect: confirms payment + runs pipeline
-│   ├── payment-success.js         ← Payment confirmation + benchmark polling logic
-│   └── results.html               ← Benchmark result viewer
+│   ├── config.js                  ← ⚙️  Single config file: API URL + Clerk keys (edit for deployment)
+│   ├── auth-pages.js              ← Shared JS utilities; injects Clerk script dynamically
+│   ├── sign-in.html / sign-in.js  ← Login page + logic
+│   ├── register.html / register.js← Registration page + logic
+│   ├── landing.html / landing.js  ← Submission history page + logic
+│   ├── upload.html / upload.js    ← Task contribution form + Stripe polling
+│   ├── payment-success.html / payment-success.js ← Post-Stripe redirect: confirms payment + pipeline
+│   └── results.html               ← Benchmark result viewer (JS inline → results.js)
 │
 └── backend/                       ← FastAPI Python server
     ├── main.py                    ← App entry point, all endpoints
@@ -697,16 +696,18 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ### 10.2 Auth Pages (`auth-pages/`)
 
+Each page is a plain HTML file with no inline JavaScript. Logic lives in a matching `.js` file.
+
 | File | Purpose |
 |---|---|
-| `sign-in.html` | Email + password login. Handles new-device verification code step when Clerk requires it. Redirects to `landing.html` on success. |
-| `register.html` | Registration form. Pre-checks domain against `/auth/check-domain` before creating a Clerk account. Email verification code required. |
-| `landing.html` | Protected home page. Shows welcome message with user's first name and a grid of submission cards. Links to `upload.html` and `results.html`. |
-| `upload.html` | Task contribution form with three sections: Task Content, Classification & Metadata, Supporting Documents. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
-| `upload.js` | Upload form logic. Handles submit, client-side validation, and the `pollForCheckout()` loop that waits for the Stripe session and redirects. |
-| `payment-success.html` | Shown after Stripe payment. Calls `/confirm-payment`, shows benchmark progress, then redirects to `results.html` when done. |
-| `payment-success.js` | Calls `POST /confirm-payment` with the Stripe session ID, then polls `GET /submissions/{id}/status` until `done`. |
-| `results.html` | Dedicated result viewer. Checks status immediately on load — if `done` shows results from database, if `processing` polls every 3 seconds. Never re-runs the benchmark. |
+| `config.js` | **The only file to edit when deploying.** Sets `API`, `CLERK_PUBLISHABLE_KEY`, and `CLERK_JS_URL`. Loaded first on every page. |
+| `auth-pages.js` | Shared utilities used by all pages. Also injects the Clerk `<script>` tag dynamically using values from `config.js`. |
+| `sign-in.html` / `sign-in.js` | Email + password login. Handles new-device verification code step. Redirects to `landing.html` on success. |
+| `register.html` / `register.js` | Registration form. Pre-checks domain against `/auth/check-domain` before creating a Clerk account. |
+| `landing.html` / `landing.js` | Protected home page. Shows welcome message and submission history grid. |
+| `upload.html` / `upload.js` | Task contribution form. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
+| `payment-success.html` / `payment-success.js` | Shown after Stripe payment. Calls `/confirm-payment`, shows benchmark progress, redirects to `results.html` when done. |
+| `results.html` | Dedicated result viewer. If `done` shows results from database immediately; if `processing` polls every 3 seconds. Never re-runs the benchmark. |
 
 ---
 
@@ -759,10 +760,11 @@ Contains all DOM render functions. These are called once on page load and build 
 
 ---
 
-All shared utilities used across multiple auth pages are in `auth-pages/auth-pages.js`. This file is included in every auth page with a `<script src="auth-pages.js"></script>` tag.
+All shared utilities used across multiple auth pages are in `auth-pages/auth-pages.js`. Every HTML page loads `config.js` first, then `auth-pages.js`. The Clerk `<script>` is no longer hardcoded in HTML — `auth-pages.js` injects it dynamically on load using `CLERK_PUBLISHABLE_KEY` and `CLERK_JS_URL` from `config.js`.
 
-| Function | Description |
+| Function / Variable | Description |
 |---|---|
+| *(startup)* | Injects the Clerk `<script>` tag dynamically using values from `config.js`. |
 | `waitForClerk(callback)` | Polls every 100ms until `window.Clerk.load` is available. Handles async script loading reliably. |
 | `showError(id, msg)` | Shows a red error banner by element ID. |
 | `showSuccess(id, msg)` | Shows a green success banner by element ID. |
@@ -772,7 +774,6 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 | `handleClerkError(err, id)` | Maps Clerk technical errors to friendly user-facing messages. |
 | `showStep(id)` | Switches between `.auth-step` divs (used in multi-step forms). |
 | `setupCodeInput(inputId, fn)` | Configures 6-digit code inputs with auto-submit on completion. |
-| `API` | Global constant: `http://127.0.0.1:8000`. Change this for production. |
 
 ---
 
@@ -942,9 +943,10 @@ In the Clerk dashboard at [clerk.com](https://clerk.com), configure the followin
 - Disable **Email verification code** as a sign-in method (otherwise users are asked for a code on every sign-in instead of using their password)
 
 **API Keys:**
-- Copy the **Publishable key** (`pk_test_...`) → add to `.env` as `CLERK_PUBLISHABLE_KEY`
+- Copy the **Publishable key** (`pk_test_...`) → add to `.env` as `CLERK_PUBLISHABLE_KEY` AND to `auth-pages/config.js` as `CLERK_PUBLISHABLE_KEY`
 - Copy the **Secret key** (`sk_test_...`) → add to `.env` as `CLERK_SECRET_KEY`
 - Copy the **JWT verification key** (RSA public key) → add to `.env` as `CLERK_PEM_PUBLIC_KEY`
+- Copy the **Clerk JS URL** (the `src` from the Clerk script snippet in the dashboard) → add to `auth-pages/config.js` as `CLERK_JS_URL`
 
 ---
 
@@ -962,22 +964,26 @@ In the Clerk dashboard → **JWT Templates** → **session token**, add this cla
 
 ---
 
-### 12.3 HTML Page Configuration
+### 12.3 Frontend Configuration (`config.js`)
 
-Every auth page has two Clerk placeholders that must be replaced with actual values:
+All frontend configuration lives in `auth-pages/config.js`. This is the **only file you need to edit** when setting up a new environment or deploying to production.
 
-```html
-<!-- Replace in: sign-in.html, register.html, landing.html, upload.html, results.html, payment-success.html -->
-<script
-  async
-  crossorigin="anonymous"
-  data-clerk-publishable-key="YOUR_PUBLISHABLE_KEY"
-  src="https://your-instance.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-  type="text/javascript">
-</script>
+```javascript
+// auth-pages/config.js
+
+// Backend API URL
+var API = 'http://127.0.0.1:8000';           // development
+// var API = 'https://your-api.onrender.com'; // production
+
+// Clerk publishable key — from Clerk dashboard → API Keys
+var CLERK_PUBLISHABLE_KEY = 'pk_test_...';
+
+// Clerk JS URL — from Clerk dashboard → API Keys → Clerk SDK snippet
+// The subdomain (e.g. amused-hyena-99) is unique to your Clerk instance
+var CLERK_JS_URL = 'https://your-instance.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
 ```
 
-Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key.
+The Clerk `<script>` tag is **no longer hardcoded in any HTML file**. `auth-pages.js` reads these values and injects the script dynamically on page load, so there is nothing to update in the HTML files themselves.
 
 ---
 
@@ -1053,7 +1059,12 @@ Update `public/main.js` to fetch from `GET /api/leaderboard` instead of reading 
 Deploy the FastAPI backend as a **Render Web Service** and the static HTML files as **Render Static Sites**. Key changes needed:
 
 1. Switch `DATABASE_URL` in `.env` to the Render PostgreSQL connection string
-2. Change the `API` constant in `auth-pages/auth-pages.js` from `http://127.0.0.1:8000` to the Render backend service URL
+2. In `auth-pages/config.js`, update all three values for production:
+   ```javascript
+   var API                  = 'https://your-api.onrender.com';
+   var CLERK_PUBLISHABLE_KEY = 'pk_live_...';   // or keep pk_test_ if still testing
+   var CLERK_JS_URL          = 'https://your-instance.clerk.accounts.dev/...';
+   ```
 3. Set `FRONTEND_URL` in `.env` to the Render static site URL (e.g. `https://your-site.onrender.com`) — this updates Stripe's success/cancel redirect URLs automatically
 4. Add the Render backend and frontend URLs to the `ALLOWED_ORIGINS` list in `main.py`
 5. The JWKS fallback in `auth.py` will work automatically on Render (unrestricted internet access)

@@ -1,29 +1,15 @@
-/**
- * AccountingBench — Auth Pages Shared JavaScript
- * ================================================
- * Shared utilities used across all four auth pages:
- *   sign-in.html, register.html, landing.html, upload.html
- *
- * Include this file in each page AFTER the Clerk script tag:
- *   <script src="auth-pages.js"></script>
- *
- * What this file provides:
- *   - waitForClerk(callback)   — waits until Clerk is fully loaded
- *   - showError(id, msg)       — shows a red error banner
- *   - showSuccess(id, msg)     — shows a green success banner
- *   - hideMessages(ids)        — hides message banners
- *   - setLoading(btnId, ...)   — toggles button loading state
- *   - escHtml(text)            — escapes HTML to prevent XSS
- *   - API                      — the base URL for the FastAPI server
- */
-
 'use strict';
 
-// ── API base URL ──────────────────────────────────────────────────────────────
-// Change this to your Render URL when you deploy:
-//   e.g. "https://accountingbench-api.onrender.com"
-var API = 'http://127.0.0.1:8000';
-
+// ── Inject Clerk script dynamically ──────────────────────────────────────────
+// CLERK_PUBLISHABLE_KEY and CLERK_JS_URL come from config.js (loaded first).
+(function() {
+  var s = document.createElement('script');
+  s.async = true;
+  s.crossOrigin = 'anonymous';
+  s.setAttribute('data-clerk-publishable-key', CLERK_PUBLISHABLE_KEY);
+  s.src = CLERK_JS_URL;
+  document.head.appendChild(s);
+})();
 
 // ── waitForClerk ──────────────────────────────────────────────────────────────
 // Polls every 100ms until window.Clerk exists AND window.Clerk.load is a
