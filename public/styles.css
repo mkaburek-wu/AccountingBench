@@ -1513,6 +1513,12 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
 .result-error    { background: var(--red-bg); border: 1px solid rgba(185,28,28,0.2); border-left: 4px solid var(--red); padding: 20px 24px; }
 .result-error h3 { font-weight: 700; font-size: 15px; color: var(--red); margin-bottom: 6px; }
 .result-error p  { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.results-empty   { padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
+
+/* ── Status card — payment-success page states ── */
+.status-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--wu-blue); padding: 52px 40px; text-align: center; margin-top: 24px; }
+.status-card--error { border-top-color: var(--red); }
+.status-card--error .processing-title { color: var(--red); }
 
 /* ── Auth pages — responsive ── */
 @media (max-width: 768px) {

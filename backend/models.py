@@ -299,6 +299,10 @@ class Submission(Base):
     # Stripe Payment Intent ID, e.g. "pi_3abc..."
     # Used to issue refunds if the script fails after payment.
 
+    checkout_url      = Column(String, nullable=True)
+    # Stripe Checkout Session URL. Set by background task shortly after submission.
+    # Frontend polls status endpoint until this appears, then redirects.
+
     price_charged     = Column(Integer, nullable=True)
     # Amount charged in cents, e.g. 5000 = €50.00.
     # Copied from settings.price_per_submission at time of payment.

@@ -161,7 +161,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,     # Required for Clerk cookies to be sent cross-origin
+    allow_credentials=False,    # Auth uses Bearer tokens, not cookies — credentials=True breaks wildcard headers
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -202,6 +202,7 @@ async def health(db: Session = Depends(get_db)):
         "database": db_status,
         "version":  "1.0.0",
     }
+
 
 
 # ── User profile endpoint ─────────────────────────────────────────────────────
@@ -366,8 +367,10 @@ async def submission_status(
         raise HTTPException(status_code=404, detail="Submission not found.")
 
     response = {
-        "id":     submission.id,
-        "status": submission.status,
+        "id":             submission.id,
+        "status":         submission.status,
+        "checkout_url":   submission.checkout_url,
+        "payment_status": submission.payment_status,
     }
 
     # If done, include the model scores

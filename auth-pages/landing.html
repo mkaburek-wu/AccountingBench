@@ -133,8 +133,7 @@
     try {
       var token = await window.Clerk.session.getToken();
       var res   = await fetch(API + '/submissions/mine', {
-        headers:     { 'Authorization': 'Bearer ' + token },
-        credentials: 'include',
+        headers: { 'Authorization': 'Bearer ' + token },
       });
 
       // Show error inline — never redirect on API errors

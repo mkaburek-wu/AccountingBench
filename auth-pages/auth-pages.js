@@ -22,7 +22,7 @@
 // ── API base URL ──────────────────────────────────────────────────────────────
 // Change this to your Render URL when you deploy:
 //   e.g. "https://accountingbench-api.onrender.com"
-var API = 'http://localhost:8000';
+var API = 'http://127.0.0.1:8000';
 
 
 // ── waitForClerk ──────────────────────────────────────────────────────────────
@@ -254,7 +254,6 @@ async function checkOrPoll(submissionId) {
     clerkToken = await window.Clerk.session.getToken();
     var res = await fetch(API + '/submissions/' + submissionId + '/status', {
       headers: { 'Authorization': 'Bearer ' + clerkToken },
-      credentials: 'include',
     });
     if (!res.ok) { showProcessing(); startPolling(submissionId); return; }
 

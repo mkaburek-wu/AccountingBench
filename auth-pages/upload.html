@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
 
-<!-- Clerk — replace YOUR_PUBLISHABLE_KEY with your actual pk_test_... key -->
 <script
   async
   crossorigin="anonymous"
@@ -16,8 +15,6 @@
   src="https://amused-hyena-99.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
   type="text/javascript">
 </script>
-
-<!-- Shared auth utilities -->
 <script src="auth-pages.js"></script>
 </head>
 <body>
@@ -65,14 +62,24 @@
       Payment was cancelled — no charge was made. Fill in your task again to contribute.
     </div>
 
-    <!-- Shown after form submits successfully while redirecting to Stripe -->
-    <div class="payment-redirect" id="paymentRedirect">
+    <!-- Shown while the Stripe Checkout Session is created in background -->
+    <div id="preparingPaymentView" class="status-card" style="display:none;">
       <div class="processing-icon"></div>
-      <div class="processing-title">Redirecting to Secure Payment</div>
+      <div class="processing-title">Preparing Payment</div>
+      <div class="processing-sub">Setting up your secure payment checkout&hellip;</div>
+    </div>
+
+    <!-- Shown after successful submission while redirecting to Stripe -->
+    <div id="paymentReadyView" class="status-card" style="display:none;">
+      <div class="processing-icon"></div>
+      <div class="processing-title">Redirecting to Payment</div>
       <div class="processing-sub">
-        You are being redirected to our payment page. If it does not open automatically, use the button below.
+        Opening secure payment page. If your browser does not redirect automatically,
+        use the button below.
       </div>
-      <a class="btn-primary" id="paymentLink" href="#" target="_top">Pay Now →</a>
+      <a class="btn-primary" id="paymentLink" href="#" target="_blank" rel="noopener">
+        Proceed to Payment →
+      </a>
     </div>
 
     <!-- Section 1: Task content -->
@@ -250,206 +257,6 @@
   </div>
 </footer>
 
-<script>
-  var clerkToken = null;
-
-  // ── Show cancelled payment banner if redirected back from Stripe ──────────
-  (function() {
-    var p = new URLSearchParams(window.location.search);
-    if (p.get('cancelled') === '1') {
-      document.getElementById('cancelledBanner').style.display = 'block';
-    }
-  })();
-
-  // ── Auth check ────────────────────────────────────────────────────────────
-  window.addEventListener('load', function() {
-    waitForClerk(async function() {
-      await window.Clerk.load();
-      if (!window.Clerk.user) { window.location.href = 'sign-in.html'; return; }
-      clerkToken = await window.Clerk.session.getToken();
-    });
-  });
-
-  // ── File name display ─────────────────────────────────────────────────────
-  document.getElementById('pdfFile').addEventListener('change', function() {
-    document.getElementById('pdfName').textContent = this.files[0] ? this.files[0].name : '';
-  });
-  document.getElementById('excelFile').addEventListener('change', function() {
-    document.getElementById('excelName').textContent = this.files[0] ? this.files[0].name : '';
-  });
-
-  // ── Drag-and-drop styling ─────────────────────────────────────────────────
-  ['pdfArea', 'excelArea'].forEach(function(id) {
-    var area = document.getElementById(id);
-    area.addEventListener('dragover',  function(e) { e.preventDefault(); area.classList.add('dragover'); });
-    area.addEventListener('dragleave', function()  { area.classList.remove('dragover'); });
-    area.addEventListener('drop',      function()  { area.classList.remove('dragover'); });
-  });
-
-  // ── Conditional fields ────────────────────────────────────────────────────
-  function handleAnswerTypeChange() {
-    var type = document.getElementById('answerType').value;
-    ['fieldOptions', 'fieldGrading', 'fieldTolerance'].forEach(function(id) {
-      document.getElementById(id).classList.remove('visible');
-    });
-    if (type === 'single_choice' || type === 'multi_choice') {
-      document.getElementById('fieldOptions').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent =
-        'Enter the correct letter(s): A, or A,C for multiple answers.';
-    } else if (type === 'open_text' || type === 'journal_entry') {
-      document.getElementById('fieldGrading').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent =
-        'Enter the reference answer for the LLM judge to compare against.';
-    } else if (type === 'open_numeric') {
-      document.getElementById('fieldGrading').classList.add('visible');
-      document.getElementById('fieldTolerance').classList.add('visible');
-      document.getElementById('goldAnswerHint').textContent =
-        'Enter the correct numeric value, e.g. 1250.50';
-    }
-  }
-
-  // ── Validation ────────────────────────────────────────────────────────────
-  function validateForm() {
-    var required = [
-      { id: 'prompt',              label: 'Question / Prompt' },
-      { id: 'answerType',          label: 'Answer Type' },
-      { id: 'taskType',            label: 'Task Type' },
-      { id: 'goldAnswer',          label: 'Correct Answer' },
-      { id: 'category',            label: 'Category' },
-      { id: 'regulatoryFramework', label: 'Regulatory Framework' },
-      { id: 'regulatoryYear',      label: 'Applicable Year' },
-      { id: 'educationLevel',      label: 'Education Level' },
-    ];
-    for (var i = 0; i < required.length; i++) {
-      var el = document.getElementById(required[i].id);
-      if (!el || !el.value.trim()) {
-        showError('formError', 'Please fill in the required field: ' + required[i].label + '.');
-        if (el) el.focus();
-        return false;
-      }
-    }
-    var type = document.getElementById('answerType').value;
-    if ((type === 'single_choice' || type === 'multi_choice') &&
-        !document.getElementById('options').value.trim()) {
-      showError('formError', 'Please enter the answer options for choice tasks.');
-      return false;
-    }
-    if (['open_text', 'journal_entry', 'open_numeric'].indexOf(type) >= 0 &&
-        !document.getElementById('gradingCriteria').value.trim()) {
-      showError('formError', 'Please enter grading criteria for open-ended tasks.');
-      return false;
-    }
-    return true;
-  }
-//
-  // ── Submit — navigates to results.html on success ─────────────────────────
- async function handleSubmit() {
-  console.log('API =', typeof API, API);  // ← ADD THIS LINE
-  hideMessages(['formError']);
-  if (!validateForm()) return;
-
-  var btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.textContent = 'Submitting…';
-
-  try {
-    // Always refresh the token immediately before using it
-    if (!window.Clerk || !window.Clerk.session) {
-      showError('formError', 'Authentication not ready. Please wait a moment and try again.');
-      btn.disabled = false;
-      btn.textContent = 'Submit & Run Benchmark';
-      return;
-    }
-
-    clerkToken = await window.Clerk.session.getToken();
-
-    if (!clerkToken) {
-      showError('formError', 'Could not get authentication token. Please refresh the page.');
-      btn.disabled = false;
-      btn.textContent = 'Submit & Run Benchmark';
-      return;
-    }
-
-    var fd = new FormData();
-    fd.append('prompt',               document.getElementById('prompt').value.trim());
-    fd.append('answer_type',          document.getElementById('answerType').value);
-    fd.append('task_type',            document.getElementById('taskType').value);
-    fd.append('gold_answer',          document.getElementById('goldAnswer').value.trim());
-    fd.append('category',             document.getElementById('category').value);
-    fd.append('regulatory_framework', document.getElementById('regulatoryFramework').value);
-    fd.append('applicable_regulatory_year', document.getElementById('regulatoryYear').value);
-    fd.append('education_level',      document.getElementById('educationLevel').value);
-
-    var opts = {
-      options:          'options',
-      gradingCriteria:  'grading_criteria',
-      numericTolerance: 'numeric_tolerance',
-      context:          'context',
-      subcategory:      'subcategory',
-      notes:            'notes',
-    };
-    Object.keys(opts).forEach(function(elId) {
-      var el = document.getElementById(elId);
-      if (el && el.value && el.value.trim()) fd.append(opts[elId], el.value.trim());
-    });
-
-    var pdfFile   = document.getElementById('pdfFile').files[0];
-    var excelFile = document.getElementById('excelFile').files[0];
-    if (pdfFile)   fd.append('pdf_file',   pdfFile);
-    if (excelFile) fd.append('excel_file', excelFile);
-
-    var res = await fetch(API + '/submissions/prepare', {
-      method:      'POST',
-      headers:     { 'Authorization': 'Bearer ' + clerkToken },
-      body:        fd,
-      credentials: 'include',
-    });
-
-    if (!res.ok) {
-      var err = await res.json().catch(function() { return {}; });
-      showError('formError', 'Server error ' + res.status + ': ' + (err.detail || 'Submission failed. Please try again.'));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      btn.disabled = false;
-      btn.textContent = 'Submit & Run Benchmark';
-      return;
-    }
-
-    var data = await res.json();
-    console.log('Submission response:', data);  // visible in DevTools console
-
-    if (!data.submission_id) {
-      showError('formError', 'Server did not return a submission ID. Response: ' + JSON.stringify(data));
-      btn.disabled = false;
-      btn.textContent = 'Submit & Run Benchmark';
-      return;
-    }
-
-    // Redirect to Stripe Checkout, or directly to results in dev mode (no Stripe key)
-    if (data.checkout_url) {
-      // Hide the form, show payment redirect view with manual fallback link
-      document.querySelectorAll('.form-card').forEach(function(el) { el.style.display = 'none'; });
-      document.querySelector('.form-submit-area').style.display = 'none';
-      document.getElementById('paymentLink').href = data.checkout_url;
-      document.getElementById('paymentRedirect').style.display = 'block';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      // Auto-redirect to Stripe (window.top breaks out of any VS Code iframe preview)
-      window.top.location.href = data.checkout_url;
-    } else {
-      window.location.replace('results.html?submission=' + data.submission_id);
-    }
-
-  } catch (err) {
-    console.error('Submit error:', err);
-    showError('formError', 'Error: ' + err.message);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    btn.disabled = false;
-    btn.textContent = 'Submit & Run Benchmark';
-  }
-}
-
-
-
-
-</script>
+<script src="upload.js"></script>
 </body>
 </html>

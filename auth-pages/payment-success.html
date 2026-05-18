@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>AccountingBench — Benchmark Result</title>
+<title>AccountingBench — Processing Payment</title>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="../public/styles.css" rel="stylesheet"/>
@@ -34,7 +34,7 @@
       <div class="nav-logo">Accounting<span>Bench</span></div>
     </a>
   </div>
-  <span class="m-page-label">Benchmark Result</span>
+  <span class="m-page-label">Processing Payment</span>
 </nav>
 
 <div class="page-tabs">
@@ -50,16 +50,26 @@
 
   <div class="upload-hero">
     <div class="upload-hero-eyebrow">Submission Portal</div>
-    <div class="upload-hero-title" id="heroTitle">Benchmark Result</div>
+    <div class="upload-hero-title" id="heroTitle">Confirming Payment</div>
     <div class="upload-hero-sub" id="heroSub">
-      Your task has been evaluated against all models.
+      Please wait while we verify your payment with Stripe.
     </div>
   </div>
 
   <div class="upload-content">
 
-    <!-- Shown while benchmark is running (e.g. direct link from landing page) -->
-    <div id="processingView" style="display:none;">
+    <!-- Stripe payment verification in progress -->
+    <div id="confirmingView" class="status-card">
+      <div class="processing-icon"></div>
+      <div class="processing-title">Confirming Payment</div>
+      <div class="processing-sub">
+        Please wait while we verify your payment with Stripe.
+      </div>
+      <div class="processing-status">Verifying with Stripe…</div>
+    </div>
+
+    <!-- Benchmark pipeline running -->
+    <div id="processingView" class="status-card">
       <div class="processing-icon"></div>
       <div class="processing-title">Running Benchmark</div>
       <div class="processing-sub">
@@ -69,59 +79,15 @@
       <div class="processing-status" id="processingStatus">Initialising…</div>
     </div>
 
-    <!-- Results table -->
-    <div id="resultView" style="display:none;">
-      <div class="result-header">
-        <div class="result-header-icon">✓</div>
-        <div class="result-header-text">
-          <h3>Benchmark Complete</h3>
-          <p>
-            Results are private until reviewed and approved by the administrator.
-            Once approved, your task's scores will be averaged into the public leaderboard.
-          </p>
-        </div>
-      </div>
-
-      <div class="results-table-wrap">
-        <div class="results-table-header">
-          <div class="rth-cell">Model</div>
-          <div class="rth-cell">Score</div>
-          <div class="rth-cell">Method</div>
-        </div>
-        <div id="resultsRows"></div>
-      </div>
-
-      <div class="result-actions">
-        <a href="landing.html" class="btn-primary">Back to My Submissions</a>
-        <a href="upload.html"  class="btn-secondary">Submit Another Task</a>
-      </div>
-    </div>
-
-    <!-- Pipeline error -->
-    <div id="errorView" style="display:none;">
-      <div class="result-error">
-        <h3>Benchmark Error</h3>
-        <p id="errorMsg">
-          The benchmark script encountered an error processing your task.
-          Please contact the administrator.
-        </p>
+    <!-- Error (payment failure or pipeline error) -->
+    <div id="errorView" class="status-card status-card--error">
+      <div class="processing-title">Something Went Wrong</div>
+      <div class="processing-sub" id="errorMsg">
+        An unexpected error occurred. Please contact support.
       </div>
       <div class="result-actions">
-        <a href="landing.html" class="btn-primary">Back to My Submissions</a>
-        <a href="upload.html"  class="btn-secondary">Submit Another Task</a>
-      </div>
-    </div>
-
-    <!-- No submission ID in URL -->
-    <div id="noIdView" style="display:none;">
-      <div class="submissions-empty">
-        <div class="submissions-empty-icon">🔍</div>
-        <div class="submissions-empty-title">No submission specified</div>
-        <div class="submissions-empty-text">
-          This page requires a submission ID in the URL.
-          Go to your submissions to find your results.
-        </div>
-        <a href="landing.html" class="btn-primary">My Submissions</a>
+        <a class="btn-primary"   href="landing.html">Back to My Submissions</a>
+        <a class="btn-secondary" href="upload.html">Try Again</a>
       </div>
     </div>
 
@@ -140,6 +106,6 @@
   </div>
 </footer>
 
-<script src="results.js"></script>
+<script src="payment-success.js"></script>
 </body>
 </html>

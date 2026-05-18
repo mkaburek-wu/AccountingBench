@@ -33,11 +33,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import stripe as _stripe
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
-from backend.database import get_db
+from backend.database import get_db, SessionLocal
 from backend.models import BenchmarkTask, Submission, Settings
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,57 @@ async def _save_file(upload: UploadFile, dest_dir: Path, prefix: str) -> str:
 
     logger.info(f"Saved file: {dest_path} ({len(content)} bytes)")
     return str(dest_path)
+
+
+# ── Background task: Stripe Checkout Session creation ─────────────────────────
+
+def _create_stripe_session(
+    submission_id: int,
+    question_id: str,
+    price: int,
+    currency: str,
+    frontend_url: str,
+    stripe_key: str,
+) -> None:
+    """
+    Creates a Stripe Checkout Session in a background thread and saves the URL
+    to the submission row. Runs after the HTTP response has already been sent,
+    so it never blocks the browser connection.
+    """
+    db = SessionLocal()
+    try:
+        _stripe.api_key = stripe_key
+        checkout = _stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency":     currency,
+                    "product_data": {
+                        "name":        "AccountingBench Task Submission",
+                        "description": f"Task {question_id} — benchmark evaluation across all models",
+                    },
+                    "unit_amount": price,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=(
+                f"{frontend_url}/auth-pages/payment-success.html"
+                f"?submission={submission_id}"
+                f"&stripe_session={{CHECKOUT_SESSION_ID}}"
+            ),
+            cancel_url=f"{frontend_url}/auth-pages/upload.html?cancelled=1",
+            metadata={"submission_id": str(submission_id)},
+        )
+        submission = db.query(Submission).filter_by(id=submission_id).first()
+        if submission:
+            submission.checkout_url = checkout.url
+            db.commit()
+        logger.info(f"Checkout Session created for submission {submission_id} ({question_id})")
+    except Exception as e:
+        logger.error(f"Stripe session creation failed for submission {submission_id}: {e}")
+    finally:
+        db.close()
 
 
 # ── Main submission endpoint ──────────────────────────────────────────────────
@@ -305,67 +357,31 @@ async def prepare_submission(
         f"task {task.id} ({question_id}) by user {user_id}"
     )
 
-    # ── 11. Create Stripe Checkout Session (or trigger pipeline directly in dev) ─
+    # ── 11. Trigger pipeline (dev) or queue Stripe session creation (prod) ───────
     if not stripe_key:
         # Dev fallback: no Stripe configured → run benchmark immediately
         # ⚠️  TESTING: uses dummy_pipeline which always returns 100%.
         # ⚠️  PRODUCTION: change this import to backend.processing.pipeline
         from backend.processing.dummy_pipeline import run_pipeline
-       # from backend.processing.pipeline import run_pipeline
+        # from backend.processing.pipeline import run_pipeline
         background_tasks.add_task(run_pipeline, submission.id)
-        return {
-            "submission_id": submission.id,
-            "task_id":       task.id,
-            "question_id":   question_id,
-            "checkout_url":  None,
-        }
+    else:
+        settings     = db.query(Settings).filter_by(id=1).first()
+        price        = settings.price_per_submission if (settings and settings.price_per_submission) else 5000
+        currency     = settings.currency             if (settings and settings.currency)             else "eur"
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5500").rstrip("/")
 
-    import stripe as _stripe
-    _stripe.api_key = stripe_key
-
-    settings = db.query(Settings).filter_by(id=1).first()
-    price    = settings.price_per_submission if (settings and settings.price_per_submission) else 5000
-    currency = settings.currency             if (settings and settings.currency)             else "eur"
-
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5500").rstrip("/")
-
-    try:
-        checkout = _stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency":     currency,
-                    "product_data": {
-                        "name":        "AccountingBench Task Submission",
-                        "description": f"Task {question_id} — benchmark evaluation across all models",
-                    },
-                    "unit_amount": price,
-                },
-                "quantity": 1,
-            }],
-            mode="payment",
-            success_url=(
-                f"{frontend_url}/auth-pages/results.html"
-                f"?submission={submission.id}"
-                f"&stripe_session={{CHECKOUT_SESSION_ID}}"
-            ),
-            cancel_url=f"{frontend_url}/auth-pages/upload.html?cancelled=1",
-            metadata={"submission_id": str(submission.id)},
+        # Stripe session is created in a background task so the HTTP response
+        # is returned to the browser immediately (avoids TCP connection drops
+        # caused by the ~1 second Stripe API call blocking the response).
+        background_tasks.add_task(
+            _create_stripe_session,
+            submission.id, question_id, price, currency, frontend_url, stripe_key,
         )
-    except Exception as e:
-        logger.error(f"Stripe Checkout Session creation failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service unavailable. Please try again later.",
-        )
-
-    logger.info(
-        f"Checkout Session created for submission {submission.id} ({question_id})"
-    )
 
     return {
         "submission_id": submission.id,
         "task_id":       task.id,
         "question_id":   question_id,
-        "checkout_url":  checkout.url,
+        "checkout_url":  None,  # frontend polls /submissions/{id}/status for this
     }
