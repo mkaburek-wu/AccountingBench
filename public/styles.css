@@ -1540,3 +1540,91 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
   .auth-card  { padding: 28px 20px 36px; }
   .auth-title { font-size: 22px; }
 }
+
+/* ── Consent checkbox ── */
+.consent-check {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 20px 0; font-size: 13px;
+  color: var(--text-muted); line-height: 1.5;
+}
+.consent-check input[type="checkbox"] {
+  flex-shrink: 0; margin-top: 2px;
+  width: 16px; height: 16px; cursor: pointer;
+  accent-color: var(--wu-blue);
+}
+.consent-check a { color: var(--wu-blue); text-decoration: underline; }
+
+/* ── Upload data notice ── */
+.data-notice {
+  font-size: 12px; color: var(--text-muted); line-height: 1.6;
+  padding: 10px 14px; background: var(--wu-light);
+  border-left: 3px solid rgba(0,60,120,0.2); margin-bottom: 16px;
+}
+.data-notice a { color: var(--wu-blue); }
+.data-notice-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.data-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 3px;
+  background: rgba(0,60,120,0.08); color: var(--wu-blue);
+  border: 1px solid rgba(0,60,120,0.18);
+}
+.data-notice--check {
+  display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin: 0;
+}
+.data-notice--check input[type="checkbox"] {
+  flex-shrink: 0; margin-top: 2px; width: 16px; height: 16px;
+  cursor: pointer; accent-color: var(--wu-blue);
+}
+
+/* ── Footer privacy link ── */
+.footer-privacy-link { color: rgba(255,255,255,0.4); text-decoration: none; }
+.footer-privacy-link:hover { color: rgba(255,255,255,0.7); }
+
+/* ── Account page ──────────────────────────────────────────────────────────── */
+.account-info-row {
+  display: flex; gap: 16px; align-items: baseline;
+  padding: 13px 0; border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.account-info-row:last-child { border-bottom: none; }
+.account-info-label {
+  width: 130px; flex-shrink: 0;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-dim);
+}
+.account-info-value { color: var(--text); }
+.account-danger-text {
+  font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 16px;
+}
+.account-back { margin-top: 8px; font-size: 13px; }
+.account-back a { color: var(--wu-blue); text-decoration: none; }
+.account-back a:hover { text-decoration: underline; }
+
+/* ── Danger zone ───────────────────────────────────────────────────────────── */
+.danger-zone {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: rgba(185, 28, 28, 0.02);
+}
+.danger-zone .form-card-title { color: var(--red); }
+.danger-zone-confirm {
+  margin-top: 4px; padding: 16px 20px;
+  background: rgba(185, 28, 28, 0.05);
+  border: 1px solid rgba(185, 28, 28, 0.18); border-radius: 4px;
+}
+.danger-zone-warning {
+  font-size: 13px; color: var(--red); line-height: 1.55; margin-bottom: 16px;
+}
+.danger-zone-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-danger {
+  background: var(--red); color: #fff; border: none;
+  padding: 10px 20px; border-radius: 4px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em; cursor: pointer;
+}
+.btn-danger:hover:not(:disabled) { background: #991b1b; }
+.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-cancel {
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 10px 20px; border-radius: 4px;
+  font-size: 12px; cursor: pointer;
+}
+.btn-cancel:hover { border-color: var(--border2); color: var(--text); }

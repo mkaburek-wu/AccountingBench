@@ -75,6 +75,7 @@
   </div>
 
   <div class="upload-content">
+    <div class="account-back" style="margin-bottom:20px;"><a href="landing.html">&larr; My Submissions</a></div>
     <div class="form-error" id="formError"></div>
     <div class="form-info" id="cancelledBanner">
       Payment was cancelled — no charge was made. Fill in your task again to contribute.
@@ -226,28 +227,36 @@
       <div class="form-card-sub">Upload any reference materials — PDF or Excel only, max 20 MB each.</div>
       <div class="form-row-2col">
         <div>
-          <label>PDF Document <span class="optional">(optional)</span></label>
+          <label>PDF Documents <span class="optional">(optional)</span></label>
           <div class="file-upload-area" id="pdfArea">
-            <input accept=".pdf" id="pdfFile" type="file"/>
+            <input accept=".pdf" id="pdfFiles" multiple type="file"/>
             <div class="file-upload-icon">📄</div>
             <div class="file-upload-label">
-              <strong>Click to upload</strong> or drag &amp; drop<br/>PDF only · Max 20 MB
+              <strong>Click to upload</strong> or drag &amp; drop<br/>PDF only · Up to 3 files · Max 20 MB each
             </div>
             <div class="file-name" id="pdfName"></div>
           </div>
         </div>
         <div>
-          <label>Excel Spreadsheet <span class="optional">(optional)</span></label>
+          <label>Excel Spreadsheets <span class="optional">(optional)</span></label>
           <div class="file-upload-area" id="excelArea">
-            <input accept=".xlsx,.xls" id="excelFile" type="file"/>
+            <input accept=".xlsx,.xls" id="excelFiles" multiple type="file"/>
             <div class="file-upload-icon">📊</div>
             <div class="file-upload-label">
-              <strong>Click to upload</strong> or drag &amp; drop<br/>Excel only · Max 20 MB
+              <strong>Click to upload</strong> or drag &amp; drop<br/>Excel only · Up to 3 files · Max 20 MB each
             </div>
             <div class="file-name" id="excelName"></div>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Data use consent -->
+    <div class="data-notice" id="dataNotice">
+      <label class="data-notice--check" for="dataConsent">
+        <input id="dataConsent" type="checkbox"/>
+        <span>By submitting this task you agree that it may be reviewed by the AccountingBench team and, if approved, published as part of the public benchmark dataset. Tasks are evaluated through EU-sovereign, GDPR-compliant infrastructure with guaranteed EU data residency and no use of submitted data for model training. See our <a href="../public/privacy.html" target="_blank">Privacy Policy</a>.</span>
+      </label>
     </div>
 
     <!-- Submit -->
@@ -272,6 +281,7 @@
   </div>
   <div class="footer-bottom">
     <span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center</span>
+    <a class="footer-privacy-link" href="../public/privacy.html">Privacy Policy</a>
   </div>
 </footer>
 

@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from backend.submissions import router as submissions_router
 from backend.payments import router as payments_router
+from backend.users import router as users_router
 
 from backend.database import get_db, check_connection, engine
 from backend.models import Base, Settings
@@ -168,6 +169,7 @@ app.add_middleware(
 # 4. Register routers — HERE
 app.include_router(submissions_router)
 app.include_router(payments_router)
+app.include_router(users_router)
 
 
 # ── Root endpoint (health check) ──────────────────────────────────────────────

@@ -268,6 +268,23 @@ def _upsert_user(user_id: str, email: str, claims: dict, db: Session) -> None:
             detail="Your account has been deactivated. Please contact the administrator.",
         )
 
+    else:
+        # Backfill names if missing (e.g. after adding JWT template to Clerk Dashboard)
+        changed = False
+        if not user.first_name:
+            fn = claims.get("first_name") or claims.get("given_name")
+            if fn:
+                user.first_name = fn
+                changed = True
+        if not user.last_name:
+            ln = claims.get("last_name") or claims.get("family_name")
+            if ln:
+                user.last_name = ln
+                changed = True
+        if changed:
+            db.commit()
+            logger.info(f"Updated name for user {email}")
+
 
 # ── FastAPI dependencies ──────────────────────────────────────────────────────
 

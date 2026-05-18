@@ -27,11 +27,13 @@ SWAPPING THE REAL SCRIPT:
   Everything else stays the same.
 """
 
+import json
 import logging
 import os
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 import stripe as _stripe
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
@@ -236,9 +238,9 @@ async def prepare_submission(
     subcategory:       str = Form(default=""),
     notes:             str = Form(default=""),
 
-    # ── Optional file uploads ─────────────────────────────────────────────────
-    pdf_file:   UploadFile = File(default=None),
-    excel_file: UploadFile = File(default=None),
+    # ── Optional file uploads (up to 3 each) ─────────────────────────────────
+    pdf_files:   List[UploadFile] = File(default=[]),
+    excel_files: List[UploadFile] = File(default=[]),
 ):
     """
     Receives the upload form, saves the task and files, then triggers
@@ -290,10 +292,16 @@ async def prepare_submission(
         raise HTTPException(400, "applicable_regulatory_year must be a whole number, e.g. 2026")
 
     # ── 5. Validate uploaded files ────────────────────────────────────────────
-    if pdf_file and pdf_file.filename:
-        _validate_file(pdf_file, ALLOWED_PDF_EXTENSIONS, ALLOWED_PDF_TYPES, "PDF")
-    if excel_file and excel_file.filename:
-        _validate_file(excel_file, ALLOWED_EXCEL_EXTENSIONS, ALLOWED_EXCEL_TYPES, "Excel")
+    real_pdfs   = [f for f in pdf_files   if f and f.filename]
+    real_excels = [f for f in excel_files if f and f.filename]
+    if len(real_pdfs) > 3:
+        raise HTTPException(400, "You may upload at most 3 PDF files.")
+    if len(real_excels) > 3:
+        raise HTTPException(400, "You may upload at most 3 Excel files.")
+    for f in real_pdfs:
+        _validate_file(f, ALLOWED_PDF_EXTENSIONS, ALLOWED_PDF_TYPES, "PDF")
+    for f in real_excels:
+        _validate_file(f, ALLOWED_EXCEL_EXTENSIONS, ALLOWED_EXCEL_TYPES, "Excel")
 
     # ── 6. Generate question_id ───────────────────────────────────────────────
     question_id = _generate_question_id(db)
@@ -343,12 +351,19 @@ async def prepare_submission(
     upload_dir = UPLOAD_DIR / user_id / str(submission.id)
     timestamp  = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
-    pdf_path   = await _save_file(pdf_file,   upload_dir, f"{timestamp}_pdf")
-    excel_path = await _save_file(excel_file, upload_dir, f"{timestamp}_excel")
+    pdf_paths = []
+    for i, f in enumerate(real_pdfs):
+        p = await _save_file(f, upload_dir, f"{timestamp}_pdf_{i+1}")
+        if p: pdf_paths.append(p)
 
-    # Update task with file paths
-    if pdf_path:   task.pdf_path   = pdf_path
-    if excel_path: task.excel_path = excel_path
+    excel_paths = []
+    for i, f in enumerate(real_excels):
+        p = await _save_file(f, upload_dir, f"{timestamp}_excel_{i+1}")
+        if p: excel_paths.append(p)
+
+    # Update task with file paths (JSON-encoded lists)
+    if pdf_paths:   task.pdf_path   = json.dumps(pdf_paths)
+    if excel_paths: task.excel_path = json.dumps(excel_paths)
 
     # ── 10. Commit everything ─────────────────────────────────────────────────
     db.commit()

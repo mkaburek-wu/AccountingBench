@@ -27,6 +27,9 @@ async function handleRegister() {
     showError('authError', 'Please enter a valid email address.'); return;
   }
   if (!password || password.length < 8) { showError('authError', 'Password must be at least 8 characters long.'); return; }
+  if (!document.getElementById('privacyConsent').checked) {
+    showError('authError', 'Please accept the Privacy Policy to continue.'); return;
+  }
 
   var emailDomain = email.split('@')[1].toLowerCase();
   setLoading('registerBtn', true, 'Checking domain…');

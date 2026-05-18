@@ -101,6 +101,10 @@
         <label>Password</label>
         <input autocomplete="new-password" id="passwordInput" placeholder="Choose a strong password (min. 8 chars)" type="password"/>
       </div>
+      <label class="consent-check">
+        <input id="privacyConsent" type="checkbox"/>
+        <span>I have read and agree to the <a href="../public/privacy.html" target="_blank">Privacy Policy</a> and consent to the processing of my personal data for the AccountingBench benchmark.</span>
+      </label>
       <button class="auth-submit" id="registerBtn" onclick="handleRegister()">Create Account</button>
     </div>
 
@@ -141,6 +145,7 @@
   </div>
   <div class="footer-bottom">
     <span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center</span>
+    <a class="footer-privacy-link" href="../public/privacy.html">Privacy Policy</a>
   </div>
 </footer>
 

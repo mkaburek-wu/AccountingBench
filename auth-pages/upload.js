@@ -20,11 +20,15 @@ window.addEventListener('load', function() {
 });
 
 // ── File name display ─────────────────────────────────────────────────────────
-document.getElementById('pdfFile').addEventListener('change', function() {
-  document.getElementById('pdfName').textContent = this.files[0] ? this.files[0].name : '';
+function showFileNames(files, nameElId) {
+  var el = document.getElementById(nameElId);
+  el.textContent = Array.from(files).map(function(f) { return f.name; }).join(', ');
+}
+document.getElementById('pdfFiles').addEventListener('change', function() {
+  showFileNames(this.files, 'pdfName');
 });
-document.getElementById('excelFile').addEventListener('change', function() {
-  document.getElementById('excelName').textContent = this.files[0] ? this.files[0].name : '';
+document.getElementById('excelFiles').addEventListener('change', function() {
+  showFileNames(this.files, 'excelName');
 });
 
 // ── Drag-and-drop area highlight ──────────────────────────────────────────────
@@ -91,13 +95,19 @@ function validateForm() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return false;
   }
+  if (!document.getElementById('dataConsent').checked) {
+    showError('formError', 'Please accept the data use terms to continue.');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return false;
+  }
   return true;
 }
 
 // ── Show the preparing-payment loading state ──────────────────────────────────
 function showPreparingPayment() {
   document.getElementById('preparingPaymentView').style.display = 'block';
-  document.querySelector('.form-submit-area').style.display = 'none';
+  document.getElementById('dataNotice').style.display           = 'none';
+  document.querySelector('.form-submit-area').style.display     = 'none';
   document.querySelectorAll('.form-card').forEach(function(el) { el.style.display = 'none'; });
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -154,7 +164,8 @@ async function pollForCheckout(submissionId) {
 
   // Timed out waiting for Stripe session
   document.getElementById('preparingPaymentView').style.display = 'none';
-  document.querySelector('.form-submit-area').style.display = 'block';
+  document.getElementById('dataNotice').style.display           = 'block';
+  document.querySelector('.form-submit-area').style.display     = 'block';
   document.querySelectorAll('.form-card').forEach(function(el) { el.style.display = 'block'; });
   showError('formError', 'Payment setup timed out. Please try submitting again.');
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -210,10 +221,27 @@ async function handleSubmit() {
       if (el && el.value && el.value.trim()) fd.append(optFields[elId], el.value.trim());
     });
 
-    var pdfFile   = document.getElementById('pdfFile').files[0];
-    var excelFile = document.getElementById('excelFile').files[0];
-    if (pdfFile)   fd.append('pdf_file',   pdfFile);
-    if (excelFile) fd.append('excel_file', excelFile);
+    var pdfFiles   = Array.from(document.getElementById('pdfFiles').files);
+    var excelFiles = Array.from(document.getElementById('excelFiles').files);
+    var MAX = 20 * 1024 * 1024;
+    for (var i = 0; i < pdfFiles.length; i++) {
+      if (pdfFiles[i].size > MAX) {
+        showError('formError', 'PDF file "' + pdfFiles[i].name + '" exceeds 20 MB.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
+        return;
+      }
+    }
+    for (var i = 0; i < excelFiles.length; i++) {
+      if (excelFiles[i].size > MAX) {
+        showError('formError', 'Excel file "' + excelFiles[i].name + '" exceeds 20 MB.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
+        return;
+      }
+    }
+    pdfFiles.forEach(function(f)   { fd.append('pdf_files',   f); });
+    excelFiles.forEach(function(f) { fd.append('excel_files', f); });
 
     console.log('[upload] fetch start, API=', API);
     var res = await fetch(API + '/submissions/prepare', {

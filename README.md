@@ -66,10 +66,14 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Clerk authentication | ✅ Done | JWT verification via local PEM key + JWKS fallback |
 | Domain restriction | ✅ Done | Checked against `allowed_domains` table on every request |
 | Sign-in page | ✅ Done | Custom form calling Clerk API directly |
-| Register page | ✅ Done | Domain pre-check before Clerk account creation |
+| Register page | ✅ Done | Domain pre-check + GDPR consent checkbox |
 | Landing page | ✅ Done | Shows user's submission history |
-| Upload form | ✅ Done | All task fields, file uploads, validation |
+| Upload form | ✅ Done | All task fields, up to 3 PDF + 3 Excel files (20 MB each), GDPR consent |
 | Results page | ✅ Done | Dedicated page, pulls from database, no re-run |
+| Account page | ✅ Done | `account.html` — view profile + delete account |
+| Privacy policy | ✅ Done | `public/privacy.html` — GDPR-compliant placeholder with all third-party services |
+| Mobile navigation | ✅ Done | Bottom tab bar on all auth pages; safe-area-aware padding |
+| Data protection UI | ✅ Done | Consent checkboxes, data-use notices, footer privacy links across all pages |
 | Dummy pipeline | ✅ Done | Always returns 100%, saves to database |
 | Real benchmark pipeline | ✅ Done | `pipeline.py` — parallel models, LLM judge, per-model timeouts |
 | Batch import + runner | ✅ Done | `batch_run.py` — Excel → DB → pipeline, parallelism control |
@@ -99,6 +103,7 @@ accountingbench/
 │   ├── dashboard.html             ← Analytics dashboard (fully dynamic)
 │   ├── methodology.html           ← Methodology explanation
 │   ├── about.html                 ← About the project (5 team members)
+│   ├── privacy.html               ← Privacy policy (GDPR, third-party services)
 │   ├── styles.css                 ← Global CSS — all styles centralised here
 │   ├── main.js                    ← Public site JavaScript
 │   ├── results.js                 ← Single source of truth for ALL benchmark data
@@ -109,10 +114,11 @@ accountingbench/
 │   ├── config.js                  ← ⚙️  Single config file: API URL + Clerk keys (edit for deployment)
 │   ├── auth-pages.js              ← Shared JS utilities; injects Clerk script dynamically
 │   ├── sign-in.html / sign-in.js  ← Login page + logic
-│   ├── register.html / register.js← Registration page + logic
+│   ├── register.html / register.js← Registration page + GDPR consent
 │   ├── landing.html / landing.js  ← Submission history page + logic
-│   ├── upload.html / upload.js    ← Task contribution form + Stripe polling
+│   ├── upload.html / upload.js    ← Task contribution form + Stripe polling (up to 3 PDF/Excel files)
 │   ├── payment-success.html / payment-success.js ← Post-Stripe redirect: confirms payment + pipeline
+│   ├── account.html / account.js  ← Account settings: view profile + delete account
 │   └── results.html               ← Benchmark result viewer (JS inline → results.js)
 │
 └── backend/                       ← FastAPI Python server
@@ -120,8 +126,9 @@ accountingbench/
     ├── auth.py                    ← Clerk JWT verification + domain check
     ├── database.py                ← SQLAlchemy engine + session factory
     ├── models.py                  ← 7 database table definitions
-    ├── submissions.py             ← POST /submissions/prepare endpoint
+    ├── submissions.py             ← POST /submissions/prepare endpoint (multi-file upload)
     ├── payments.py                ← POST /submissions/{id}/confirm-payment endpoint
+    ├── users.py                   ← DELETE /users/me (account deletion — DB then Clerk)
     ├── import_tasks.py            ← One-time Excel → database migration
     ├── batch_run.py               ← Batch import + pipeline runner (see §8)
     ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §9)
@@ -291,10 +298,11 @@ The FastAPI server runs at `http://127.0.0.1:8000`. Interactive API documentatio
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/me` | Returns the signed-in user's profile. |
+| `GET` | `/me` | Returns the signed-in user's profile (id, email, first/last name). |
+| `DELETE` | `/users/me` | Permanently deletes the account. Removes all DB records first, then calls the Clerk API. |
 | `GET` | `/submissions/mine` | Returns the user's submission history for the landing page. |
 | `GET` | `/submissions/{id}/status` | Returns submission status, `checkout_url`, and model scores when done. Polled by both `upload.html` and `results.html`. |
-| `POST` | `/submissions/prepare` | Receives the upload form, saves task + files, queues Stripe session creation as a background task. Returns immediately. |
+| `POST` | `/submissions/prepare` | Receives the upload form (up to 3 PDF + 3 Excel files), saves task + files, queues Stripe session creation as a background task. Returns immediately. |
 | `POST` | `/submissions/{id}/confirm-payment` | Called by `payment-success.html` after Stripe redirects back. Verifies the Checkout Session with Stripe, marks submission as paid, triggers the benchmark pipeline. Idempotent — safe to call multiple times. |
 
 ### 5.3 Admin Endpoints (require `ADMIN_EMAIL`)
@@ -703,10 +711,11 @@ Each page is a plain HTML file with no inline JavaScript. Logic lives in a match
 | `config.js` | **The only file to edit when deploying.** Sets `API`, `CLERK_PUBLISHABLE_KEY`, and `CLERK_JS_URL`. Loaded first on every page. |
 | `auth-pages.js` | Shared utilities used by all pages. Also injects the Clerk `<script>` tag dynamically using values from `config.js`. |
 | `sign-in.html` / `sign-in.js` | Email + password login. Handles new-device verification code step. Redirects to `landing.html` on success. |
-| `register.html` / `register.js` | Registration form. Pre-checks domain against `/auth/check-domain` before creating a Clerk account. |
-| `landing.html` / `landing.js` | Protected home page. Shows welcome message and submission history grid. |
-| `upload.html` / `upload.js` | Task contribution form. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
+| `register.html` / `register.js` | Registration form. Domain pre-check before Clerk account creation. GDPR consent checkbox required. |
+| `landing.html` / `landing.js` | Protected home page. Shows welcome message and submission history grid. Links to Contribute, Account Settings, and Sign Out. |
+| `upload.html` / `upload.js` | Task contribution form. Supports up to 3 PDF and 3 Excel uploads (20 MB each). GDPR data-use consent required. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
 | `payment-success.html` / `payment-success.js` | Shown after Stripe payment. Calls `/confirm-payment`, shows benchmark progress, redirects to `results.html` when done. |
+| `account.html` / `account.js` | Account settings page. Displays profile (name, email). Danger Zone section with two-step confirmation for permanent account deletion — deletes all local DB data first, then removes the user from Clerk. |
 | `results.html` | Dedicated result viewer. If `done` shows results from database immediately; if `processing` polls every 3 seconds. Never re-runs the benchmark. |
 
 ---
@@ -952,15 +961,19 @@ In the Clerk dashboard at [clerk.com](https://clerk.com), configure the followin
 
 ### 12.2 JWT Template (Required)
 
-Without the email claim in the JWT, the domain check in `auth.py` fails with a 403 error.
+Without the email claim in the JWT, the domain check in `auth.py` fails with a 403 error. Without `first_name`/`last_name`, the user's name will be `null` in the database.
 
-In the Clerk dashboard → **JWT Templates** → **session token**, add this claim:
+In the Clerk dashboard → **Configure** → **Sessions** → **"Customize session token"**, add these claims:
 
 ```json
 {
-  "email": "{{user.primary_email_address}}"
+  "email": "{{user.primary_email_address}}",
+  "first_name": "{{user.first_name}}",
+  "last_name": "{{user.last_name}}"
 }
 ```
+
+> **Note on existing users:** If you added `first_name`/`last_name` to the JWT template after users had already registered, their names in the database will be `null`. `auth.py` automatically backfills missing names on the user's next login — no manual database update needed.
 
 ---
 
@@ -1072,5 +1085,5 @@ Deploy the FastAPI backend as a **Render Web Service** and the static HTML files
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.3 · May 2026*
+*AccountingBench Developer Documentation · Version 1.4 · May 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*
