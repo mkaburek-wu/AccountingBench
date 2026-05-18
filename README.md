@@ -18,12 +18,13 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 4. [Authentication](#4-authentication)
 5. [Backend API Endpoints](#5-backend-api-endpoints)
 6. [Submission Pipeline](#6-submission-pipeline)
-7. [Batch Runner (`batch_run.py`)](#7-batch-runner-batch_runpy)
-8. [Model Re-run (`rerun_model.py`)](#8-model-re-run-rerun_modelpy)
-9. [Frontend Pages](#9-frontend-pages)
-10. [Environment Setup](#10-environment-setup)
-11. [Clerk Configuration](#11-clerk-configuration)
-12. [Remaining Implementation](#12-remaining-implementation)
+7. [Stripe Payment Flow](#7-stripe-payment-flow)
+8. [Batch Runner (`batch_run.py`)](#8-batch-runner-batch_runpy)
+9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy)
+10. [Frontend Pages](#10-frontend-pages)
+11. [Environment Setup](#11-environment-setup)
+12. [Clerk Configuration](#12-clerk-configuration)
+13. [Remaining Implementation](#13-remaining-implementation)
 
 ---
 
@@ -47,11 +48,11 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | ORM & migrations | SQLAlchemy + Alembic |
 | Authentication | Clerk (JWT tokens, email verification) |
 | Domain restriction | Custom FastAPI middleware (replaces Clerk Allowlist premium) |
+| Payments | Stripe Checkout (hosted payment page) |
 | Frontend — public | Static HTML + CSS + vanilla JavaScript |
-| Frontend — portal | Static HTML pages served via VS Code Live Server (port 5500) |
+| Frontend — portal | Static HTML pages served via Python HTTP server (port 5500) |
 | File storage | Local filesystem (`uploads/` folder) |
-| Deployment target | Render.com (Phase 6 — not yet implemented) |
-| Payments | Stripe (Phase 7 — not yet implemented) |
+| Deployment target | Render.com (Phase 6 — planned) |
 
 ---
 
@@ -61,7 +62,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 |---|---|---|
 | Database schema + migrations | ✅ Done | 7 tables, Alembic migrations applied |
 | 521 original tasks imported | ✅ Done | From `matrikelnummer_ground_truth_template.xlsx` |
-| FastAPI server | ✅ Done | 14 endpoints, running locally |
+| FastAPI server | ✅ Done | Endpoints, running locally |
 | Clerk authentication | ✅ Done | JWT verification via local PEM key + JWKS fallback |
 | Domain restriction | ✅ Done | Checked against `allowed_domains` table on every request |
 | Sign-in page | ✅ Done | Custom form calling Clerk API directly |
@@ -76,10 +77,10 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Shared batch utilities | ✅ Done | `batch_utils.py` — shared helpers for batch scripts |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
+| Stripe payments | ✅ Done | Full Checkout flow with payment confirmation and pipeline trigger |
 | Admin review page | ⏳ Planned | Phase 4 |
 | Live leaderboard | ⏳ Planned | Phase 5 |
 | Deployment to Render | ⏳ Planned | Phase 6 |
-| Stripe payments | ⏳ Planned | Phase 7 |
 
 ---
 
@@ -110,6 +111,9 @@ accountingbench/
 │   ├── register.html              ← Registration page
 │   ├── landing.html               ← User's submission history
 │   ├── upload.html                ← Task contribution form
+│   ├── upload.js                  ← Upload form logic + Stripe polling
+│   ├── payment-success.html       ← Post-Stripe redirect: confirms payment + runs pipeline
+│   ├── payment-success.js         ← Payment confirmation + benchmark polling logic
 │   └── results.html               ← Benchmark result viewer
 │
 └── backend/                       ← FastAPI Python server
@@ -118,9 +122,10 @@ accountingbench/
     ├── database.py                ← SQLAlchemy engine + session factory
     ├── models.py                  ← 7 database table definitions
     ├── submissions.py             ← POST /submissions/prepare endpoint
+    ├── payments.py                ← POST /submissions/{id}/confirm-payment endpoint
     ├── import_tasks.py            ← One-time Excel → database migration
-    ├── batch_run.py               ← Batch import + pipeline runner (see §7)
-    ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §8)
+    ├── batch_run.py               ← Batch import + pipeline runner (see §8)
+    ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §9)
     ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
@@ -152,7 +157,7 @@ The database has 7 tables defined in `backend/models.py` using SQLAlchemy. Migra
 | `benchmark_runs` | One row per model per benchmark execution (run metadata). |
 | `benchmark_outputs` | One row per model per task (answers, scores, evaluation method). |
 | `submissions` | Tracks each user contribution from submission through to review. |
-| `settings` | Single-row config table (pricing for Phase 7). |
+| `settings` | Single-row config table (pricing, currency). |
 
 ---
 
@@ -167,7 +172,7 @@ This table replaces the ground-truth Excel spreadsheet. Column names match the s
 | `question_id` | Unique ID. Format: `usr_xxxxxx` for user submissions, `q_NNNN` for originals. |
 | `source` | `"original_dataset"` for the 521 imported tasks, `"user_submitted"` for new contributions. |
 | `is_public` | `False` by default. Set to `True` by admin when task is approved for the leaderboard. |
-| `validation_status` | `"approved"` \| `"pending"` \| `"rejected"` |
+| `validation_status` | `"approved"` \| `"pending"` \| `"rejected"` \| `"awaiting_payment"` |
 | `answer_type` | `single_choice` \| `multi_choice` \| `open_text` \| `open_numeric` \| `journal_entry` |
 | `gold_answer` | The correct answer. Letter(s) for choice tasks, value for numeric, text for open. |
 | `grading_criteria` | Rubric used by the LLM judge for open-text and journal-entry tasks. |
@@ -190,12 +195,19 @@ Tracks each user contribution lifecycle.
 
 | Status | Meaning |
 |---|---|
-| `pending` | Saved, waiting for benchmark to start. |
-| `processing` | Pipeline is currently running. |
+| `pending` | Saved, Stripe session being created in background. |
+| `processing` | Payment confirmed, benchmark pipeline is running. |
 | `done` | Script finished, scores available in database. |
 | `error` | Script encountered an error. |
 
-> **Note:** Payment fields (`payment_status`, `stripe_payment_id`, `price_charged`) are included now so no migration is needed when Stripe is added in Phase 7.
+Payment fields on the `submissions` table:
+
+| Field | Description |
+|---|---|
+| `payment_status` | `"unpaid"` → `"paid"` after Stripe confirms payment. |
+| `stripe_payment_id` | Stripe PaymentIntent ID (e.g. `pi_...`). Set on payment confirmation. |
+| `price_charged` | Amount charged in smallest currency unit (e.g. cents). |
+| `checkout_url` | Stripe Checkout Session URL. Set by background task ~1 second after form submission. Frontend polls until this appears, then redirects. |
 
 ---
 
@@ -265,7 +277,7 @@ def leaderboard(user_id: str | None = Depends(get_optional_user)):
 
 ## 5. Backend API Endpoints
 
-The FastAPI server runs at `http://localhost:8000`. Interactive API documentation is available at `http://localhost:8000/docs`.
+The FastAPI server runs at `http://127.0.0.1:8000`. Interactive API documentation is available at `http://127.0.0.1:8000/docs`.
 
 ### 5.1 Public Endpoints (no authentication required)
 
@@ -282,8 +294,9 @@ The FastAPI server runs at `http://localhost:8000`. Interactive API documentatio
 |---|---|---|
 | `GET` | `/me` | Returns the signed-in user's profile. |
 | `GET` | `/submissions/mine` | Returns the user's submission history for the landing page. |
-| `GET` | `/submissions/{id}/status` | Returns submission status and model scores when done. Polled by `results.html`. |
-| `POST` | `/submissions/prepare` | Receives the upload form, saves task + files, triggers pipeline. |
+| `GET` | `/submissions/{id}/status` | Returns submission status, `checkout_url`, and model scores when done. Polled by both `upload.html` and `results.html`. |
+| `POST` | `/submissions/prepare` | Receives the upload form, saves task + files, queues Stripe session creation as a background task. Returns immediately. |
+| `POST` | `/submissions/{id}/confirm-payment` | Called by `payment-success.html` after Stripe redirects back. Verifies the Checkout Session with Stripe, marks submission as paid, triggers the benchmark pipeline. Idempotent — safe to call multiple times. |
 
 ### 5.3 Admin Endpoints (require `ADMIN_EMAIL`)
 
@@ -300,35 +313,52 @@ The FastAPI server runs at `http://localhost:8000`. Interactive API documentatio
 
 ## 6. Submission Pipeline
 
-### 6.1 Full Flow
+### 6.1 Full Flow (with Stripe)
 
 When a user submits a task on `upload.html`, the following happens:
 
 1. `upload.html` validates all required fields in the browser before sending.
 2. `POST /submissions/prepare` receives the form data and files.
-3. `submissions.py` validates fields again server-side (enum values, conditional requirements, file types and sizes up to 20 MB).
+3. `submissions.py` validates fields server-side (enum values, conditional requirements, file types up to 20 MB).
 4. A unique `question_id` is generated (format: `usr_xxxxxx`).
 5. Uploaded files are saved to `uploads/{user_id}/{submission_id}/`.
-6. A row is inserted into `benchmark_tasks` (`is_public=False`, `validation_status=pending`).
-7. A row is inserted into `submissions` (`status=pending`).
-8. The endpoint returns immediately with `{submission_id, task_id, question_id}`.
-9. The browser navigates to `results.html?submission={id}`.
-10. The pipeline runs as a FastAPI `BackgroundTask` in a separate thread.
-11. `results.html` polls `GET /submissions/{id}/status` every 3 seconds.
-12. When `status=done`, the result table is shown from the database — **the script never runs again**.
+6. A row is inserted into `benchmark_tasks` (`validation_status=awaiting_payment`).
+7. A row is inserted into `submissions` (`payment_status=unpaid`).
+8. **The endpoint returns immediately** — Stripe session creation is queued as a background task (avoids blocking the HTTP response).
+9. `upload.html` shows a "Preparing Payment" spinner and polls `GET /submissions/{id}/status` every 500 ms.
+10. In the background (~1 second), `_create_stripe_session()` calls Stripe and saves `checkout_url` to the submission row.
+11. The polling loop finds `checkout_url` and redirects the browser to Stripe's hosted checkout page.
+12. User completes payment on Stripe's page.
+13. Stripe redirects to `payment-success.html?submission=N&stripe_session=cs_...`
+14. `payment-success.html` calls `POST /submissions/{id}/confirm-payment` with the Stripe session ID.
+15. The backend verifies the payment with Stripe, marks the submission as `paid`, moves the task to `pending`, and triggers the benchmark pipeline as a background task.
+16. `payment-success.html` polls `GET /submissions/{id}/status` every 3 seconds.
+17. When `status=done`, the browser navigates to `results.html?submission={id}`.
+18. `results.html` shows the model scores from the database — **the pipeline never runs again**.
+
+**Cancellation:** If the user clicks "Back" or "Cancel" on the Stripe checkout page, Stripe redirects to `upload.html?cancelled=1`, which shows a cancellation banner so the user can try submitting again.
 
 ---
 
-### 6.2 Dummy Pipeline (Testing)
+### 6.2 Flow Without Stripe (development)
+
+If `STRIPE_SECRET_KEY` is not set in `.env`, the flow skips payment entirely:
+
+1. `POST /submissions/prepare` triggers the benchmark pipeline immediately as a background task.
+2. `upload.html` polls status and redirects to `results.html` when `status=processing`.
+
+---
+
+### 6.3 Dummy Pipeline (Testing)
 
 `backend/processing/dummy_pipeline.py` is used during development. It:
 
 - Sets submission status to `"processing"`
 - Waits 3 seconds to simulate runtime
-- Inserts one `BenchmarkRun` + one `BenchmarkOutput` row for each of the 10 fixed models with `final_score_percent = 100.0`
+- Inserts one `BenchmarkRun` + one `BenchmarkOutput` row for each model with `final_score_percent = 100.0`
 - Sets submission status to `"done"`
 
-> ✅ **Swapping to the real script:** Change one import line in `submissions.py`:
+> ✅ **Swapping to the real pipeline:** Change one import line in both `submissions.py` and `payments.py`:
 > ```python
 > # Testing (current):
 > from backend.processing.dummy_pipeline import run_pipeline
@@ -340,7 +370,7 @@ When a user submits a task on `upload.html`, the following happens:
 
 ---
 
-### 6.3 Pipeline Architecture (`pipeline.py`)
+### 6.4 Pipeline Architecture (`pipeline.py`)
 
 The real benchmark pipeline in `backend/processing/pipeline.py`:
 
@@ -352,7 +382,7 @@ The real benchmark pipeline in `backend/processing/pipeline.py`:
 - Writes one `benchmark_outputs` row per model
 - Handles timeouts, 404s (model not found), 429/500/503 (retried once after 5s)
 
-### 6.4 Model Configuration
+### 6.5 Model Configuration
 
 Models are configured via two `.env` variables:
 
@@ -374,33 +404,105 @@ Each model entry can include a `"timeout"` key (seconds) to override the default
 }
 ```
 
-### 6.5 Fixed Model List
+---
 
-The following models are benchmarked for every submitted task (configured via `OPENAI_MODEL_LIST` in `.env`):
+## 7. Stripe Payment Flow
 
-| Model |
-|---|
-| gpt-5.4 |
-| gpt-5.2 |
-| gpt-5.5 |
-| gpt-5-mini |
-| gpt-4o |
-| claude-opus-4-6 |
-| claude-sonnet-4-6 |
-| claude-opus-4-7 |
-| Mistral-Large-3 |
-| grok-4-fast-reasoning |
-| DeepSeek-V3.2 |
-| Kimi-K2.6 |
-| mercury-2 |
+### 7.1 Overview
+
+AccountingBench uses Stripe Checkout — Stripe's fully hosted payment page. The backend never handles raw card data.
+
+**Flow summary:**
+```
+upload.html → /submissions/prepare → (background) Stripe Session created
+    → poll /status → redirect to Stripe → payment
+    → payment-success.html → /confirm-payment → pipeline → results.html
+```
+
+### 7.2 Required Stripe Keys
+
+In the [Stripe Dashboard](https://dashboard.stripe.com) → Developers → API Keys:
+
+| Key | Where to put it |
+|---|---|
+| Secret key (`sk_test_...` or `sk_live_...`) | `.env` → `STRIPE_SECRET_KEY` |
+| Publishable key (`pk_test_...` or `pk_live_...`) | Not used server-side; for reference only |
+| Webhook signing secret | `.env` → `STRIPE_WEBHOOK_SECRET` (optional — not used currently) |
+
+### 7.3 `FRONTEND_URL` — Critical for Redirects
+
+Stripe needs to know where to redirect the user after payment (success or cancel). This is set via `FRONTEND_URL` in `.env`.
+
+```
+FRONTEND_URL=http://127.0.0.1:5500
+```
+
+**Why this matters:**
+
+When a user completes or cancels payment on Stripe's hosted checkout page, Stripe redirects their browser to URLs built from `FRONTEND_URL`:
+
+- **Success:** `{FRONTEND_URL}/auth-pages/payment-success.html?submission=N&stripe_session=cs_...`
+- **Cancel:** `{FRONTEND_URL}/auth-pages/upload.html?cancelled=1`
+
+If `FRONTEND_URL` is wrong, the user lands on the wrong page (or nowhere) after payment.
+
+**Local development:**
+
+```
+FRONTEND_URL=http://127.0.0.1:5500
+```
+
+> ⚠️ Use `127.0.0.1`, not `localhost`. On Windows, `localhost` resolves to IPv6 (`::1`) while Clerk sessions are bound to `127.0.0.1`. Using `localhost` here causes the browser to land on a different origin after the Stripe redirect, which makes Clerk think the user is not signed in and sends them to the sign-in page.
+
+**Production (Render):**
+
+```
+FRONTEND_URL=https://your-site.onrender.com
+```
+
+Replace `your-site` with the actual subdomain Render assigns to your static site. This is the URL where `auth-pages/` is publicly accessible. When you deploy, this is the only value you need to change for Stripe redirects to work on production.
+
+### 7.4 Stripe Price Configuration
+
+The price per submission is stored in the `settings` table (not hardcoded). It can be changed without redeploying:
+
+```sql
+-- View current price
+SELECT price_per_submission, currency FROM settings WHERE id = 1;
+
+-- Change to €30 (amount is always in smallest currency unit: cents)
+UPDATE settings SET price_per_submission = 3000, currency = 'eur' WHERE id = 1;
+```
+
+Default: 5000 cents = €50.
+
+### 7.5 Security: Session Substitution Prevention
+
+`payments.py` checks that the Stripe Checkout Session's `metadata.submission_id` matches the URL parameter. This prevents a user from paying for one submission and then reusing that payment to confirm a different (more expensive or someone else's) submission.
+
+### 7.6 Idempotency
+
+`POST /submissions/{id}/confirm-payment` is idempotent. If the user refreshes `payment-success.html` after payment, the endpoint returns `{"ok": true, "already_paid": true}` immediately without re-contacting Stripe or re-triggering the pipeline.
+
+### 7.7 Switching from Dummy to Real Pipeline
+
+The `confirm-payment` endpoint currently uses the dummy pipeline for testing:
+
+```python
+# backend/payments.py — near the bottom
+from backend.processing.dummy_pipeline import run_pipeline   # ← testing
+# from backend.processing.pipeline import run_pipeline       # ← production
+```
+
+Also update the same import in `submissions.py` (used for the no-Stripe dev path).
 
 ---
 
-## 7. Batch Runner (`batch_run.py`)
+## 8. Batch Runner (`batch_run.py`)
 
 `backend/batch_run.py` is a command-line tool for importing tasks from an Excel file and running the full benchmark pipeline on them. It is the primary tool for large-scale data ingestion during development and evaluation.
 
-### 7.1 Basic Usage
+### 8.1 Basic Usage
 
 Always run from the project root (`accountingbench/`):
 
@@ -408,7 +510,7 @@ Always run from the project root (`accountingbench/`):
 python -m backend.batch_run --file backend\tasks.xlsx [options]
 ```
 
-### 7.2 All Flags
+### 8.2 All Flags
 
 | Flag | Default | Description |
 |---|---|---|
@@ -422,7 +524,7 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
 | `--user` | `batch_admin` | User ID to attribute submissions to |
 
-### 7.3 Common Commands
+### 8.3 Common Commands
 
 ```bash
 # Preview what would be imported (no writes)
@@ -438,7 +540,7 @@ python -m backend.batch_run --file backend\tasks.xlsx --approved --sequential
 python -m backend.batch_run --file backend\tasks.xlsx --approved --max-workers 4
 ```
 
-### 7.4 Parallelism and DB Connection Limits
+### 8.4 Parallelism and DB Connection Limits
 
 The batch runner processes multiple tasks simultaneously. Each task runs all its models in parallel internally, so the total number of simultaneous DB connections is:
 
@@ -455,7 +557,7 @@ The SQLite connection pool in `database.py` is configured with a maximum of **60
 
 > ⚠️ Never pass `--max-workers` higher than these values or you will hit connection pool timeouts. Never run 500+ tasks fully in parallel — use `--max-workers` to throttle throughput.
 
-### 7.5 Progress Logging
+### 8.5 Progress Logging
 
 The script logs `[X/N]` counters on every line so you can track exactly which task is running:
 
@@ -470,7 +572,7 @@ The script logs `[X/N]` counters on every line so you can track exactly which ta
 
 In parallel mode the `[X/N]` prefix appears on every log line, making it possible to follow individual tasks even when output is interleaved.
 
-### 7.6 Debug Logging
+### 8.6 Debug Logging
 
 To see the full prompt sent to each model and the raw response, enable DEBUG logging by adding this line after the logger setup in `batch_run.py`:
 
@@ -480,7 +582,7 @@ logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
 
 This shows `[LLM→]` (prompt sent) and `[LLM←]` (raw response) lines for every model call. Remove or comment out this line to return to normal INFO logging.
 
-### 7.7 Attached Files
+### 8.7 Attached Files
 
 If a task references a PDF, the script searches for it in this order:
 
@@ -493,7 +595,7 @@ If a task references a PDF, the script searches for it in this order:
 
 PDF content is extracted and injected into the prompt as `DOKUMENT-INHALT (extrahiert):` before the question text.
 
-### 7.8 Resetting the Database
+### 8.8 Resetting the Database
 
 During development, use `reset_db.py` to wipe all tasks, submissions, runs and outputs:
 
@@ -505,11 +607,11 @@ The script asks for confirmation before deleting anything. It preserves `setting
 
 ---
 
-## 8. Model Re-run (`rerun_model.py`)
+## 9. Model Re-run (`rerun_model.py`)
 
 `backend/rerun_model.py` runs one or more **new** models against all tasks already in the database. Use this when you add a new model to your Azure deployment and want to benchmark it without re-importing everything from Excel.
 
-### 8.1 Key Differences from `batch_run.py`
+### 9.1 Key Differences from `batch_run.py`
 
 | | `batch_run.py` | `rerun_model.py` |
 |---|---|---|
@@ -519,7 +621,7 @@ The script asks for confirmation before deleting anything. It preserves `setting
 | Model selection | All models in `OPENAI_MODEL_LIST` | Only the models you specify |
 | Use case | Initial import + full run | Add a new model to existing results |
 
-### 8.2 All Flags
+### 9.2 All Flags
 
 | Flag | Default | Description |
 |---|---|---|
@@ -530,7 +632,7 @@ The script asks for confirmation before deleting anything. It preserves `setting
 | `--limit` | off | Only process first N tasks (useful for testing) |
 | `--user` | `batch_admin` | User ID for created submissions |
 
-### 8.3 Common Commands
+### 9.3 Common Commands
 
 ```bash
 # Step 1 — always dry-run first to see what would happen (no API calls, no DB writes)
@@ -549,7 +651,7 @@ python -m backend.rerun_model --models "Kimi-K2.6,gpt-5.5" --max-workers 4
 python -m backend.rerun_model --models "Kimi-K2.6" --sequential
 ```
 
-### 8.4 Recommended max-workers by model count
+### 9.4 Recommended max-workers by model count
 
 | Models being re-run | Recommended max-workers | Connections used |
 |---|---|---|
@@ -557,15 +659,15 @@ python -m backend.rerun_model --models "Kimi-K2.6" --sequential
 | 3 | 15 | 45 |
 | 13 | 4 | 52 |
 
-### 8.5 How outputs are linked
+### 9.5 How outputs are linked
 
 The script creates a new `Submission` row for each task with `task_id` pointing to the existing task. The pipeline then writes `benchmark_outputs` rows linked to that `task_id` — exactly the same as a normal run. The new model's results are fully integrated with all existing results in the database.
 
-### 8.6 Skip logic
+### 9.6 Skip logic
 
 Before creating any submission, the script queries `benchmark_outputs` for existing rows matching the requested model(s). If all requested models already have outputs for a task, that task is skipped. Running the script twice for the same model is completely safe — the second run does nothing.
 
-### 8.7 Shared utilities (`batch_utils.py`)
+### 9.7 Shared utilities (`batch_utils.py`)
 
 Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/batch_utils.py`:
 
@@ -577,9 +679,9 @@ Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/bat
 
 ---
 
-## 9. Frontend Pages
+## 10. Frontend Pages
 
-### 9.1 Public Site (`public/`)
+### 10.1 Public Site (`public/`)
 
 Five static HTML pages served directly. No authentication required. Navigation uses a blue page-tabs bar that switches between in-page sections using `showPage()` JavaScript calls. All five pages have a **Sign In** button added to the page-tabs bar that navigates to `auth-pages/sign-in.html`.
 
@@ -593,19 +695,22 @@ Five static HTML pages served directly. No authentication required. Navigation u
 
 ---
 
-### 9.2 Auth Pages (`auth-pages/`)
+### 10.2 Auth Pages (`auth-pages/`)
 
 | File | Purpose |
 |---|---|
 | `sign-in.html` | Email + password login. Handles new-device verification code step when Clerk requires it. Redirects to `landing.html` on success. |
 | `register.html` | Registration form. Pre-checks domain against `/auth/check-domain` before creating a Clerk account. Email verification code required. |
 | `landing.html` | Protected home page. Shows welcome message with user's first name and a grid of submission cards. Links to `upload.html` and `results.html`. |
-| `upload.html` | Task contribution form with three sections: Task Content, Classification & Metadata, Supporting Documents. Navigates to `results.html?submission={id}` on submit. |
-| `results.html` | Dedicated result viewer. Checks status immediately on load — if `done` shows results instantly from database, if `processing` shows spinner and polls every 3 seconds. Never re-runs the benchmark. |
+| `upload.html` | Task contribution form with three sections: Task Content, Classification & Metadata, Supporting Documents. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
+| `upload.js` | Upload form logic. Handles submit, client-side validation, and the `pollForCheckout()` loop that waits for the Stripe session and redirects. |
+| `payment-success.html` | Shown after Stripe payment. Calls `/confirm-payment`, shows benchmark progress, then redirects to `results.html` when done. |
+| `payment-success.js` | Calls `POST /confirm-payment` with the Stripe session ID, then polls `GET /submissions/{id}/status` until `done`. |
+| `results.html` | Dedicated result viewer. Checks status immediately on load — if `done` shows results from database, if `processing` polls every 3 seconds. Never re-runs the benchmark. |
 
 ---
 
-### 9.4 Public Site Data Layer (`results.js` + `data.js`)
+### 10.3 Public Site Data Layer (`results.js` + `data.js`)
 
 The public site is fully dynamic — all numbers, charts, tables, and leaderboards are driven from two files. **Never edit numbers directly in the HTML files.**
 
@@ -667,22 +772,21 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 | `handleClerkError(err, id)` | Maps Clerk technical errors to friendly user-facing messages. |
 | `showStep(id)` | Switches between `.auth-step` divs (used in multi-step forms). |
 | `setupCodeInput(inputId, fn)` | Configures 6-digit code inputs with auto-submit on completion. |
-| `API` | Global constant: `http://localhost:8000`. Change this for production. |
+| `API` | Global constant: `http://127.0.0.1:8000`. Change this for production. |
 
 ---
 
-## 10. Environment Setup
+## 11. Environment Setup
 
-### 10.1 Prerequisites
+### 11.1 Prerequisites
 
 - Python 3.11 or newer
-- Node.js (for VS Code Live Server extension)
-- VS Code with the **Live Server** extension installed (by Ritwick Dey)
 - A Clerk account (free tier at [clerk.com](https://clerk.com))
+- A Stripe account (free at [stripe.com](https://stripe.com))
 
 ---
 
-### 10.2 Python Dependencies
+### 11.2 Python Dependencies
 
 Install all packages with:
 
@@ -694,9 +798,9 @@ python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
 
 ---
 
-### 10.3 Environment Variables (`.env`)
+### 11.3 Environment Variables (`.env`)
 
-Create `backend/.env` with the following variables:
+Create `.env` in the project root with the following variables:
 
 | Variable | Description |
 |---|---|
@@ -711,34 +815,53 @@ Create `backend/.env` with the following variables:
 | `MODEL_REGISTRY_JSON` | JSON object mapping model names to API config (base_url, api_key, api_type, timeout). |
 | `BATCH_USER_ID` | User ID used for batch-imported submissions. Default: `batch_admin`. |
 | `BATCH_USER_EMAIL` | Email for the batch user. Default: `admin@wu.ac.at`. |
-| `STRIPE_SECRET_KEY` | Stripe secret key — Phase 7 only, leave blank for now. |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret — Phase 7 only, leave blank for now. |
+| `STRIPE_SECRET_KEY` | Stripe secret key (`sk_test_...` for testing, `sk_live_...` for production). |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (for reference — not used server-side). |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret. Optional — not used in current implementation. |
+| `FRONTEND_URL` | Base URL of the frontend. Stripe uses this for payment success/cancel redirects. **See §7.3 for details.** |
 
 Example `.env` file:
 
 ```
 DATABASE_URL=sqlite:///C:/Users/yourname/path/to/backend/accountingbench.db
+
 CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CLERK_PEM_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
 -----END PUBLIC KEY-----"
+
 ADMIN_EMAIL=your-admin@institution.ac.at
 UPLOAD_DIR=./uploads
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-STRIPE_SECRET_KEY=
+
+OPENAI_API_KEY=not-used
+OPENAI_MODEL_LIST=claude-opus-4-7,gpt-5.5,Kimi-K2.6
+
+MODEL_REGISTRY_JSON='{
+  "claude-opus-4-7": { ... },
+  ...
+}'
+
+BATCH_USER_ID=batch_admin
+BATCH_USER_EMAIL=admin@wu.ac.at
+
+STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+STRIPE_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 STRIPE_WEBHOOK_SECRET=
+
+# Local development — must use 127.0.0.1 (not localhost) — see §7.3
+FRONTEND_URL=http://127.0.0.1:5500
 ```
 
 ---
 
-### 10.4 Database Initialisation (run once)
+### 11.4 Database Initialisation (run once)
 
 Run these commands from the root `accountingbench/` folder:
 
 ```bash
-# 1. Run database migrations (creates all 7 tables)
-python -m alembic -c backend\alembic.ini upgrade head
+# 1. Run database migrations (creates all tables including checkout_url column)
+python -m alembic upgrade head
 
 # 2. Import the 521 original tasks from the Excel spreadsheet
 python import_tasks.py --excel backend/matrikelnummer_ground_truth_template.xlsx
@@ -758,32 +881,37 @@ print('Done')
 
 ---
 
-### 10.5 Running the Server
+### 11.5 Running the Server
 
 Always run from the root `accountingbench/` folder — never from inside `backend/`:
 
 ```bash
-python -m uvicorn backend.main:app --reload
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-The server starts at `http://localhost:8000`. The `--reload` flag restarts automatically on file changes.
+The server starts at `http://127.0.0.1:8000`. The `--reload` flag restarts automatically on file changes.
 
-Open the interactive API documentation at `http://localhost:8000/docs` to test all endpoints directly in the browser.
-
----
-
-### 10.6 Running the Frontend
-
-1. Open the root `accountingbench/` folder in VS Code (not a subfolder).
-2. In the VS Code file explorer, navigate to `auth-pages/sign-in.html`.
-3. Right-click → **Open with Live Server**.
-4. Pages are served at `http://localhost:5500/auth-pages/sign-in.html`.
-
-> ⚠️ **Important:** Always open the root `accountingbench/` folder in VS Code, not the `auth-pages/` subfolder. The pages reference `../public/styles.css` — if the root folder is not open, CSS paths will break.
+Open the interactive API documentation at `http://127.0.0.1:8000/docs` to test all endpoints directly in the browser.
 
 ---
 
-### 10.7 Windows-Specific and macOS Notes
+### 11.6 Running the Frontend
+
+Serve the frontend with Python's built-in HTTP server:
+
+```bash
+python -m http.server 5500
+```
+
+Pages are served at `http://127.0.0.1:5500/auth-pages/sign-in.html`.
+
+> ⚠️ **Do not use VS Code Live Server for payment testing.** Live Server automatically reloads the browser on every file save in VS Code, which interrupts in-flight Stripe polling loops. Python's `http.server` serves files statically without any auto-reload.
+
+> ⚠️ **Always open the root `accountingbench/` folder** before starting the server, not a subfolder. The pages reference `../public/styles.css` — relative paths break if you serve from a subfolder.
+
+---
+
+### 11.7 Windows-Specific and macOS Notes
 
 **Windows:**
 - Always use `python -m uvicorn` and `python -m alembic` instead of bare `uvicorn` and `alembic`.
@@ -792,19 +920,19 @@ Open the interactive API documentation at `http://localhost:8000/docs` to test a
   DATABASE_URL=sqlite:///C:/Users/yourname/OneDrive - WU Wien/Dokumente/AccountingBench/backend/accountingbench.db
   ```
 - Always run Python commands from the root `accountingbench/` folder, not from inside `backend/`.
+- Use `127.0.0.1` everywhere instead of `localhost` — on Windows, `localhost` resolves to IPv6 (`::1`) which conflicts with Clerk's origin matching.
 
 **macOS:**
 - Use `python -m pip install <package>` instead of `pip install` to ensure packages install for the correct Python version (especially important if using pyenv).
 - For an absolute SQLite path, use 4 slashes: `sqlite:////Users/yourname/Documents/AccountingBench/backend/accountingbench.db`
 - To create a `.env` file (dotfiles are hidden in Finder), use Terminal: `touch .env` then edit in VS Code.
 - If you get `ModuleNotFoundError` for any package, always use `python -m pip install <package>` to guarantee it installs for the Python version returned by `python --version`.
-- Install all dependencies in one command: `python -m pip install fastapi uvicorn sqlalchemy alembic python-dotenv pyjwt cryptography httpx anthropic openai pandas openpyxl pymupdf python-multipart stripe requests`
 
 ---
 
-## 11. Clerk Configuration
+## 12. Clerk Configuration
 
-### 11.1 Dashboard Settings
+### 12.1 Dashboard Settings
 
 In the Clerk dashboard at [clerk.com](https://clerk.com), configure the following settings:
 
@@ -820,7 +948,7 @@ In the Clerk dashboard at [clerk.com](https://clerk.com), configure the followin
 
 ---
 
-### 11.2 JWT Template (Required)
+### 12.2 JWT Template (Required)
 
 Without the email claim in the JWT, the domain check in `auth.py` fails with a 403 error.
 
@@ -834,26 +962,26 @@ In the Clerk dashboard → **JWT Templates** → **session token**, add this cla
 
 ---
 
-### 11.3 HTML Page Configuration
+### 12.3 HTML Page Configuration
 
 Every auth page has two Clerk placeholders that must be replaced with actual values:
 
 ```html
-<!-- Replace in: sign-in.html, register.html, landing.html, upload.html, results.html -->
+<!-- Replace in: sign-in.html, register.html, landing.html, upload.html, results.html, payment-success.html -->
 <script
   async
   crossorigin="anonymous"
   data-clerk-publishable-key="YOUR_PUBLISHABLE_KEY"
-  src="https://unpkg.com/@clerk/clerk-js@latest/dist/clerk.browser.js"
+  src="https://your-instance.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
   type="text/javascript">
 </script>
 ```
 
-Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key. The `unpkg.com` CDN URL does not need to change.
+Replace `YOUR_PUBLISHABLE_KEY` with your `pk_test_...` key.
 
 ---
 
-## 12. Remaining Implementation
+## 13. Remaining Implementation
 
 ### Phase 4 — Admin Task Review (via SQL)
 
@@ -916,7 +1044,7 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 Update `public/main.js` to fetch from `GET /api/leaderboard` instead of reading from `data.js`. The endpoint is already implemented in `main.py` and returns data in the same format as the existing `lbData` array.
 
-> **Note:** The real benchmark pipeline (`pipeline.py`) and batch runner (`batch_run.py`) are already implemented. See §6 and §7 for details.
+> **Note:** The real benchmark pipeline (`pipeline.py`) and batch runner (`batch_run.py`) are already implemented. See §6 and §8 for details.
 
 ---
 
@@ -924,26 +1052,14 @@ Update `public/main.js` to fetch from `GET /api/leaderboard` instead of reading 
 
 Deploy the FastAPI backend as a **Render Web Service** and the static HTML files as **Render Static Sites**. Key changes needed:
 
-- Switch `DATABASE_URL` in `.env` to the Render PostgreSQL connection string
-- Change the `API` constant in `auth-pages.js` from `http://localhost:8000` to the Render service URL
-- Add the Render URL to the `ALLOWED_ORIGINS` list in `main.py`
-- The JWKS fallback in `auth.py` will work automatically on Render (unrestricted internet access)
-- Run `alembic upgrade head` on the Render database on first deploy
+1. Switch `DATABASE_URL` in `.env` to the Render PostgreSQL connection string
+2. Change the `API` constant in `auth-pages/auth-pages.js` from `http://127.0.0.1:8000` to the Render backend service URL
+3. Set `FRONTEND_URL` in `.env` to the Render static site URL (e.g. `https://your-site.onrender.com`) — this updates Stripe's success/cancel redirect URLs automatically
+4. Add the Render backend and frontend URLs to the `ALLOWED_ORIGINS` list in `main.py`
+5. The JWKS fallback in `auth.py` will work automatically on Render (unrestricted internet access)
+6. Run `alembic upgrade head` on the Render database on first deploy
 
 ---
 
-### Phase 7 — Stripe Payments
-
-The database schema already includes all payment fields in the `submissions` table (`payment_status`, `stripe_payment_id`, `price_charged`). The `settings` table has `price_per_submission` for configuring the price without code changes.
-
-Add Stripe integration between form submission and pipeline triggering:
-
-1. After `POST /submissions/prepare`, redirect to a Stripe checkout page
-2. On payment success, Stripe calls a webhook endpoint (`POST /stripe/webhook`)
-3. The webhook sets `payment_status = "paid"` and triggers `run_pipeline`
-4. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in `.env`
-
----
-
-*AccountingBench Developer Documentation · Version 1.2 · May 2026*
+*AccountingBench Developer Documentation · Version 1.3 · May 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*

@@ -89,7 +89,7 @@ async def confirm_payment(
         )
 
     # Prevent session substitution — metadata must match this submission
-    if str(session.metadata.get("submission_id", "")) != str(submission_id):
+    if str(getattr(session.metadata, "submission_id", "")) != str(submission_id):
         raise HTTPException(
             status_code=403,
             detail="Payment session does not match this submission.",

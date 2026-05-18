@@ -369,7 +369,7 @@ async def prepare_submission(
         settings     = db.query(Settings).filter_by(id=1).first()
         price        = settings.price_per_submission if (settings and settings.price_per_submission) else 5000
         currency     = settings.currency             if (settings and settings.currency)             else "eur"
-        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5500").rstrip("/")
+        frontend_url = os.environ.get("FRONTEND_URL", "http://127.0.0.1:5500").rstrip("/")
 
         # Stripe session is created in a background task so the HTTP response
         # is returned to the browser immediately (avoids TCP connection drops

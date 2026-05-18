@@ -104,19 +104,24 @@ function showPreparingPayment() {
 
 // ── Poll status until checkout_url appears, then redirect to Stripe ───────────
 async function pollForCheckout(submissionId) {
+  console.log('[poll] starting for submission', submissionId);
   var maxAttempts = 30; // 15 seconds max (500 ms interval)
   for (var i = 0; i < maxAttempts; i++) {
     await new Promise(function(r) { setTimeout(r, 500); });
+    console.log('[poll] attempt', i + 1);
     try {
       var token = await window.Clerk.session.getToken();
       var res   = await fetch(API + '/submissions/' + submissionId + '/status', {
         headers: { 'Authorization': 'Bearer ' + token },
       });
+      console.log('[poll] status response', res.status);
       if (!res.ok) continue;
       var data = await res.json();
+      console.log('[poll] data', JSON.stringify(data));
 
       if (data.checkout_url) {
         // Stripe session is ready — redirect
+        console.log('[poll] navigating to', data.checkout_url);
         var pl = document.getElementById('paymentLink');
         if (pl) pl.href = data.checkout_url;
         document.getElementById('preparingPaymentView').style.display = 'none';
@@ -127,11 +132,12 @@ async function pollForCheckout(submissionId) {
 
       // Dev mode (no Stripe): pipeline starts immediately
       if (data.status === 'processing' || data.status === 'done') {
+        console.log('[poll] no-stripe path, going to results');
         window.location.href = 'results.html?submission=' + submissionId;
         return;
       }
     } catch (e) {
-      // Network hiccup — keep polling
+      console.log('[poll] error', e.message);
     }
   }
 
@@ -198,11 +204,13 @@ async function handleSubmit() {
     if (pdfFile)   fd.append('pdf_file',   pdfFile);
     if (excelFile) fd.append('excel_file', excelFile);
 
+    console.log('[upload] fetch start, API=', API);
     var res = await fetch(API + '/submissions/prepare', {
       method:  'POST',
       headers: { 'Authorization': 'Bearer ' + clerkToken },
       body:    fd,
     });
+    console.log('[upload] fetch done, status=', res.status);
 
     if (!res.ok) {
       var errData = await res.json().catch(function() { return {}; });
@@ -224,11 +232,12 @@ async function handleSubmit() {
 
     // The server returns immediately (checkout_url is null — Stripe session is
     // being created in a background task). Show spinner and poll until ready.
+    console.log('[upload] submission_id=', data.submission_id, 'showing preparing view');
     showPreparingPayment();
     pollForCheckout(data.submission_id);
 
   } catch (err) {
-    console.error('Submit error:', err);
+    console.error('[upload] CATCH', err.name, err.message);
     showError('formError', 'Unexpected error: ' + err.message);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     btn.disabled = false; btn.textContent = 'Submit & Run Benchmark';
