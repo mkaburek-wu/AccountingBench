@@ -82,7 +82,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
 | Stripe payments | ✅ Done | Full Checkout flow with payment confirmation and pipeline trigger |
-| Admin review page | ⏳ Planned | Phase 4 |
+| Admin panel | ✅ Done | `admin.html` — task review, user management, live stats, domain management |
 | Live leaderboard | ⏳ Planned | Phase 5 |
 | Deployment to Render | ⏳ Planned | Phase 6 |
 
@@ -119,6 +119,7 @@ accountingbench/
 │   ├── upload.html / upload.js    ← Task contribution form + Stripe polling (up to 3 PDF/Excel files)
 │   ├── payment-success.html / payment-success.js ← Post-Stripe redirect: confirms payment + pipeline
 │   ├── account.html / account.js  ← Account settings: view profile + delete account
+│   ├── admin.html / admin.js      ← Admin panel: task review, users, stats, domains
 │   └── results.html               ← Benchmark result viewer (JS inline → results.js)
 │
 └── backend/                       ← FastAPI Python server
@@ -129,6 +130,7 @@ accountingbench/
     ├── submissions.py             ← POST /submissions/prepare endpoint (multi-file upload)
     ├── payments.py                ← POST /submissions/{id}/confirm-payment endpoint
     ├── users.py                   ← DELETE /users/me (account deletion — DB then Clerk)
+    ├── admin.py                   ← Admin endpoints: stats, user management, task review
     ├── import_tasks.py            ← One-time Excel → database migration
     ├── batch_run.py               ← Batch import + pipeline runner (see §8)
     ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §9)
@@ -312,6 +314,10 @@ The FastAPI server runs at `http://127.0.0.1:8000`. Interactive API documentatio
 | `GET` | `/admin/tasks?status=pending` | Lists tasks pending review. Also accepts `approved`/`rejected`. |
 | `POST` | `/admin/tasks/{id}/approve` | Approves a task — sets `is_public=True` so it appears in the leaderboard. |
 | `POST` | `/admin/tasks/{id}/reject` | Rejects a task — stays private. |
+| `GET` | `/admin/stats` | Returns KPI counts: pending/approved/rejected tasks, users, submissions today/week/total, revenue. |
+| `GET` | `/admin/users` | Lists all users with submission counts. |
+| `POST` | `/admin/users/{id}/deactivate` | Deactivates a user account (blocks API access). |
+| `POST` | `/admin/users/{id}/activate` | Re-activates a user account. |
 | `GET` | `/admin/domains` | Lists all allowed email domains. |
 | `POST` | `/admin/domains` | Adds a new allowed domain. Body: `{"domain": "kpmg.com"}`. |
 | `DELETE` | `/admin/domains/{id}` | Removes an allowed domain. |
@@ -712,10 +718,11 @@ Each page is a plain HTML file with no inline JavaScript. Logic lives in a match
 | `auth-pages.js` | Shared utilities used by all pages. Also injects the Clerk `<script>` tag dynamically using values from `config.js`. |
 | `sign-in.html` / `sign-in.js` | Email + password login. Handles new-device verification code step. Redirects to `landing.html` on success. |
 | `register.html` / `register.js` | Registration form. Domain pre-check before Clerk account creation. GDPR consent checkbox required. |
-| `landing.html` / `landing.js` | Protected home page. Shows welcome message and submission history grid. Links to Contribute, Account Settings, and Sign Out. |
+| `landing.html` / `landing.js` | Protected home page. Shows welcome message and submission history grid. Nav bar has Account Settings, Sign Out, and (admin only) Admin Panel buttons. Logo links back to `landing.html` on all auth pages. |
 | `upload.html` / `upload.js` | Task contribution form. Supports up to 3 PDF and 3 Excel uploads (20 MB each). GDPR data-use consent required. On submit: shows "Preparing Payment" spinner, polls until `checkout_url` is ready, then redirects to Stripe. |
 | `payment-success.html` / `payment-success.js` | Shown after Stripe payment. Calls `/confirm-payment`, shows benchmark progress, redirects to `results.html` when done. |
 | `account.html` / `account.js` | Account settings page. Displays profile (name, email). Danger Zone section with two-step confirmation for permanent account deletion — deletes all local DB data first, then removes the user from Clerk. |
+| `admin.html` / `admin.js` | Admin-only panel. Auth-guarded — redirects to `landing.html` if not admin. Four sections: Task Review (approve/reject with expandable detail rows), Users (activate/deactivate), Stats (live KPI cards), Domains (add/remove allowed domains). |
 | `results.html` | Dedicated result viewer. If `done` shows results from database immediately; if `processing` polls every 3 seconds. Never re-runs the benchmark. |
 
 ---
@@ -783,6 +790,7 @@ All shared utilities used across multiple auth pages are in `auth-pages/auth-pag
 | `handleClerkError(err, id)` | Maps Clerk technical errors to friendly user-facing messages. |
 | `showStep(id)` | Switches between `.auth-step` divs (used in multi-step forms). |
 | `setupCodeInput(inputId, fn)` | Configures 6-digit code inputs with auto-submit on completion. |
+| `handleSignOut()` | Signs out via Clerk and redirects to `sign-in.html`. Available globally on all auth pages. |
 
 ---
 
@@ -1002,9 +1010,15 @@ The Clerk `<script>` tag is **no longer hardcoded in any HTML file**. `auth-page
 
 ## 13. Remaining Implementation
 
-### Phase 4 — Admin Task Review (via SQL)
+### Phase 4 — Admin Task Review ✅ Done
 
-A dedicated admin UI page is planned for a later phase. In the meantime, tasks can be approved and rejected directly in the database using **DB Browser for SQLite** (free download at [sqlitebrowser.org](https://sqlitebrowser.org)).
+The admin panel is fully implemented at `auth-pages/admin.html`. Log in with the `ADMIN_EMAIL` account — an "Admin Panel" link appears in the nav bar automatically. It provides task review (approve/reject with expandable detail rows), user management (activate/deactivate), live KPI stats, and domain management.
+
+The SQL queries below remain useful for direct database access or scripting.
+
+#### Admin Review (via SQL — alternative / command line)
+
+Tasks can also be approved and rejected directly in the database using **DB Browser for SQLite** (free download at [sqlitebrowser.org](https://sqlitebrowser.org)).
 
 Open `backend/accountingbench.db` in DB Browser, click the **Execute SQL** tab, and use the queries below.
 
@@ -1055,7 +1069,7 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 > **Effect of approval:** Setting `is_public = 1` causes the task to be included in the `GET /api/leaderboard` endpoint calculations automatically. No server restart is needed — the leaderboard query reads from the database on every request.
 
-> **Planned:** A proper `auth-pages/admin.html` page with Approve/Reject buttons will be built in a later phase. It will call the existing `POST /admin/tasks/{id}/approve` and `/reject` endpoints which are already implemented in `main.py`.
+> **Tip:** The UI admin panel (`admin.html`) is the easiest way to manage tasks. These SQL queries are useful for bulk operations or scripting.
 
 ---
 
@@ -1085,5 +1099,5 @@ Deploy the FastAPI backend as a **Render Web Service** and the static HTML files
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.4 · May 2026*
+*AccountingBench Developer Documentation · Version 1.5 · May 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*
