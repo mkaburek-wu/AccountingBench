@@ -272,7 +272,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 42.9, tax: 6.7, financial: 44.9, management: null, interpLaw: 80.0, calculation: 25.2, journal: 42.9, multiChoice: 100.0, openText: 35.0, singleChoice: 75.0, journalEntry: 40.2, austrianTax: 41.6, mixedAcc: null, ugb: 47.1, ifrs: null },
     },
     n: '560/564', priceIn: 0.5, priceOut: 1.5, cost: 0.001365, tokTask: 1272, speed: 48.2,
-    note: '4 tasks excluded (no final_answer). Scored on 516/520 tasks.',
+    note: '4 tasks excluded (no final_answer). Scored on 560/564 tasks.',
     calib: [
       {x:0.85,y:38.4,n:46},{x:0.95,y:54.1,n:466},
     ],
@@ -333,7 +333,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 31.1, tax: 21.0, financial: 31.6, management: null, interpLaw: 67.0, calculation: 12.0, journal: 32.7, multiChoice: 75.0, openText: 24.6, singleChoice: 62.5, journalEntry: 25.3, austrianTax: 32.0, mixedAcc: null, ugb: 27.9, ifrs: null },
     },
     n: '563/564', priceIn: 0.28, priceOut: 0.42, cost: 0.000304, tokTask: 904, speed: 35.7,
-    note: '1 task excluded (no final_answer). Scored on 519/520 tasks.',
+    note: '1 task excluded (no final_answer). Scored on 563/564 tasks.',
     calib: [
       {x:0.15,y:15.0,n:4},{x:0.25,y:4.3,n:7},{x:0.35,y:2.9,n:7},
       {x:0.45,y:0.0,n:4},{x:0.55,y:3.3,n:6},{x:0.65,y:12.7,n:12},
@@ -355,7 +355,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 50.6, tax: 28.3, financial: 51.9, management: null, interpLaw: 80.0, calculation: 29.1, journal: 57.0, multiChoice: 100.0, openText: 40.7, singleChoice: 75.0, journalEntry: 60.9, austrianTax: 47.1, mixedAcc: null, ugb: 62.3, ifrs: null },
     },
     n: '517/520', priceIn: 0.95, priceOut: 4, cost: 0, tokTask: 0, speed: 41.7,
-    note: "3 task excluded (no final_answer). Scored on 517/520 tasks.",
+    note: "3 task excluded (no final_answer). Scored on 561/564 tasks.",
     calib: [
       {x:0.55,y:17.0,n:5},{x:0.65,y:26,n:7},{x:0.75,y:18.4,n:19},
       {x:0.85,y:37.2,n:218},{x:0.95,y:77.5,n:250},
