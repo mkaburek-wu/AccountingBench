@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AccountingBench — Admin Panel</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="../public/styles.css" rel="stylesheet"/>
+
+<script src="config.js"></script>
+<script src="auth-pages.js"></script>
+</head>
+<body>
+
+<!-- BOTTOM TAB BAR (mobile only) -->
+<div class="m-tabs" role="navigation" aria-label="Main navigation">
+  <a class="m-tab" href="../public/index.html" aria-label="Overview">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><rect height="7" width="7" x="3" y="3"></rect><rect height="7" width="7" x="14" y="3"></rect><rect height="7" width="7" x="3" y="14"></rect><rect height="7" width="7" x="14" y="14"></rect></svg>
+    Overview
+  </a>
+  <a class="m-tab" href="../public/leaderboard.html" aria-label="Leaderboard">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    Results
+  </a>
+  <a class="m-tab" href="../public/dashboard.html" aria-label="Dashboard">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg>
+    Analytics
+  </a>
+  <a class="m-tab" href="../public/methodology.html" aria-label="Methodology">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+    Method
+  </a>
+  <a class="m-tab active" aria-label="Portal">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24"><rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    Portal
+  </a>
+</div>
+
+<nav>
+  <div class="nav-left">
+    <div class="nav-partners">
+      <a class="nav-partner-link" href="https://www.wu.ac.at/revision/forschung/transferstudien" target="_blank">
+        <img alt="WU Accounting &amp; Auditing" class="nav-partner-logo-wu" src="../public/img/wu-logo.png"/>
+      </a>
+      <a class="nav-partner-link" href="https://www.boardservice.center/" target="_blank">
+        <img alt="Board Service Center" class="nav-partner-logo-bsc" src="../public/img/bsc-logo.png"/>
+      </a>
+    </div>
+    <a class="nav-logo-wrap" href="landing.html">
+      <div class="nav-logo-bar"></div>
+      <div class="nav-logo">Accounting<span>Bench</span></div>
+    </a>
+  </div>
+  <span class="m-page-label">Admin Panel</span>
+  <div class="nav-right">
+    <a href="account.html" class="btn-sign-out">Account Settings</a>
+    <button class="btn-sign-out" onclick="handleSignOut()">Sign Out</button>
+  </div>
+</nav>
+
+<div class="page-tabs">
+  <a class="page-tab" href="../public/index.html">Overview</a>
+  <a class="page-tab" href="../public/leaderboard.html">Leaderboard</a>
+  <a class="page-tab" href="../public/dashboard.html">Dashboard</a>
+  <a class="page-tab" href="../public/methodology.html">Methodology</a>
+  <a class="page-tab" href="../public/about.html">About Us</a>
+  <a class="page-tab active">Admin</a>
+</div>
+
+<div class="private-page">
+  <div class="upload-hero">
+    <div class="upload-hero-eyebrow">Administration</div>
+    <div class="upload-hero-title">Admin Panel</div>
+    <div class="upload-hero-sub">Review submitted tasks, manage users, and monitor platform activity.</div>
+    <div class="landing-hero-actions" style="margin-top:16px;">
+      <a href="landing.html" class="btn-sign-out">&larr; My Submissions</a>
+      <button class="btn-sign-out" onclick="handleSignOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <div class="upload-content">
+
+    <!-- Internal tab bar -->
+    <div class="admin-tab-bar">
+      <button class="admin-tab" id="tab-tasks"   onclick="showTab('tasks')">Task Review</button>
+      <button class="admin-tab" id="tab-users"   onclick="showTab('users')">Users</button>
+      <button class="admin-tab" id="tab-stats"   onclick="showTab('stats')">Stats</button>
+      <button class="admin-tab" id="tab-domains" onclick="showTab('domains')">Domains</button>
+    </div>
+
+    <!-- ── TASK REVIEW ──────────────────────────────────────────────────────── -->
+    <div class="admin-section" id="section-tasks" style="display:none">
+
+      <div class="admin-filter-bar">
+        <button class="admin-filter-btn active" data-filter="pending"  onclick="setTaskFilter('pending')">Pending</button>
+        <button class="admin-filter-btn"        data-filter="approved" onclick="setTaskFilter('approved')">Approved</button>
+        <button class="admin-filter-btn"        data-filter="rejected" onclick="setTaskFilter('rejected')">Rejected</button>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Category</th>
+              <th>Question Preview</th>
+              <th>Answer Type</th>
+              <th>Submitted</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tasks-tbody">
+            <tr><td colspan="6" class="admin-table-msg">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="admin-hint">Click any row to expand the full question, answer, and model scores.</p>
+    </div>
+
+    <!-- ── USERS ────────────────────────────────────────────────────────────── -->
+    <div class="admin-section" id="section-users" style="display:none">
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Joined</th>
+              <th style="text-align:center">Submissions</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="5" class="admin-table-msg">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── STATS ─────────────────────────────────────────────────────────────── -->
+    <div class="admin-section" id="section-stats" style="display:none">
+
+      <div class="admin-kpi-grid">
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Pending Review</div>
+          <div class="admin-kpi-value" id="kpi-pending">—</div>
+          <div class="admin-kpi-sub">tasks awaiting approval</div>
+        </div>
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Registered Users</div>
+          <div class="admin-kpi-value" id="kpi-users">—</div>
+          <div class="admin-kpi-sub" id="kpi-users-active"></div>
+        </div>
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Submissions This Week</div>
+          <div class="admin-kpi-value" id="kpi-week">—</div>
+          <div class="admin-kpi-sub">today: <span id="kpi-today">—</span></div>
+        </div>
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Total Revenue</div>
+          <div class="admin-kpi-value" id="kpi-revenue">—</div>
+          <div class="admin-kpi-sub">from paid submissions</div>
+        </div>
+      </div>
+
+      <div class="admin-kpi-grid admin-kpi-grid-sm">
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Approved Tasks</div>
+          <div class="admin-kpi-value admin-kpi-value-sm" id="kpi-approved">—</div>
+        </div>
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Rejected Tasks</div>
+          <div class="admin-kpi-value admin-kpi-value-sm" id="kpi-rejected">—</div>
+        </div>
+        <div class="admin-kpi-card">
+          <div class="admin-kpi-label">Processing Now</div>
+          <div class="admin-kpi-value admin-kpi-value-sm" id="kpi-processing">—</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── DOMAINS ───────────────────────────────────────────────────────────── -->
+    <div class="admin-section" id="section-domains" style="display:none">
+      <div class="form-card">
+        <div class="form-card-title">Allowed Email Domains</div>
+        <div class="form-card-sub">Only users with these email domains can register.</div>
+
+        <div class="domain-add-form">
+          <input id="newDomain" type="text" placeholder="e.g. wu.ac.at"
+                 onkeydown="if(event.key==='Enter') addDomain()"/>
+          <button class="btn-primary" onclick="addDomain()"
+                  style="padding:9px 20px;font-size:12px;">Add Domain</button>
+        </div>
+        <div class="form-error" id="domainError"></div>
+        <div class="form-info"  id="domainSuccess"></div>
+
+        <div id="domains-list">
+          <div class="admin-table-msg">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="footer-top">
+    <div>
+      <div class="footer-logo">Accounting<span>Bench</span></div>
+      <div class="footer-tagline">A structured benchmark for evaluating large language models<br/>in accounting education and professional practice</div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 AccountingBench · WU Vienna, Financial Accounting &amp; Auditing Group · Board Service Center</span>
+    <a class="footer-privacy-link" href="../public/privacy.html">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="admin.js"></script>
+</body>
+</html>

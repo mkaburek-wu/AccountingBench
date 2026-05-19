@@ -186,6 +186,13 @@ function handleClerkError(err, errorElementId) {
 }
 
 
+// ── Sign out ──────────────────────────────────────────────────────────────────
+async function handleSignOut() {
+  try { await window.Clerk.signOut(); } catch (e) { /* ignore */ }
+  window.location.href = 'sign-in.html';
+}
+
+
 // ── Step switcher ─────────────────────────────────────────────────────────────
 
 /**

@@ -77,6 +77,7 @@ nav {
   box-shadow: 0 2px 12px rgba(0,60,120,0.08);
 }
 .nav-left         { display: flex; align-items: center; gap: 18px; min-width: 0; flex: 1 1 auto; }
+.nav-right        { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .nav-partners     { display: flex; align-items: center; gap: 14px; padding-right: 18px; margin-right: 2px; border-right: 1px solid var(--border); flex-shrink: 0; }
 .nav-partner-link { display: flex; align-items: center; opacity: 0.9; transition: opacity 0.2s; }
 .nav-partner-link:hover { opacity: 1; }
@@ -952,6 +953,7 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
   .nav-logo-bar  { height: 24px; }
   .nav-logo      { font-size: 13px; }
   .nav-links     { display: none !important; }
+  .nav-right     { display: none !important; }
   .m-page-label  { display: none !important; }
 
   /* Ticker */
@@ -1215,7 +1217,7 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
 }
 
 .private-page {
-  padding-top: 140px;
+  padding-top: 112px;
   min-height: 100vh;
   background: var(--bg);
 }
@@ -1321,13 +1323,20 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
 
 /* ── Sign-out button ── */
 .btn-sign-out {
+  display: inline-flex; align-items: center;
   background: transparent; border: 1.5px solid rgba(255,255,255,0.3);
   color: rgba(255,255,255,0.7); padding: 9px 18px;
-  font-family: 'IBM Plex Sans', sans-serif; font-size: 11px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; line-height: 1;
   font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
   cursor: pointer; transition: all 0.2s;
 }
 .btn-sign-out:hover { border-color: rgba(255,255,255,0.6); color: #fff; }
+
+/* ── Sign-out buttons in nav bar (white background) ── */
+.nav-right .btn-sign-out {
+  border-color: var(--border2); color: var(--text-muted); text-decoration: none;
+}
+.nav-right .btn-sign-out:hover { border-color: var(--wu-blue); color: var(--wu-blue); }
 
 /* ── Landing page hero ── */
 .landing-hero { background: var(--wu-blue); padding: 44px 40px 48px; }
@@ -1579,6 +1588,130 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
 /* ── Footer privacy link ── */
 .footer-privacy-link { color: rgba(255,255,255,0.4); text-decoration: none; }
 .footer-privacy-link:hover { color: rgba(255,255,255,0.7); }
+
+/* ── Admin panel ───────────────────────────────────────────────────────────── */
+.admin-tab-bar {
+  display: flex; gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 28px; overflow-x: auto;
+}
+.admin-tab {
+  padding: 10px 22px; background: none;
+  border: none; border-bottom: 2px solid transparent; margin-bottom: -2px;
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-muted); cursor: pointer;
+  white-space: nowrap; transition: color 0.15s, border-color 0.15s;
+}
+.admin-tab:hover  { color: var(--wu-blue); }
+.admin-tab.active { color: var(--wu-blue); border-bottom-color: var(--wu-blue); }
+
+/* KPI grid */
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px; margin-bottom: 20px;
+}
+.admin-kpi-grid-sm { grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); }
+.admin-kpi-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 20px 24px;
+}
+.admin-kpi-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px;
+}
+.admin-kpi-value {
+  font-size: 30px; font-weight: 700; color: var(--text);
+  font-family: 'IBM Plex Mono', monospace; line-height: 1;
+}
+.admin-kpi-value-sm { font-size: 22px; }
+.admin-kpi-sub { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+
+/* Filter bar */
+.admin-filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.admin-filter-btn {
+  padding: 6px 14px; border-radius: 4px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.admin-filter-btn:hover  { border-color: var(--wu-blue); color: var(--wu-blue); }
+.admin-filter-btn.active { background: var(--wu-blue); color: #fff; border-color: var(--wu-blue); }
+
+/* Table */
+.admin-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin-table th {
+  text-align: left; padding: 10px 14px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-dim);
+  border-bottom: 2px solid var(--border); background: var(--bg);
+}
+.admin-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table-msg { padding: 28px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.admin-hint { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+.admin-mono { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.task-preview-cell { max-width: 260px; color: var(--text-muted); }
+.task-actions-cell { white-space: nowrap; }
+
+/* Expandable task detail */
+.task-main-row { cursor: pointer; }
+.task-main-row:hover td { background: var(--wu-light); }
+.task-detail-inner {
+  padding: 16px 18px; margin: 2px 0 6px;
+  background: var(--wu-light); border-radius: 4px;
+}
+.task-detail-field { margin-bottom: 10px; font-size: 13px; }
+.task-detail-field:last-child { margin-bottom: 0; }
+.task-detail-field label {
+  display: block; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-dim); margin-bottom: 3px;
+}
+.task-detail-field p { color: var(--text); line-height: 1.55; margin: 0; }
+
+/* Table action buttons */
+.btn-tbl-approve {
+  background: var(--green); color: #fff; border: none;
+  padding: 5px 11px; border-radius: 3px;
+  font-size: 11px; font-weight: 600; cursor: pointer; margin-right: 5px;
+}
+.btn-tbl-approve:hover { background: #065f46; }
+.btn-tbl-reject {
+  background: transparent; color: var(--red);
+  border: 1px solid rgba(185,28,28,0.35);
+  padding: 5px 11px; border-radius: 3px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.btn-tbl-reject:hover { background: var(--red-bg); }
+
+/* Status badges */
+.admin-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; margin-right: 6px;
+}
+.admin-badge-green { background: var(--green-bg); color: var(--green); }
+.admin-badge-red   { background: var(--red-bg);   color: var(--red); }
+
+/* Domains */
+.domain-add-form {
+  display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.domain-add-form input {
+  flex: 1; min-width: 200px; padding: 9px 14px;
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 13px; color: var(--text); background: var(--surface);
+}
+.domain-add-form input:focus { outline: none; border-color: var(--wu-blue); }
+.domain-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 4px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.domain-row:last-child { border-bottom: none; }
+.domain-meta { flex: 1; font-size: 11px; color: var(--text-dim); }
 
 /* ── Account page ──────────────────────────────────────────────────────────── */
 .account-info-row {

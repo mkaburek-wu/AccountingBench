@@ -10,6 +10,18 @@ window.addEventListener('load', function() {
       document.getElementById('userName').textContent = ', ' + firstName + '.';
     }
 
+    // Reveal admin link if user is admin
+    try {
+      var token = await window.Clerk.session.getToken();
+      var res   = await fetch(API + '/me', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (res.ok) {
+        var me = await res.json();
+        if (me.is_admin) {
+          document.getElementById('navAdminLink').style.display = 'inline-block';
+        }
+      }
+    } catch (e) { /* non-critical — ignore */ }
+
     await loadSubmissions();
   });
 });

@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from backend.submissions import router as submissions_router
 from backend.payments import router as payments_router
 from backend.users import router as users_router
+from backend.admin import router as admin_router
 
 from backend.database import get_db, check_connection, engine
 from backend.models import Base, Settings
@@ -170,6 +171,7 @@ app.add_middleware(
 app.include_router(submissions_router)
 app.include_router(payments_router)
 app.include_router(users_router)
+app.include_router(admin_router)
 
 
 # ── Root endpoint (health check) ──────────────────────────────────────────────
@@ -221,12 +223,14 @@ async def get_me(
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
+    admin_email = os.environ.get("ADMIN_EMAIL", "").strip()
     return {
         "id":         user.id,
         "email":      user.email,
         "first_name": user.first_name,
         "last_name":  user.last_name,
         "is_active":  user.is_active,
+        "is_admin":   user.email == admin_email,
     }
 
 
