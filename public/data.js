@@ -14,9 +14,9 @@ const AXIS_KEYS = ['overall', 'financial', 'management', 'tax', 'ifrs', 'ugb'];
 
 // ── Score breakdown categories ────────────────────────────────
 const BREAKDOWN_CATS = [
-  { key:'financial',  label:'Financial Accounting', subtitle:'122 questions' },
-  { key:'management', label:'Management Accounting', subtitle:'49 questions'  },
-  { key:'tax',        label:'Tax',                   subtitle:'349 questions' },
+  { key:'financial',  label:'Financial Accounting', subtitle: BENCHMARK_META.categories.find(c => c.label === 'Financial Accounting').tasks + ' questions' },
+  { key:'management', label:'Management Accounting', subtitle: BENCHMARK_META.categories.find(c => c.label === 'Management Accounting').tasks + ' questions' },
+  { key:'tax',        label:'Tax',                   subtitle: BENCHMARK_META.categories.find(c => c.label === 'Tax').tasks + ' questions' },
 ];
 
 // ── Holistic matrix column definitions ───────────────────────
