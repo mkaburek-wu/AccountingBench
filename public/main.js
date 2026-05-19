@@ -840,6 +840,10 @@ function renderBreakdown() {
 // ===== INIT =====
 
 window.addEventListener('load', () => {
+  // Populate metadata-driven placeholders present on any page
+  document.querySelectorAll('.js-total-tasks').forEach(el => { el.textContent = BENCHMARK_META.totalTasks; });
+  document.querySelectorAll('.js-bench-date').forEach(el   => { el.textContent = BENCHMARK_META.date; });
+
   // Detect which page we are on and init only what is needed
   const file = window.location.pathname.split('/').pop() || 'index.html';
 
