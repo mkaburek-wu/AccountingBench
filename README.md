@@ -25,6 +25,7 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 11. [Environment Setup](#11-environment-setup)
 12. [Clerk Configuration](#12-clerk-configuration)
 13. [Remaining Implementation](#13-remaining-implementation)
+14. [Database Administration (SQL Reference)](#14-database-administration-sql-reference)
 
 ---
 
@@ -1010,69 +1011,6 @@ The Clerk `<script>` tag is **no longer hardcoded in any HTML file**. `auth-page
 
 ## 13. Remaining Implementation
 
-### Phase 4 — Admin Task Review ✅ Done
-
-The admin panel is fully implemented at `auth-pages/admin.html`. Log in with the `ADMIN_EMAIL` account — an "Admin Panel" link appears in the nav bar automatically. It provides task review (approve/reject with expandable detail rows), user management (activate/deactivate), live KPI stats, and domain management.
-
-The SQL queries below remain useful for direct database access or scripting.
-
-#### Admin Review (via SQL — alternative / command line)
-
-Tasks can also be approved and rejected directly in the database using **DB Browser for SQLite** (free download at [sqlitebrowser.org](https://sqlitebrowser.org)).
-
-Open `backend/accountingbench.db` in DB Browser, click the **Execute SQL** tab, and use the queries below.
-
-#### Find pending submissions
-
-```sql
-SELECT bt.question_id, bt.prompt, bt.category, bt.answer_type, s.status, s.submitted_at
-FROM submissions s
-JOIN benchmark_tasks bt ON bt.id = s.task_id
-WHERE bt.validation_status = 'pending'
-ORDER BY s.submitted_at DESC;
-```
-
-#### Approve a single task
-
-```sql
-UPDATE benchmark_tasks
-SET is_public = 1,
-    validation_status = 'approved',
-    validated_by = 'admin@wu.ac.at'
-WHERE question_id = 'usr_3a9f12';
-```
-
-Replace `usr_3a9f12` with the actual `question_id` from the query above, and `admin@wu.ac.at` with your email address.
-
-#### Reject a single task
-
-```sql
-UPDATE benchmark_tasks
-SET is_public = 0,
-    validation_status = 'rejected',
-    validated_by = 'admin@wu.ac.at'
-WHERE question_id = 'usr_3a9f12';
-```
-
-#### Approve all pending user submissions at once
-
-```sql
-UPDATE benchmark_tasks
-SET is_public = 1,
-    validation_status = 'approved',
-    validated_by = 'admin@wu.ac.at'
-WHERE source = 'user_submitted'
-AND validation_status = 'pending';
-```
-
-After running any query, click **Write Changes** in DB Browser to save.
-
-> **Effect of approval:** Setting `is_public = 1` causes the task to be included in the `GET /api/leaderboard` endpoint calculations automatically. No server restart is needed — the leaderboard query reads from the database on every request.
-
-> **Tip:** The UI admin panel (`admin.html`) is the easiest way to manage tasks. These SQL queries are useful for bulk operations or scripting.
-
----
-
 ### Phase 5 — Live Leaderboard
 
 Update `public/main.js` to fetch from `GET /api/leaderboard` instead of reading from `data.js`. The endpoint is already implemented in `main.py` and returns data in the same format as the existing `lbData` array.
@@ -1096,6 +1034,61 @@ Deploy the FastAPI backend as a **Render Web Service** and the static HTML files
 4. Add the Render backend and frontend URLs to the `ALLOWED_ORIGINS` list in `main.py`
 5. The JWKS fallback in `auth.py` will work automatically on Render (unrestricted internet access)
 6. Run `alembic upgrade head` on the Render database on first deploy
+
+---
+
+## 14. Database Administration (SQL Reference)
+
+The admin panel (`admin.html`) covers most day-to-day operations. The SQL queries below are useful for bulk operations, scripting, or direct database access via **DB Browser for SQLite** (free at [sqlitebrowser.org](https://sqlitebrowser.org)).
+
+Open `backend/accountingbench.db`, click the **Execute SQL** tab, and run the queries below.
+
+### Find pending submissions
+
+```sql
+SELECT bt.question_id, bt.prompt, bt.category, bt.answer_type, s.status, s.submitted_at
+FROM submissions s
+JOIN benchmark_tasks bt ON bt.id = s.task_id
+WHERE bt.validation_status = 'pending'
+ORDER BY s.submitted_at DESC;
+```
+
+### Approve a single task
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 1,
+    validation_status = 'approved',
+    validated_by = 'admin@wu.ac.at'
+WHERE question_id = 'usr_3a9f12';
+```
+
+Replace `usr_3a9f12` with the actual `question_id` and `admin@wu.ac.at` with your email.
+
+### Reject a single task
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 0,
+    validation_status = 'rejected',
+    validated_by = 'admin@wu.ac.at'
+WHERE question_id = 'usr_3a9f12';
+```
+
+### Approve all pending user submissions at once
+
+```sql
+UPDATE benchmark_tasks
+SET is_public = 1,
+    validation_status = 'approved',
+    validated_by = 'admin@wu.ac.at'
+WHERE source = 'user_submitted'
+AND validation_status = 'pending';
+```
+
+After running any query, click **Write Changes** in DB Browser to save.
+
+> **Effect of approval:** Setting `is_public = 1` includes the task in `GET /api/leaderboard` calculations automatically — no server restart needed.
 
 ---
 
