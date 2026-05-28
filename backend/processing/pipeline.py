@@ -727,20 +727,67 @@ def call_llm_json(
             raise RuntimeError(f"Alawyer rate limit exceeded — retry after {retry_after}s")
         resp.raise_for_status()
 
-        # SSE: skip keepalive lines (": keepalive"), collect the one data: {...} event
+        # SSE: accumulate data: fields per event (blank line = event boundary).
+        # Alawyer may embed raw newlines in the response string, which iter_lines()
+        # splits into continuation lines — treat them as part of the same event.
         payload = None
+        received_lines: list[str] = []
+        event_data: list[str] = []
+        in_data_field = False
+
         for line in resp.iter_lines(decode_unicode=True):
-            if not line or line.startswith(":"):
+            if line is None:
                 continue
+            if not line:
+                # Blank line = SSE event boundary — flush accumulated data
+                if event_data:
+                    raw = "\n".join(event_data)
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        payload = json.loads(raw)
+                    except json.JSONDecodeError as ex:
+                        # Alawyer embeds raw newlines in string values — escape them
+                        try:
+                            fixed = raw.replace('\r\n', '\\n').replace('\r', '\\n').replace('\n', '\\n')
+                            payload = json.loads(fixed)
+                            logger.warning(f"[alawyer] JSON had raw newlines, fixed: {ex}")
+                        except json.JSONDecodeError:
+                            logger.warning(f"[alawyer] JSON parse error: {ex} | raw[:300]={raw[:300]!r}")
+                    event_data = []
+                    in_data_field = False
+                continue
+            if line.startswith(":"):
+                continue  # SSE keepalive / comment
+            received_lines.append(line)
             if line == "data: [DONE]":
                 break
             if line.startswith("data: "):
+                event_data.append(line[6:])
+                in_data_field = True
+            elif in_data_field:
+                # Continuation: raw newline in data: value split by iter_lines()
+                event_data.append(line)
+
+        # Flush remaining event if stream ended without a trailing blank line
+        if event_data and payload is None:
+            raw = "\n".join(event_data)
+            if raw != "[DONE]":
                 try:
-                    payload = json.loads(line[6:])
-                except Exception:
-                    pass
+                    payload = json.loads(raw)
+                except json.JSONDecodeError as ex:
+                    try:
+                        fixed = raw.replace('\r\n', '\\n').replace('\r', '\\n').replace('\n', '\\n')
+                        payload = json.loads(fixed)
+                        logger.warning(f"[alawyer] JSON had raw newlines (eof), fixed: {ex}")
+                    except json.JSONDecodeError:
+                        logger.warning(f"[alawyer] JSON parse error (eof): {ex} | raw[:300]={raw[:300]!r}")
 
         if payload is None:
+            logger.warning(
+                f"[alawyer] No data event in SSE response. "
+                f"Lines received: {received_lines[:5]!r}"
+            )
             raise RuntimeError("Alawyer: no data event received in SSE response")
         if "error" in payload:
             raise RuntimeError(f"Alawyer upstream error: {payload['error']}")
@@ -1020,7 +1067,11 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                         except Exception as e:
                             error_str    = str(e)
                             is_not_found = '404' in error_str or 'DeploymentNotFound' in error_str
-                            is_transient = any(c in error_str for c in ['429', '500', '502', '503'])
+                            is_alawyer   = any(s in error_str for s in [
+                                'no data event', 'Read timed out', 'ConnectionError',
+                                'RemoteDisconnected', 'Connection reset',
+                            ])
+                            is_transient = is_alawyer or any(c in error_str for c in ['429', '500', '502', '503'])
 
                             if is_not_found:
                                 logger.warning(
@@ -1030,11 +1081,12 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                                 return f"SKIP:{current_model}"
 
                             elif attempt == 0 and is_transient:
+                                delay = 30 if is_alawyer else 5
                                 logger.warning(
                                     f"  [{current_model}] Trial {t} transient error, "
-                                    f"retrying in 5s: {e}"
+                                    f"retrying in {delay}s: {e}"
                                 )
-                                time.sleep(5)
+                                time.sleep(delay)
                             else:
                                 raise  # permanent error or retry also failed
 
