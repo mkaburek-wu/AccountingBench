@@ -25,7 +25,7 @@ SWAPPING IN THE REAL SCRIPT:
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -91,7 +91,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
         # All models in a single benchmark run share the same run_id so you
         # can group them together later.
         run_id = (
-            f"run_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
             f"_{uuid.uuid4().hex[:8]}"
         )
 
@@ -103,7 +103,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 run_id                = run_id,
                 task_id               = task.id,
                 model_name            = model_name,
-                run_timestamp         = datetime.utcnow(),
+                run_timestamp         = datetime.now(timezone.utc),
                 temperature           = 0.0,
                 n_trials              = 3,
                 system_prompt_version = "dummy_v1",
@@ -141,7 +141,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
                 # Metadata
                 evaluation_method    = "dummy",
-                evaluated_at_utc     = datetime.utcnow(),
+                evaluated_at_utc     = datetime.now(timezone.utc),
                 evaluation_notes     = "Dummy pipeline — always returns 100%.",
             )
             db.add(output)
@@ -155,7 +155,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
         # ── 6. Mark as done ───────────────────────────────────────────────────
         submission = db.query(Submission).filter_by(id=submission_id).first()
         submission.status       = "done"
-        submission.completed_at = datetime.utcnow()
+        submission.completed_at = datetime.now(timezone.utc)
         db.commit()
         logger.info(f"[DUMMY] Submission {submission_id} — done.")
 
@@ -165,7 +165,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
             sub = db.query(Submission).filter_by(id=submission_id).first()
             if sub:
                 sub.status       = "error"
-                sub.completed_at = datetime.utcnow()
+                sub.completed_at = datetime.now(timezone.utc)
                 db.commit()
         except Exception:
             pass

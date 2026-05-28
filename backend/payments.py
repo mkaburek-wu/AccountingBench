@@ -18,11 +18,13 @@ Flow:
 import logging
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+import stripe
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.limiter import limiter, LIMIT_PAYMENT
 from backend.models import BenchmarkTask, Submission
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,9 @@ router = APIRouter()
 
 
 @router.post("/submissions/{submission_id}/confirm-payment", tags=["Payments"])
+@limiter.limit(LIMIT_PAYMENT)
 async def confirm_payment(
+    request: Request,
     submission_id: int,
     payload: dict,
     background_tasks: BackgroundTasks,
@@ -69,12 +73,9 @@ async def confirm_payment(
             detail="Payment service is not configured. Please contact support.",
         )
 
-    import stripe
-    stripe.api_key = stripe_key
-
     # Retrieve and verify the Checkout Session from Stripe
     try:
-        session = stripe.checkout.Session.retrieve(session_id)
+        session = stripe.checkout.Session.retrieve(session_id, api_key=stripe_key)
     except Exception as e:
         logger.error(f"Stripe session retrieval failed for submission {submission_id}: {e}")
         raise HTTPException(

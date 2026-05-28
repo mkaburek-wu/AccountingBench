@@ -24,7 +24,7 @@ import argparse
 import math
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -196,7 +196,7 @@ def import_tasks(excel_path: str):
                 validated_by      = clean(row.get("validated_by")),
 
                 # ── Timestamps ────────────────────────────────────────────────
-                created_at = datetime.utcnow(),
+                created_at = datetime.now(timezone.utc),
 
                 # ── No uploaded files for original tasks ──────────────────────
                 pdf_path   = None,

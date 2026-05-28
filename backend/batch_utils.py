@@ -21,11 +21,13 @@ BATCH_USER_EMAIL = os.environ.get("BATCH_USER_EMAIL", "batch@accountingbench.loc
 
 def ensure_batch_user(db) -> None:
     """Create the batch user row in the users table if it doesn't exist yet."""
-    existing = db.query(User).filter_by(clerk_id=BATCH_USER_ID).first()
+    existing = db.query(User).filter_by(id=BATCH_USER_ID).first()
     if not existing:
         db.add(User(
-            clerk_id = BATCH_USER_ID,
-            email    = BATCH_USER_EMAIL,
+            id         = BATCH_USER_ID,
+            email      = BATCH_USER_EMAIL,
+            first_name = "Batch",
+            last_name  = "Runner",
         ))
         db.commit()
         logger.info(f"Created batch user: {BATCH_USER_ID}")

@@ -78,12 +78,13 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Dummy pipeline | ✅ Done | Always returns 100%, saves to database |
 | Real benchmark pipeline | ✅ Done | `pipeline.py` — parallel models, LLM judge, per-model timeouts |
 | Batch import + runner | ✅ Done | `batch_run.py` — Excel → DB → pipeline, parallelism control |
-| Model re-run script | ✅ Done | `rerun_model.py` — run new models on existing DB tasks |
+| Model re-run script | ✅ Done | `rerun_model.py` — run new models on existing DB tasks, with task filters |
 | Shared batch utilities | ✅ Done | `batch_utils.py` — shared helpers for batch scripts |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
 | Stripe payments | ✅ Done | Full Checkout flow with payment confirmation and pipeline trigger |
 | Admin panel | ✅ Done | `admin.html` — task review, user management, live stats, domain management |
+| Rate limiting | ✅ Done | `slowapi` — per-IP limits on all endpoints; tighter limits on submit + payment |
 | Live leaderboard | ⏳ Planned | Phase 5 |
 | Deployment to Render | ⏳ Planned | Phase 6 |
 
@@ -126,7 +127,9 @@ accountingbench/
 └── backend/                       ← FastAPI Python server
     ├── main.py                    ← App entry point, all endpoints
     ├── auth.py                    ← Clerk JWT verification + domain check
+    ├── config.py                  ← Shared constants sourced from .env (APP_VERSION, pricing)
     ├── database.py                ← SQLAlchemy engine + session factory
+    ├── limiter.py                 ← slowapi Limiter singleton + rate-limit thresholds
     ├── models.py                  ← 7 database table definitions
     ├── submissions.py             ← POST /submissions/prepare endpoint (multi-file upload)
     ├── payments.py                ← POST /submissions/{id}/confirm-payment endpoint
@@ -405,7 +408,13 @@ OPENAI_MODEL_LIST=claude-opus-4-6,claude-sonnet-4-6,gpt-5.2,...
 MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_key": "...", "timeout": 300}, ...}
 ```
 
-Supported `api_type` values: `openai_v1`, `anthropic_foundry`, `responses_api`.
+**Supported `api_type` values:**
+
+| `api_type` | Protocol | Used for |
+|---|---|---|
+| `openai_v1` | OpenAI Chat / Responses API | Azure-hosted OpenAI, DeepSeek, Mistral, Kimi, Mercury |
+| `anthropic_foundry` | Anthropic Messages API | Claude models via Azure AI Foundry |
+| `alawyer` | Custom SSE (POST `/api/v1/completions`) | Alawyer Austrian legal AI |
 
 Each model entry can include a `"timeout"` key (seconds) to override the default 240s. This is important for slow models:
 
@@ -417,6 +426,25 @@ Each model entry can include a `"timeout"` key (seconds) to override the default
     "timeout": 600
 }
 ```
+
+**`${ENV_VAR}` references in `api_key`:** Instead of hardcoding a key in `MODEL_REGISTRY_JSON`, you can reference an environment variable using the `${VAR_NAME}` syntax. The pipeline resolves it at runtime:
+
+```json
+"alawyer": {
+    "api_type": "alawyer",
+    "base_url": "https://app.alawyer.ai",
+    "api_key": "${ALAWYER_API_KEY}",
+    "timeout": 660
+}
+```
+
+Then set `ALAWYER_API_KEY=your-key` separately in `.env`.
+
+**Alawyer-specific notes:**
+- API rate limit is **10 requests per minute** — use `--max-workers 1` or `--max-workers 2` when running `rerun_model.py`
+- Each call takes 1–10 minutes; `timeout` is set to 660s (11 minutes) by default
+- Alawyer returns free-form legal text, not JSON. The pipeline passes the response directly as the answer. Scoring works best on `open_text` and `journal_entry` tasks (judge-evaluated); choice tasks will score 0
+- Confidence is not available from the Alawyer API — `avg_model_confidence` will be `null`
 
 ---
 
@@ -533,7 +561,7 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | `--approved` | off | Mark tasks as `validation_status=approved` and `is_public=True` immediately |
 | `--skip-existing` | off | Skip tasks whose `question_id` is already in the database |
 | `--sequential` | off | Run tasks one at a time instead of in parallel |
-| `--max-workers` | `10` | Maximum number of tasks to run in parallel |
+| `--max-workers` | `4` | Maximum number of tasks to run in parallel |
 | `--dry-run` | off | Parse the Excel file and print what would happen — no DB writes |
 | `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
 | `--user` | `batch_admin` | User ID to attribute submissions to |
@@ -562,7 +590,7 @@ The batch runner processes multiple tasks simultaneously. Each task runs all its
 max_workers × number_of_models = simultaneous DB connections
 ```
 
-The SQLite connection pool in `database.py` is configured with a maximum of **60 connections** (pool_size=20, max_overflow=40). Choose `--max-workers` accordingly:
+The SQLite connection pool in `database.py` is configured with a maximum of **100 connections** (pool_size=20, max_overflow=80). Choose `--max-workers` accordingly:
 
 | Models | Recommended max-workers | Connections used |
 |---|---|---|
@@ -637,14 +665,29 @@ The script asks for confirmation before deleting anything. It preserves `setting
 
 ### 9.2 All Flags
 
+**Execution flags:**
+
 | Flag | Default | Description |
 |---|---|---|
-| `--models` | *(required)* | Comma-separated model name(s) from `MODEL_REGISTRY_JSON` |
+| `--models` | *(from `.env`)* | Comma-separated model name(s) from `MODEL_REGISTRY_JSON`. If omitted, `OPENAI_MODEL_LIST` from `.env` is used. |
 | `--max-workers` | `10` | Max parallel tasks. Rule of thumb: `floor(50 / num_models)` |
 | `--sequential` | off | Run one task at a time |
 | `--dry-run` | off | Print plan without writing to DB or calling APIs |
 | `--limit` | off | Only process first N tasks (useful for testing) |
 | `--user` | `batch_admin` | User ID for created submissions |
+
+**Filter flags** (all optional, combinable, comma-separated for multiple values):
+
+| Flag | Filters on | Valid values |
+|---|---|---|
+| `--category` | `category` | `Tax`, `Financial Accounting`, `Management Accounting` |
+| `--task-type` | `task_type` | `interpretation_of_law`, `calculation`, `journal_entry` |
+| `--answer-type` | `answer_type` | `single_choice`, `multi_choice`, `open_text`, `open_numeric`, `journal_entry` |
+| `--education-level` | `education_level` | `Professional Examinations`, `University Master's`, `Secondary Vocational` |
+| `--regulatory-framework` | `regulatory_framework` | `Austrian Tax Law`, `IFRS`, `National GAAP`, `Mixed Accounting Framework`, `Mixed: Accounting + Tax` |
+| `--question-ids` | `question_id` | Specific IDs, e.g. `q_0001,q_0042` |
+
+Filters are applied at the SQL query level (`IN` clause) before the skip-existing check, so they compose cleanly with `--limit` and `--dry-run`.
 
 ### 9.3 Common Commands
 
@@ -663,6 +706,18 @@ python -m backend.rerun_model --models "Kimi-K2.6,gpt-5.5" --max-workers 4
 
 # Safest option for large datasets
 python -m backend.rerun_model --models "Kimi-K2.6" --sequential
+
+# Run only Tax tasks
+python -m backend.rerun_model --models "alawyer" --category "Tax" --max-workers 2
+
+# Run only calculation tasks under Austrian Tax Law
+python -m backend.rerun_model --models "alawyer" --task-type "calculation" --regulatory-framework "Austrian Tax Law" --dry-run
+
+# Run only open-ended answer types (best suited for Alawyer)
+python -m backend.rerun_model --models "alawyer" --answer-type "open_text,journal_entry" --max-workers 1
+
+# Re-run specific tasks by ID
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "q_0001,q_0042"
 ```
 
 ### 9.4 Recommended max-workers by model count
@@ -812,7 +867,7 @@ Install all packages with:
 ```bash
 python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
     python-dotenv aiofiles python-multipart pandas openpyxl pypdf \
-    requests openai anthropic "PyJWT[crypto]" stripe
+    requests openai anthropic "PyJWT[crypto]" stripe slowapi
 ```
 
 ---
@@ -830,10 +885,17 @@ Create `.env` in the project root with the following variables:
 | `CLERK_JWKS_URL` | Optional. Set to override the auto-derived JWKS URL. |
 | `ADMIN_EMAIL` | Your own email address. Required for admin endpoints. |
 | `UPLOAD_DIR` | Path where uploaded files are saved. Default: `./uploads` |
-| `OPENAI_MODEL_LIST` | Comma-separated list of model names to benchmark. |
+| `ALLOWED_ORIGINS` | Comma-separated CORS-allowed origins. Defaults to localhost dev URLs if unset. |
+| `APP_ENV` | Set to `production` to disable auto-`create_all()` on startup. Default: `development`. |
+| `APP_VERSION` | API version string shown in `/health` and `/docs`. Default: `1.0.0`. |
+| `DEBUG_PIPELINE` | Set to `true` to enable DEBUG logging for the pipeline (prompts + raw responses). Default: off. |
+| `OPENAI_MODEL_LIST` | Comma-separated list of model names to benchmark. Also used as fallback by `rerun_model.py --models`. |
 | `MODEL_REGISTRY_JSON` | JSON object mapping model names to API config (base_url, api_key, api_type, timeout). |
+| `ALAWYER_API_KEY` | API key for the Alawyer Austrian legal AI. Referenced in `MODEL_REGISTRY_JSON` as `${ALAWYER_API_KEY}`. |
 | `BATCH_USER_ID` | User ID used for batch-imported submissions. Default: `batch_admin`. |
-| `BATCH_USER_EMAIL` | Email for the batch user. Default: `admin@wu.ac.at`. |
+| `BATCH_USER_EMAIL` | Email for the batch user. Default: `batch@accountingbench.local`. |
+| `DEFAULT_PRICE_CENTS` | Default submission price in cents if the `settings` table row has no price set. Default: `5000` (€50). |
+| `DEFAULT_CURRENCY` | Default currency for Stripe. Default: `eur`. |
 | `STRIPE_SECRET_KEY` | Stripe secret key (`sk_test_...` for testing, `sk_live_...` for production). |
 | `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (for reference — not used server-side). |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret. Optional — not used in current implementation. |
@@ -1092,5 +1154,5 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.5 · May 2026*
+*AccountingBench Developer Documentation · Version 1.7 · May 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*

@@ -23,13 +23,48 @@ python -m backend.rerun_model --models "Kimi-K2.6" --dry-run
 # Run sequentially (safest for large datasets)
 python -m backend.rerun_model --models "Kimi-K2.6" --sequential
 
+# Filter by category
+python -m backend.rerun_model --models "Kimi-K2.6" --category "Tax"
+python -m backend.rerun_model --models "Kimi-K2.6" --category "Tax,Financial Accounting"
+
+# Filter by task type
+python -m backend.rerun_model --models "Kimi-K2.6" --task-type "calculation"
+
+# Filter by answer type
+python -m backend.rerun_model --models "Kimi-K2.6" --answer-type "single_choice,multi_choice"
+
+# Filter by education level
+python -m backend.rerun_model --models "Kimi-K2.6" --education-level "University Master's"
+
+# Filter by regulatory framework
+python -m backend.rerun_model --models "Kimi-K2.6" --regulatory-framework "Austrian Tax Law"
+
+# Run only specific tasks by question_id
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "q_0001,q_0042"
+
+# Combine filters (all conditions must match)
+python -m backend.rerun_model --models "Kimi-K2.6" --category "Tax" --task-type "calculation" --dry-run
+
 Flags
 -----
---models        Required. Comma-separated model name(s) from MODEL_REGISTRY_JSON.
---max-workers   Max parallel tasks (default: 10).
---sequential    Run one task at a time.
---dry-run       Print plan without writing to DB or calling any APIs.
---user          User ID for created submissions (default: batch_admin).
+--models                Optional. Comma-separated model name(s) from MODEL_REGISTRY_JSON.
+                        If omitted, OPENAI_MODEL_LIST from .env is used.
+--max-workers           Max parallel tasks (default: 10).
+--sequential            Run one task at a time.
+--dry-run               Print plan without writing to DB or calling any APIs.
+--user                  User ID for created submissions (default: batch_admin).
+--category              Filter by category. Comma-separated.
+                        Values: Tax | Financial Accounting | Management Accounting
+--task-type             Filter by task_type. Comma-separated.
+                        Values: interpretation_of_law | calculation | journal_entry
+--answer-type           Filter by answer_type. Comma-separated.
+                        Values: single_choice | multi_choice | open_text | open_numeric | journal_entry
+--education-level       Filter by education_level. Comma-separated.
+                        Values: Professional Examinations | University Master's | Secondary Vocational
+--regulatory-framework  Filter by regulatory_framework. Comma-separated.
+                        Values: Austrian Tax Law | IFRS | National GAAP |
+                                Mixed Accounting Framework | Mixed: Accounting + Tax
+--question-ids          Run only these specific tasks. Comma-separated question_id values.
 
 How it works
 ------------
@@ -38,10 +73,10 @@ How it works
    requested model(s). Tasks where ALL requested models already have outputs
    are skipped entirely.
 3. For tasks that need running, creates a new Submission row.
-4. Temporarily sets OPENAI_MODEL_LIST in os.environ to only the requested
-   model(s), then calls run_pipeline(submission.id) — which reads that env
-   var and runs only those models.
-5. After each pipeline call, restores OPENAI_MODEL_LIST to its original value.
+4. Calls run_pipeline(submission.id) — which reads OPENAI_MODEL_LIST from the
+   environment to determine which models to run. OPENAI_MODEL_LIST is set once
+   at startup (from --models or from OPENAI_MODEL_LIST in .env) before any
+   threads are started, so it is never mutated during parallel execution.
 
 The pipeline itself is unchanged. Outputs are linked to the existing task via
 submission.task_id → benchmark_outputs.task_id, exactly as in a normal run.
@@ -73,8 +108,9 @@ logging.basicConfig(
 logger = logging.getLogger("rerun_model")
 
 # ── Imports (after env is loaded) ─────────────────────────────────────────────
+from sqlalchemy import func
 from backend.database import SessionLocal
-from backend.models   import BenchmarkTask, BenchmarkOutput, Submission
+from backend.models   import BenchmarkTask
 from backend.processing.pipeline import run_pipeline
 from backend.batch_utils import (
     ensure_batch_user,
@@ -85,8 +121,6 @@ from backend.batch_utils import (
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-ORIG_MODEL_LIST = os.environ.get("OPENAI_MODEL_LIST", "")
-
 
 def process_task(task_id: int, task_qid: str, models_needed: list[str],
                  user_id: str, dry_run: bool,
@@ -120,13 +154,7 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
         db.close()
         db = None
 
-        # Override model list so pipeline only runs the needed models
-        os.environ["OPENAI_MODEL_LIST"] = ",".join(models_needed)
-        try:
-            run_pipeline(sub.id)
-        finally:
-            # Always restore original model list
-            os.environ["OPENAI_MODEL_LIST"] = ORIG_MODEL_LIST
+        run_pipeline(sub.id)
 
         logger.info(f"{prefix} [DONE] {task_qid} → submission {sub.id} — complete.")
         result["status"] = "done"
@@ -147,8 +175,11 @@ def main():
         description="Run new model(s) against all tasks already in the database."
     )
     parser.add_argument(
-        "--models", required=True,
-        help="Comma-separated model name(s) to run, e.g. 'Kimi-K2.6' or 'Kimi-K2.6,gpt-5.5'",
+        "--models", required=False, default=None,
+        help=(
+            "Comma-separated model name(s) to run, e.g. 'Kimi-K2.6' or 'Kimi-K2.6,gpt-5.5'. "
+            "Overrides OPENAI_MODEL_LIST from .env. If omitted, OPENAI_MODEL_LIST from .env is used."
+        ),
     )
     parser.add_argument(
         "--max-workers", type=int, default=10,
@@ -170,25 +201,115 @@ def main():
         "--user", default=os.environ.get("BATCH_USER_ID", "batch_admin"),
         help="User ID for created submissions (default: batch_admin).",
     )
+    parser.add_argument(
+        "--category", default=None,
+        help=(
+            "Filter tasks by category. Comma-separated. "
+            "Values: Tax | Financial Accounting | Management Accounting"
+        ),
+    )
+    parser.add_argument(
+        "--task-type", default=None,
+        dest="task_type",
+        help=(
+            "Filter by task_type. Comma-separated. "
+            "Values: interpretation_of_law | calculation | journal_entry"
+        ),
+    )
+    parser.add_argument(
+        "--answer-type", default=None,
+        dest="answer_type",
+        help=(
+            "Filter by answer_type. Comma-separated. "
+            "Values: single_choice | multi_choice | open_text | open_numeric | journal_entry"
+        ),
+    )
+    parser.add_argument(
+        "--education-level", default=None,
+        dest="education_level",
+        help=(
+            "Filter by education_level. Comma-separated. "
+            "Values: Professional Examinations | University Master's | Secondary Vocational"
+        ),
+    )
+    parser.add_argument(
+        "--regulatory-framework", default=None,
+        dest="regulatory_framework",
+        help=(
+            "Filter by regulatory_framework. Comma-separated. "
+            "Values: Austrian Tax Law | IFRS | National GAAP | "
+            "Mixed Accounting Framework | Mixed: Accounting + Tax"
+        ),
+    )
+    parser.add_argument(
+        "--question-ids", default=None,
+        dest="question_ids",
+        help="Run only specific tasks. Comma-separated question_id values, e.g. 'q_0001,q_0042'.",
+    )
     args = parser.parse_args()
 
-    # Parse requested models
-    requested_models = [m.strip() for m in args.models.split(",") if m.strip()]
+    # Resolve model list: --models overrides OPENAI_MODEL_LIST from .env
+    if args.models:
+        requested_models = [m.strip() for m in args.models.split(",") if m.strip()]
+    else:
+        env_list = os.environ.get("OPENAI_MODEL_LIST", "")
+        requested_models = [m.strip() for m in env_list.split(",") if m.strip()]
+
     if not requested_models:
-        logger.error("--models must contain at least one model name.")
+        logger.error("No models specified. Use --models or set OPENAI_MODEL_LIST in .env")
         sys.exit(1)
 
-    logger.info(f"Models requested:  {requested_models}")
-    logger.info(f"Max workers:       {args.max_workers}")
-    logger.info(f"Sequential:        {args.sequential}")
-    logger.info(f"Dry run:           {args.dry_run}")
-    logger.info(f"User:              {args.user}")
+    # Set once before any threads start — pipeline reads this value, never written again
+    os.environ["OPENAI_MODEL_LIST"] = ",".join(requested_models)
 
-    # ── Load all tasks from DB ────────────────────────────────────────────────
+    # Parse filter values (split comma-separated strings into lists)
+    def _split(val):
+        return [v.strip() for v in val.split(",") if v.strip()] if val else None
+
+    filter_category    = _split(args.category)
+    filter_task_type   = _split(args.task_type)
+    filter_answer_type = _split(args.answer_type)
+    filter_edu_level   = _split(args.education_level)
+    filter_reg_fw      = _split(args.regulatory_framework)
+    filter_qids        = _split(args.question_ids)
+
+    logger.info(f"Models requested:        {requested_models}")
+    logger.info(f"Max workers:             {args.max_workers}")
+    logger.info(f"Sequential:              {args.sequential}")
+    logger.info(f"Dry run:                 {args.dry_run}")
+    logger.info(f"User:                    {args.user}")
+    if filter_category:    logger.info(f"Filter category:         {filter_category}")
+    if filter_task_type:   logger.info(f"Filter task_type:        {filter_task_type}")
+    if filter_answer_type: logger.info(f"Filter answer_type:      {filter_answer_type}")
+    if filter_edu_level:   logger.info(f"Filter education_level:  {filter_edu_level}")
+    if filter_reg_fw:      logger.info(f"Filter reg. framework:   {filter_reg_fw}")
+    if filter_qids:        logger.info(f"Filter question_ids:     {filter_qids}")
+
+    # ── Load tasks from DB (with optional filters) ────────────────────────────
     db = SessionLocal()
     try:
-        all_tasks = db.query(BenchmarkTask).all()
-        logger.info(f"Found {len(all_tasks)} tasks in database.")
+        query = db.query(BenchmarkTask)
+
+        # DB stores values as lowercase_underscore (e.g. "professional_examinations").
+        # Normalize filter values the same way so "Professional Examinations" also matches.
+        def _norm(v: str) -> str:
+            return v.lower().replace(" ", "_").replace("-", "_")
+
+        if filter_category:
+            query = query.filter(func.lower(BenchmarkTask.category).in_([_norm(v) for v in filter_category]))
+        if filter_task_type:
+            query = query.filter(func.lower(BenchmarkTask.task_type).in_([_norm(v) for v in filter_task_type]))
+        if filter_answer_type:
+            query = query.filter(func.lower(BenchmarkTask.answer_type).in_([_norm(v) for v in filter_answer_type]))
+        if filter_edu_level:
+            query = query.filter(func.lower(BenchmarkTask.education_level).in_([_norm(v) for v in filter_edu_level]))
+        if filter_reg_fw:
+            query = query.filter(func.lower(BenchmarkTask.regulatory_framework).in_([_norm(v) for v in filter_reg_fw]))
+        if filter_qids:
+            query = query.filter(BenchmarkTask.question_id.in_(filter_qids))
+
+        all_tasks = query.all()
+        logger.info(f"Found {len(all_tasks)} tasks matching filters.")
 
         # For each task, determine which requested models are still missing
         work_items = []  # list of (task_id, task_qid, models_needed)

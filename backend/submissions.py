@@ -31,16 +31,18 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
 import stripe as _stripe
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
+from backend.config import DEFAULT_PRICE_CENTS, DEFAULT_CURRENCY
 from backend.database import get_db, SessionLocal
+from backend.limiter import limiter, LIMIT_SUBMIT
 from backend.models import BenchmarkTask, Submission, Settings
 
 logger = logging.getLogger(__name__)
@@ -140,13 +142,21 @@ async def _save_file(upload: UploadFile, dest_dir: Path, prefix: str) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"File '{upload.filename}' is too large "
-                f"({len(content) // (1024*1024)} MB). Maximum allowed size is 20 MB."
+                f"({len(content) // (1024 * 1024)} MB). "
+                f"Maximum allowed size is {MAX_FILE_SIZE // (1024 * 1024)} MB."
             ),
         )
 
-    # Build a safe filename: prefix_originalname (spaces replaced with underscores)
-    safe_name = upload.filename.replace(" ", "_")
+    # Strip directory components first, then replace spaces
+    safe_name = Path(upload.filename).name.replace(" ", "_")
     dest_path = dest_dir / f"{prefix}_{safe_name}"
+
+    # Guard against any remaining path traversal (e.g. symlinks, edge cases)
+    if not dest_path.resolve().is_relative_to(dest_dir.resolve()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename.",
+        )
 
     try:
         dest_path.write_bytes(content)
@@ -215,7 +225,9 @@ def _create_stripe_session(
 # ── Main submission endpoint ──────────────────────────────────────────────────
 
 @router.post("/submissions/prepare", tags=["Submissions"])
+@limiter.limit(LIMIT_SUBMIT)
 async def prepare_submission(
+    request: Request,
     background_tasks: BackgroundTasks,
     db:      Session = Depends(get_db),
     user_id: str     = Depends(get_current_user),
@@ -277,7 +289,17 @@ async def prepare_submission(
     if answer_type in {"open_text", "journal_entry", "open_numeric"} and not grading_criteria.strip():
         raise HTTPException(400, "grading_criteria is required for open-ended tasks.")
 
-    # ── 3. Parse numeric_tolerance ────────────────────────────────────────────
+    # ── 3. Parse options JSON string → dict for JSON column storage ──────────
+    options_dict = None
+    if options.strip():
+        try:
+            options_dict = json.loads(options.strip())
+            if not isinstance(options_dict, dict):
+                raise HTTPException(400, 'options must be a JSON object, e.g. {"A": "text", "B": "text"}')
+        except json.JSONDecodeError:
+            raise HTTPException(400, 'options must be valid JSON, e.g. {"A": "text", "B": "text"}')
+
+    # ── 4. Parse numeric_tolerance ────────────────────────────────────────────
     tolerance_float = None
     if numeric_tolerance.strip():
         try:
@@ -285,13 +307,13 @@ async def prepare_submission(
         except ValueError:
             raise HTTPException(400, "numeric_tolerance must be a number, e.g. 1.00")
 
-    # ── 4. Parse applicable_regulatory_year ───────────────────────────────────
+    # ── 5. Parse applicable_regulatory_year ───────────────────────────────────
     try:
         reg_year = int(applicable_regulatory_year.strip())
     except ValueError:
         raise HTTPException(400, "applicable_regulatory_year must be a whole number, e.g. 2026")
 
-    # ── 5. Validate uploaded files ────────────────────────────────────────────
+    # ── 6. Validate uploaded files ────────────────────────────────────────────
     real_pdfs   = [f for f in pdf_files   if f and f.filename]
     real_excels = [f for f in excel_files if f and f.filename]
     if len(real_pdfs) > 3:
@@ -303,13 +325,13 @@ async def prepare_submission(
     for f in real_excels:
         _validate_file(f, ALLOWED_EXCEL_EXTENSIONS, ALLOWED_EXCEL_TYPES, "Excel")
 
-    # ── 6. Generate question_id ───────────────────────────────────────────────
+    # ── 7. Generate question_id ───────────────────────────────────────────────
     question_id = _generate_question_id(db)
 
     # Check Stripe availability before creating DB records
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 
-    # ── 7. Create the task row ────────────────────────────────────────────────
+    # ── 8. Create the task row ────────────────────────────────────────────────
     task = BenchmarkTask(
         question_id                = question_id,
         prompt                     = prompt.strip(),
@@ -317,7 +339,7 @@ async def prepare_submission(
         task_type                  = task_type,
         task_format                = answer_type,       # mirrors answer_type for compatibility
         gold_answer                = gold_answer.strip(),
-        options                    = options.strip()           or None,
+        options                    = options_dict,
         grading_criteria           = grading_criteria.strip() or None,
         numeric_tolerance          = tolerance_float,
         context                    = context.strip()          or None,
@@ -331,25 +353,25 @@ async def prepare_submission(
         submitted_by               = user_id,
         is_public                  = False,          # private until admin approves
         validation_status          = "awaiting_payment" if stripe_key else "pending",
-        created_at                 = datetime.utcnow(),
+        created_at                 = datetime.now(timezone.utc),
     )
     db.add(task)
     db.flush()   # assigns task.id without committing — so we can use it below
 
-    # ── 8. Create the submission tracking row ─────────────────────────────────
+    # ── 9. Create the submission tracking row ─────────────────────────────────
     submission = Submission(
         user_id        = user_id,
         task_id        = task.id,
         status         = "pending",
         payment_status = "unpaid",   # Phase 2: Stripe will set this to "paid"
-        submitted_at   = datetime.utcnow(),
+        submitted_at   = datetime.now(timezone.utc),
     )
     db.add(submission)
     db.flush()   # assigns submission.id
 
-    # ── 9. Save uploaded files ────────────────────────────────────────────────
+    # ── 10. Save uploaded files ───────────────────────────────────────────────
     upload_dir = UPLOAD_DIR / user_id / str(submission.id)
-    timestamp  = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp  = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
     pdf_paths = []
     for i, f in enumerate(real_pdfs):
@@ -365,14 +387,14 @@ async def prepare_submission(
     if pdf_paths:   task.pdf_path   = json.dumps(pdf_paths)
     if excel_paths: task.excel_path = json.dumps(excel_paths)
 
-    # ── 10. Commit everything ─────────────────────────────────────────────────
+    # ── 11. Commit everything ─────────────────────────────────────────────────
     db.commit()
     logger.info(
         f"Submission {submission.id} created — "
         f"task {task.id} ({question_id}) by user {user_id}"
     )
 
-    # ── 11. Trigger pipeline (dev) or queue Stripe session creation (prod) ───────
+    # ── 12. Trigger pipeline (dev) or queue Stripe session creation (prod) ──────
     if not stripe_key:
         # Dev fallback: no Stripe configured → run benchmark immediately
         # ⚠️  TESTING: uses dummy_pipeline which always returns 100%.
@@ -382,8 +404,8 @@ async def prepare_submission(
         background_tasks.add_task(run_pipeline, submission.id)
     else:
         settings     = db.query(Settings).filter_by(id=1).first()
-        price        = settings.price_per_submission if (settings and settings.price_per_submission) else 5000
-        currency     = settings.currency             if (settings and settings.currency)             else "eur"
+        price        = settings.price_per_submission if (settings and settings.price_per_submission) else DEFAULT_PRICE_CENTS
+        currency     = settings.currency             if (settings and settings.currency)             else DEFAULT_CURRENCY
         frontend_url = os.environ.get("FRONTEND_URL", "http://127.0.0.1:5500").rstrip("/")
 
         # Stripe session is created in a background task so the HTTP response

@@ -10,9 +10,10 @@ New admin endpoints that complement the existing ones in main.py:
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.auth import require_admin
@@ -29,8 +30,8 @@ async def admin_stats(
     db: Session = Depends(get_db),
 ):
     """Aggregate counts for the admin stats tab."""
-    week_ago  = datetime.utcnow() - timedelta(days=7)
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago  = datetime.now(timezone.utc) - timedelta(days=7)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Task counts (user-submitted only)
     total_tasks = db.query(BenchmarkTask).filter_by(source="user_submitted").count()
@@ -49,8 +50,9 @@ async def admin_stats(
     subs_processing = db.query(Submission).filter_by(status="processing").count()
 
     # Revenue (paid submissions)
-    paid_rows       = db.query(Submission).filter_by(payment_status="paid").all()
-    revenue_cents   = sum(s.price_charged or 0 for s in paid_rows)
+    paid_count    = db.query(Submission).filter_by(payment_status="paid").count()
+    revenue_cents = db.query(func.coalesce(func.sum(Submission.price_charged), 0)) \
+                     .filter_by(payment_status="paid").scalar()
 
     return {
         "tasks": {
@@ -68,7 +70,7 @@ async def admin_stats(
             "today":      subs_today,
             "this_week":  subs_week,
             "processing": subs_processing,
-            "paid":       len(paid_rows),
+            "paid":       paid_count,
         },
         "revenue": {
             "total_cents": revenue_cents,

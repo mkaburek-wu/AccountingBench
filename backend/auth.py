@@ -32,7 +32,7 @@ Usage in a FastAPI endpoint:
 
 import logging
 import os
-from functools import lru_cache
+from datetime import datetime, timezone
 
 import jwt as pyjwt
 from dotenv import load_dotenv
@@ -89,20 +89,26 @@ def _get_jwks_url() -> str:
     return CLERK_JWKS_URL or _derive_jwks_url()
 
 
-# ── JWKS client (cached — fetched at most once per server start) ──────────────
-@lru_cache(maxsize=1)
+# ── JWKS client (module-level singleton) ──────────────────────────────────────
+_jwks_client = None
+
+
 def _get_jwks_client():
     """
-    Creates a PyJWKClient that fetches and caches Clerk's public keys.
+    Returns a long-lived PyJWKClient singleton.
+    PyJWKClient(cache_keys=True) handles key rotation internally: when a token
+    arrives with an unknown kid, it re-fetches JWKS automatically.
     Only used as a fallback when the local PEM key is not available or fails.
-    Requires internet access.
     """
-    from jwt import PyJWKClient
-    jwks_url = _get_jwks_url()
-    if not jwks_url:
-        return None
-    logger.info(f"Clerk JWKS URL: {jwks_url}")
-    return PyJWKClient(jwks_url, cache_keys=True)
+    global _jwks_client
+    if _jwks_client is None:
+        from jwt import PyJWKClient
+        jwks_url = _get_jwks_url()
+        if not jwks_url:
+            return None
+        logger.info(f"Clerk JWKS URL: {jwks_url}")
+        _jwks_client = PyJWKClient(jwks_url, cache_keys=True)
+    return _jwks_client
 
 
 # ── Core token verification ───────────────────────────────────────────────────
@@ -245,8 +251,6 @@ def _upsert_user(user_id: str, email: str, claims: dict, db: Session) -> None:
     Creates or updates the user record in the local database on every login.
     Fast in practice — only writes if something has changed.
     """
-    from datetime import datetime
-
     user = db.query(User).filter_by(id=user_id).first()
 
     if user is None:
@@ -256,7 +260,7 @@ def _upsert_user(user_id: str, email: str, claims: dict, db: Session) -> None:
             email      = email,
             first_name = claims.get("first_name") or claims.get("given_name"),
             last_name  = claims.get("last_name")  or claims.get("family_name"),
-            created_at = datetime.now(),
+            created_at = datetime.now(timezone.utc),
         )
         db.add(user)
         db.commit()

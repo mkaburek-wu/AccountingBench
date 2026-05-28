@@ -26,36 +26,45 @@ File structure this depends on:
 
 import logging
 import os
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.orm import Session
+
+from backend.auth import get_current_user, require_admin
+from backend.config import APP_VERSION, DEFAULT_PRICE_CENTS, DEFAULT_CURRENCY
+from backend.limiter import limiter
+from backend.database import get_db, check_connection, engine, SessionLocal
+from backend.models import (
+    AllowedDomain, Base, BenchmarkOutput, BenchmarkTask,
+    Settings, Submission, User,
+)
 from backend.submissions import router as submissions_router
 from backend.payments import router as payments_router
 from backend.users import router as users_router
 from backend.admin import router as admin_router
 
-from backend.database import get_db, check_connection, engine
-from backend.models import Base, Settings
-from backend.auth import get_current_user, require_admin
-
-
-#load_dotenv()
-from pathlib import Path
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
-
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
-# Show DEBUG logs only for the pipeline so we can see prompts and raw responses
-logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
+# Set DEBUG_PIPELINE=true in .env to see all prompts and raw model responses.
+# Leave unset or false in production.
+if os.environ.get("DEBUG_PIPELINE", "").lower() == "true":
+    logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # ── Allowed origins for CORS ──────────────────────────────────────────────────
@@ -102,9 +111,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"Database connection FAILED: {e}")
         raise RuntimeError(f"Cannot connect to database: {e}")
 
-    # Create tables if they don't exist yet
-    # (Alembic handles this in production — this is a safety net for dev)
-    Base.metadata.create_all(bind=engine)
+    # In development, auto-create any missing tables as a convenience.
+    # In production, Alembic migrations are the only way tables are modified.
+    if os.environ.get("APP_ENV", "development") != "production":
+        Base.metadata.create_all(bind=engine)
     logger.info("Database tables: OK")
 
     # Ensure the settings row exists (always exactly one row with id=1)
@@ -122,17 +132,16 @@ async def lifespan(app: FastAPI):
 
 def _ensure_settings_row():
     """Creates the single settings row if it does not exist yet."""
-    from backend.database import SessionLocal
     db = SessionLocal()
     try:
         settings = db.query(Settings).filter_by(id=1).first()
         if not settings:
-            db.add(Settings(id=1, price_per_submission=5000, currency="eur"))
+            db.add(Settings(id=1, price_per_submission=DEFAULT_PRICE_CENTS, currency=DEFAULT_CURRENCY))
             db.commit()
             logger.info("Settings row created with default price €50.00.")
         elif settings.price_per_submission is None:
-            settings.price_per_submission = 5000
-            settings.currency = settings.currency or "eur"
+            settings.price_per_submission = DEFAULT_PRICE_CENTS
+            settings.currency = settings.currency or DEFAULT_CURRENCY
             db.commit()
             logger.info("Settings price seeded to default €50.00.")
     except Exception as e:
@@ -151,15 +160,21 @@ app = FastAPI(
         "Handles authentication, task contributions, benchmark runs, "
         "admin review, and the public leaderboard."
     ),
-    version="1.0.0",
+    version=APP_VERSION,
     docs_url="/docs",       # Interactive docs at /docs
     redoc_url="/redoc",     # Alternative docs at /redoc
     lifespan=lifespan,
 )
 
 
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ── CORS middleware ───────────────────────────────────────────────────────────
 # Must be added before any routes.
+# SlowAPIMiddleware is added after CORSMiddleware so CORS headers are present
+# even on 429 responses returned to browser clients.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -167,7 +182,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# 4. Register routers — HERE
+app.add_middleware(SlowAPIMiddleware)
 app.include_router(submissions_router)
 app.include_router(payments_router)
 app.include_router(users_router)
@@ -204,7 +219,7 @@ async def health(db: Session = Depends(get_db)):
     return {
         "api":      "ok",
         "database": db_status,
-        "version":  "1.0.0",
+        "version":  APP_VERSION,
     }
 
 
@@ -219,7 +234,6 @@ async def get_me(
     Returns the currently signed-in user's profile.
     Useful for the frontend to confirm the session is valid and get the user's name.
     """
-    from backend.models import User
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -245,9 +259,6 @@ async def get_leaderboard(db: Session = Depends(get_db)):
     Returns the same shape as the old lbData array in data.js so the
     existing renderLeaderboard() and chart functions work without changes.
     """
-    from backend.models import BenchmarkTask, BenchmarkOutput
-    from collections import defaultdict
-
     # Get all approved task IDs
     approved_ids = [
         t.id for t in
@@ -321,8 +332,6 @@ async def my_submissions(
     Shown on the landing page.
     Does NOT return result_data — only status and metadata.
     """
-    from backend.models import Submission, BenchmarkTask
-
     submissions = (
         db.query(Submission)
         .filter_by(user_id=user_id)
@@ -348,7 +357,9 @@ async def my_submissions(
 
 # ── Submissions — status polling endpoint ─────────────────────────────────────
 @app.get("/submissions/{submission_id}/status", tags=["Submissions"])
+@limiter.limit("30/minute")
 async def submission_status(
+    request: Request,
     submission_id: int,
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -363,8 +374,6 @@ async def submission_status(
         done       → script finished, scores available
         error      → script encountered an error
     """
-    from backend.models import Submission, BenchmarkOutput
-
     submission = db.query(Submission).filter_by(
         id=submission_id, user_id=user_id
     ).first()
@@ -410,36 +419,41 @@ async def submission_status(
 # ── Admin — list pending tasks ────────────────────────────────────────────────
 @app.get("/admin/tasks", tags=["Admin"])
 async def list_tasks_for_review(
-    status: str = "pending",
+    task_status: str = "pending",
     admin_id: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
     Returns tasks filtered by validation_status.
-    Default: status=pending (tasks awaiting your review).
-    Use ?status=approved or ?status=rejected to see other groups.
+    Default: task_status=pending (tasks awaiting your review).
+    Use ?task_status=approved or ?task_status=rejected to see other groups.
     Admin only.
     """
-    from backend.models import BenchmarkTask, BenchmarkOutput
-
     tasks = (
         db.query(BenchmarkTask)
-        .filter_by(validation_status=status)
+        .filter_by(validation_status=task_status)
         .filter(BenchmarkTask.source == "user_submitted")
         .order_by(BenchmarkTask.created_at.desc())
         .all()
     )
 
-    result = []
-    for t in tasks:
-        # Get the model scores if the script has already run
-        outputs = (
-            db.query(BenchmarkOutput)
-            .filter_by(task_id=t.id)
-            .order_by(BenchmarkOutput.final_score_percent.desc())
-            .all()
-        )
-        result.append({
+    if not tasks:
+        return []
+
+    # Fetch all outputs for all tasks in one query, then group by task_id
+    task_ids = [t.id for t in tasks]
+    all_outputs = (
+        db.query(BenchmarkOutput)
+        .filter(BenchmarkOutput.task_id.in_(task_ids))
+        .order_by(BenchmarkOutput.final_score_percent.desc())
+        .all()
+    )
+    outputs_by_task = defaultdict(list)
+    for o in all_outputs:
+        outputs_by_task[o.task_id].append(o)
+
+    return [
+        {
             "id":                   t.id,
             "question_id":          t.question_id,
             "prompt":               t.prompt,
@@ -457,15 +471,43 @@ async def list_tasks_for_review(
             "created_at":           t.created_at.isoformat() if t.created_at else None,
             "model_scores": [
                 {
-                    "model": o.model_name,
-                    "score": o.final_score_percent,
+                    "model":  o.model_name,
+                    "score":  o.final_score_percent,
                     "method": o.evaluation_method,
                 }
-                for o in outputs
+                for o in outputs_by_task[t.id]
             ],
-        })
+        }
+        for t in tasks
+    ]
 
-    return result
+
+# ── Admin helpers ────────────────────────────────────────────────────────────
+def _admin_email(admin_id: str, db: Session) -> str:
+    """Returns the admin's email address, falling back to their ID if not found."""
+    user = db.query(User).filter_by(id=admin_id).first()
+    return user.email if user else admin_id
+
+
+# ── Shared helper for task approval / rejection ───────────────────────────────
+def _set_task_status(
+    task_id: int,
+    is_public: bool,
+    validation_status: str,
+    admin_id: str,
+    db: Session,
+) -> dict:
+    task = db.query(BenchmarkTask).filter_by(id=task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    task.is_public         = is_public
+    task.validation_status = validation_status
+    task.validated_by      = _admin_email(admin_id, db)
+    db.commit()
+
+    logger.info(f"Task {task_id} ({task.question_id}) {validation_status} by {admin_id}")
+    return {"ok": True, "task_id": task_id, "status": validation_status}
 
 
 # ── Admin — approve a task ────────────────────────────────────────────────────
@@ -479,22 +521,7 @@ async def approve_task(
     Approves a task. Sets is_public=True so it is included in the
     public leaderboard calculations. Admin only.
     """
-    from backend.models import BenchmarkTask, User
-    from datetime import datetime
-
-    task = db.query(BenchmarkTask).filter_by(id=task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found.")
-
-    admin_user = db.query(User).filter_by(id=admin_id).first()
-
-    task.is_public         = True
-    task.validation_status = "approved"
-    task.validated_by      = admin_user.email if admin_user else admin_id
-    db.commit()
-
-    logger.info(f"Task {task_id} ({task.question_id}) approved by {admin_id}")
-    return {"ok": True, "task_id": task_id, "status": "approved"}
+    return _set_task_status(task_id, True, "approved", admin_id, db)
 
 
 # ── Admin — reject a task ─────────────────────────────────────────────────────
@@ -509,22 +536,7 @@ async def reject_task(
     public leaderboard. The user sees status='rejected' on their landing page.
     Admin only.
     """
-    from backend.models import BenchmarkTask, User
-    from datetime import datetime
-
-    task = db.query(BenchmarkTask).filter_by(id=task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found.")
-
-    admin_user = db.query(User).filter_by(id=admin_id).first()
-
-    task.is_public         = False
-    task.validation_status = "rejected"
-    task.validated_by      = admin_user.email if admin_user else admin_id
-    db.commit()
-
-    logger.info(f"Task {task_id} ({task.question_id}) rejected by {admin_id}")
-    return {"ok": True, "task_id": task_id, "status": "rejected"}
+    return _set_task_status(task_id, False, "rejected", admin_id, db)
 
 
 # ── Admin — list allowed domains ──────────────────────────────────────────────
@@ -534,8 +546,6 @@ async def list_domains(
     db: Session = Depends(get_db),
 ):
     """Returns all allowed email domains. Admin only."""
-    from backend.models import AllowedDomain
-
     domains = db.query(AllowedDomain).order_by(AllowedDomain.added_at).all()
     return [
         {
@@ -560,9 +570,6 @@ async def add_domain(
     Body: {"domain": "kpmg.com"}
     Admin only.
     """
-    from backend.models import AllowedDomain, User
-    from datetime import datetime
-
     domain = payload.get("domain", "").strip().lower()
     if not domain:
         raise HTTPException(status_code=400, detail="Domain cannot be empty.")
@@ -578,11 +585,10 @@ async def add_domain(
             detail=f"Domain '{domain}' is already in the allowed list."
         )
 
-    admin_user = db.query(User).filter_by(id=admin_id).first()
     new_domain = AllowedDomain(
         domain   = domain,
-        added_at = datetime.now(),
-        added_by = admin_user.email if admin_user else admin_id,
+        added_at = datetime.now(timezone.utc),
+        added_by = _admin_email(admin_id, db),
     )
     db.add(new_domain)
     db.commit()
@@ -608,8 +614,6 @@ async def remove_domain(
     Get the ID from GET /admin/domains.
     Admin only.
     """
-    from backend.models import AllowedDomain
-
     domain = db.query(AllowedDomain).filter_by(id=domain_id).first()
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found.")
@@ -644,7 +648,6 @@ async def check_domain(domain: str, db: Session = Depends(get_db)):
     Public endpoint — checks if an email domain is in the allowed list.
     Used by the register page to give instant feedback before creating an account.
     """
-    from backend.models import AllowedDomain
     allowed = db.query(AllowedDomain).filter_by(domain=domain.lower().strip()).first()
     if not allowed:
         raise HTTPException(

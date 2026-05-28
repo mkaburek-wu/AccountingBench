@@ -65,7 +65,7 @@ if DATABASE_URL.startswith("sqlite"):
         # DB connection. pool_size + max_overflow must exceed N × M.
         # Default is pool_size=5, max_overflow=10 (max 15) — way too low.
         pool_size=20,
-        max_overflow=80,    # Total max = 60 connections
+        max_overflow=80,    # Total max = 100 connections (pool_size + max_overflow)
         pool_timeout=60,    # Wait up to 60s for a connection before failing
     )
 else:

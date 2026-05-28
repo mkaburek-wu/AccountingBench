@@ -49,14 +49,13 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_root, ".env"))
 
 from backend.database import SessionLocal
-from backend.models import BenchmarkTask, Submission, User
+from backend.models import BenchmarkTask, Submission
 from backend.processing.pipeline import run_pipeline
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
     log_summary,
     BATCH_USER_ID,
-    BATCH_USER_EMAIL,
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -70,7 +69,8 @@ logger = logging.getLogger("batch_run")
 #logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
 
 # Default uploads folder — same as the web upload path
-DEFAULT_UPLOADS_DIR = os.path.join(_root, "backend", "uploads")
+DEFAULT_UPLOADS_DIR  = os.path.join(_root, "backend", "uploads")
+DEFAULT_MAX_WORKERS  = 4
 
 # Columns we read from the Excel (all optional except the starred ones)
 EXCEL_COLUMNS = [
@@ -219,25 +219,6 @@ def resolve_attached_files(raw, uploads_dir):
         resolved.append(entry)
 
     return " | ".join(resolved) if resolved else None
-
-
-def ensure_batch_user(db) -> str:
-    """
-    Make sure the batch user exists in the users table.
-    Returns the user ID.
-    """
-    user = db.query(User).filter_by(id=BATCH_USER_ID).first()
-    if not user:
-        user = User(
-            id=BATCH_USER_ID,
-            email=BATCH_USER_EMAIL,
-            first_name="Batch",
-            last_name="Runner",
-        )
-        db.add(user)
-        db.commit()
-        logger.info(f"Created batch user: {BATCH_USER_ID}")
-    return BATCH_USER_ID
 
 
 def read_excel(file_path: str, sheet_name: str) -> pd.DataFrame:
@@ -389,7 +370,7 @@ def main():
     parser.add_argument("--user",          default=None,   help="User ID to attribute submissions to")
     parser.add_argument("--dry-run",       action="store_true", help="Parse Excel only, no DB writes")
     parser.add_argument("--sequential",    action="store_true", help="Run tasks one by one (default: parallel)")
-    parser.add_argument("--max-workers",   type=int, default=4, help="Max parallel tasks (default: 10, use 1 for sequential)")
+    parser.add_argument("--max-workers",   type=int, default=DEFAULT_MAX_WORKERS, help=f"Max parallel tasks (default: {DEFAULT_MAX_WORKERS})")
     parser.add_argument("--skip-existing", action="store_true", help="Skip tasks already in DB")
     parser.add_argument("--uploads-dir",
                         default=DEFAULT_UPLOADS_DIR,

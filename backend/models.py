@@ -8,8 +8,7 @@ Run migrations after any change to this file:
     alembic upgrade head
 """
 
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
@@ -34,7 +33,7 @@ class User(Base):
     email      = Column(String, unique=True, nullable=False)
     first_name = Column(String, nullable=True)
     last_name  = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     is_active  = Column(Boolean, default=True, nullable=False)
     # Set to False to block a user without deleting their data
 
@@ -53,7 +52,7 @@ class AllowedDomain(Base):
 
     id       = Column(Integer, primary_key=True, autoincrement=True)
     domain   = Column(String, unique=True, nullable=False)  # e.g. "kpmg.com"
-    added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     added_by = Column(String, nullable=True)                # admin email for audit trail
 
 
@@ -152,7 +151,7 @@ class BenchmarkTask(Base):
     # True = included in public leaderboard calculations.
     # The original 520 tasks are imported with is_public=True.
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     validated_by      = Column(String, nullable=True)   # your admin email after review
     validation_status = Column(String, default="pending", nullable=False)
@@ -191,7 +190,7 @@ class BenchmarkRun(Base):
     model_name = Column(String, nullable=False)
     # e.g. "gpt-5.4", "claude-opus-4-6" etc.
 
-    run_timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    run_timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     temperature           = Column(Float, default=0.0)
     n_trials              = Column(Integer, default=3)
@@ -263,7 +262,11 @@ class BenchmarkOutput(Base):
     token_reasoning = Column(Integer, nullable=True)
     # Token counts from trial 1 only (as in the original script).
 
-    evaluated_at_utc   = Column(DateTime, default=datetime.utcnow)
+    judge_token_input  = Column(Integer, nullable=True)
+    judge_token_output = Column(Integer, nullable=True)
+    # Token counts for the judge call. Only set for open tasks (eval_method = "judge").
+
+    evaluated_at_utc   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     evaluation_notes   = Column(Text, nullable=True)
 
     # Relationships
@@ -308,7 +311,7 @@ class Submission(Base):
     # Copied from settings.price_per_submission at time of payment.
 
     # ── Timestamps ────────────────────────────────────────────────────────────
-    submitted_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    submitted_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     completed_at  = Column(DateTime, nullable=True)
     # Set when status changes to "done" or "error".
 
@@ -337,5 +340,5 @@ class Settings(Base):
     currency             = Column(String, nullable=True, default="eur")
     # ISO currency code. Phase 2 only.
 
-    updated_at           = Column(DateTime, default=datetime.utcnow,
-                                  onupdate=datetime.utcnow, nullable=False)
+    updated_at           = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                                  onupdate=lambda: datetime.now(timezone.utc), nullable=False)

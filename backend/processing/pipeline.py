@@ -527,6 +527,10 @@ def _is_responses_only_model(model: str) -> bool:
     m = (model or "").strip()
     if "-chat" in m:
         return False
+    if MODEL_REGISTRY and model in MODEL_REGISTRY:
+        base = (MODEL_REGISTRY[model].get("base_url") or "").lower()
+        if "openai.azure.com" not in base and "api.openai.com" not in base:
+            return False
     return m.startswith("gpt-5") or m.startswith("o")
 
 
@@ -539,6 +543,13 @@ def _reasoning_for_model(model: str):
     if m.startswith("gpt-5") or m.startswith("o"):
         return {"effort": "low"}
     return None
+
+
+def _resolve_api_key(key: str) -> str:
+    """Resolve ${ENV_VAR} references in api_key values from MODEL_REGISTRY_JSON."""
+    if key and key.startswith("${") and key.endswith("}"):
+        return os.environ.get(key[2:-1], key)
+    return key
 
 
 def _get_client_for_model(model: str) -> Tuple[Any, str]:
@@ -569,6 +580,21 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
         c = AnthropicFoundry(api_key=api_key, base_url=base_url)
         CLIENT_CACHE[cache_key] = (c, "anthropic_foundry")
         return CLIENT_CACHE[cache_key]
+    if api_type == "alawyer":
+        base_url = cfg.get("base_url", "https://app.alawyer.ai")
+        api_key  = _resolve_api_key(cfg.get("api_key", ""))
+        if not api_key:
+            raise RuntimeError(
+                f"MODEL_REGISTRY entry for '{model}': api_key is empty. "
+                "Set ALAWYER_API_KEY in .env."
+            )
+        resolved_cfg = {
+            "base_url": base_url,
+            "api_key":  api_key,
+            "timeout":  float(cfg.get("timeout", 660.0)),
+        }
+        CLIENT_CACHE[cache_key] = (resolved_cfg, "alawyer")
+        return CLIENT_CACHE[cache_key]
     raise RuntimeError(f"Unsupported api_type for model '{model}': {api_type}")
 
 
@@ -578,6 +604,15 @@ def _get_timeout_for_model(model: str) -> float:
         cfg = MODEL_REGISTRY.get(model) or {}
         return float(cfg.get("timeout", 240.0))
     return 240.0
+
+
+def _get_model_api_id(model: str) -> str:
+    """Return the model ID to send to the API.
+    Allows overriding via 'model_id' in MODEL_REGISTRY_JSON — useful when the
+    registry key (e.g. 'gpt-5-mini') differs from the provider's model name."""
+    if MODEL_REGISTRY and model in MODEL_REGISTRY:
+        return MODEL_REGISTRY[model].get("model_id") or model
+    return model
 
 
 def usage_to_tokens(usage_obj: Any) -> Tuple[Optional[int], Optional[int], Optional[int]]:
@@ -666,11 +701,78 @@ def call_llm_json(
         logger.debug(f"[LLM←] model={model} | answer={answer!r} conf={conf}")
         return answer, conf, (token_in, token_out, None)
 
+    # Alawyer — Austrian legal AI (SSE streaming, custom endpoint)
+    # Docs: Alawyer_API_DOCS.pdf — POST /api/v1/completions with {"query": "...", "mode": "max"}
+    # Rate limit: 10 req/min. Use --max-workers 1 or 2 when running rerun_model.
+    if api_mode == "alawyer":
+        cfg      = resolved_client  # config dict stored in CLIENT_CACHE
+        base_url = cfg["base_url"].rstrip("/")
+        api_key  = cfg["api_key"]
+        timeout  = cfg["timeout"]
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "text/event-stream",
+        }
+        resp = req_lib.post(
+            f"{base_url}/api/v1/completions",
+            headers=headers,
+            json={"query": prompt, "mode": "max"},
+            timeout=timeout,
+            stream=True,
+        )
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", "60"))
+            raise RuntimeError(f"Alawyer rate limit exceeded — retry after {retry_after}s")
+        resp.raise_for_status()
+
+        # SSE: skip keepalive lines (": keepalive"), collect the one data: {...} event
+        payload = None
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line or line.startswith(":"):
+                continue
+            if line == "data: [DONE]":
+                break
+            if line.startswith("data: "):
+                try:
+                    payload = json.loads(line[6:])
+                except Exception:
+                    pass
+
+        if payload is None:
+            raise RuntimeError("Alawyer: no data event received in SSE response")
+        if "error" in payload:
+            raise RuntimeError(f"Alawyer upstream error: {payload['error']}")
+
+        raw_answer = (payload.get("response") or "").strip()
+        usage      = payload.get("usage") or {}
+        token_in   = usage.get("prompt_tokens")
+        token_out  = usage.get("completion_tokens")
+
+        logger.debug(f"[LLM←] alawyer | raw_answer={raw_answer[:200]!r}")
+
+        # Alawyer returns natural-language legal analysis, not JSON.
+        # Use gpt-5-mini to extract the structured answer from it.
+        # Extract the actual question from the full trial prompt (which may be prefixed
+        # by large document chunks) to give the extraction step the right context.
+        frage_match = re.search(r"FRAGE:\n(.*?)(?:\n\nOPTIONEN:|\n\nGIB AUSSCHLIESSLICH|$)", prompt, re.DOTALL)
+        task_question_ctx = frage_match.group(1).strip()[:2000] if frage_match else prompt[:2000]
+        extraction_prompt = (
+            "Ein Rechts-KI-System hat die folgende Frage beantwortet. "
+            "Extrahiere die finale Antwort und gib NUR JSON zurück: {\"answer\": \"...\", \"confidence\": 0.0}\n"
+            "WICHTIG: Bei Multiple-Choice-Fragen gib als 'answer' NUR den Buchstaben an (z.B. 'A' oder 'B'). "
+            "Bei offenen Fragen gib die berechnete Zahl oder den Text an. Kein anderer Text.\n\n"
+            f"FRAGE:\n{task_question_ctx}\n\nANTWORT:\n{raw_answer[:3000]}"
+        )
+        answer, conf, _ = call_llm_json(extraction_prompt, model=JUDGE_MODEL, temperature=0.0)
+        return answer, conf, (token_in, token_out, None)
+
     # GPT-5 / o-series — use Responses API
     if _is_responses_only_model(model):
         reasoning_cfg = _reasoning_for_model(model)
         kwargs = {
-            "model": model,
+            "model": _get_model_api_id(model),
             "input": [
                 {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
                 {"role": "user",   "content": prompt},
@@ -684,7 +786,7 @@ def call_llm_json(
         # Chat completions
         if model == "gpt-5.2-chat":
             resp = resolved_client.chat.completions.create(
-                model=model,
+                model=_get_model_api_id(model),
                 timeout=_timeout,
                 messages=[
                     {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
@@ -693,7 +795,7 @@ def call_llm_json(
             )
         else:
             resp = resolved_client.chat.completions.create(
-                model=model,
+                model=_get_model_api_id(model),
                 temperature=temperature,
                 timeout=_timeout,
                 messages=[
@@ -733,7 +835,7 @@ def call_llm_json(
 
 def call_judge(
     question: str, final_answer: str, gold_answer: str
-) -> Tuple[float, Optional[float], str]:
+) -> Tuple[float, Optional[float], str, Optional[int], Optional[int]]:
     resolved_client, api_mode = _get_client_for_model(JUDGE_MODEL)
     if api_mode == "anthropic_foundry":
         raise RuntimeError("JUDGE_MODEL must be an OpenAI-compatible deployment.")
@@ -742,7 +844,7 @@ def call_judge(
 
     if _is_responses_only_model(JUDGE_MODEL):
         resp     = resolved_client.responses.create(
-            model=JUDGE_MODEL,
+            model=_get_model_api_id(JUDGE_MODEL),
             reasoning={"effort": "low"},
             input=[
                 {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
@@ -752,7 +854,7 @@ def call_judge(
         raw_text = getattr(resp, "output_text", "") or "{}"
     else:
         resp     = resolved_client.chat.completions.create(
-            model=JUDGE_MODEL,
+            model=_get_model_api_id(JUDGE_MODEL),
             temperature=0.0,
             messages=[
                 {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
@@ -761,6 +863,8 @@ def call_judge(
         )
         raw_text = resp.choices[0].message.content or "{}"
 
+    j_in, j_out, _ = usage_to_tokens(getattr(resp, "usage", None))
+
     text = extract_json_object(raw_text)
     try:
         data          = json.loads(text)
@@ -768,9 +872,9 @@ def call_judge(
         conf_val      = data.get("confidence", None)
         conf          = max(0.0, min(1.0, float(conf_val))) if conf_val is not None else None
         notes         = str(data.get("notes", "") or "")[:200]
-        return score_percent, conf, notes
+        return score_percent, conf, notes, j_in, j_out
     except Exception:
-        return 0.0, None, "judge_parse_error"
+        return 0.0, None, "judge_parse_error", j_in, j_out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -831,11 +935,14 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
             safe_str(task.task_type),
         )
 
-        # Parse valid choices for SC/MC tasks
+        # Parse valid choices for SC/MC tasks.
+        # task_options is already a Python dict (SQLAlchemy deserialises JSON columns),
+        # so we use it directly instead of round-tripping through json.loads(str(...))
+        # which produces invalid JSON from Python's single-quoted repr.
         valid_choices = None
-        if safe_str(task_options).strip():
+        if task_options:
             try:
-                parsed = json.loads(str(task_options))
+                parsed = task_options if isinstance(task_options, dict) else json.loads(task_options)
                 if isinstance(parsed, dict):
                     valid_choices = [str(k).upper() for k in parsed.keys()]
             except Exception:
@@ -913,7 +1020,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                         except Exception as e:
                             error_str    = str(e)
                             is_not_found = '404' in error_str or 'DeploymentNotFound' in error_str
-                            is_transient = any(c in error_str for c in ['429', '500', '503'])
+                            is_transient = any(c in error_str for c in ['429', '500', '502', '503'])
 
                             if is_not_found:
                                 logger.warning(
@@ -959,6 +1066,8 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 sc_mc_score_percent = None
                 judge_score_percent = None
                 judge_conf          = None
+                judge_tok_in        = None
+                judge_tok_out       = None
                 notes               = ""
                 final_score         = None
 
@@ -982,7 +1091,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                         final_prompt, model=current_model, temperature=0.0
                     )
                     logger.info(f"  [{current_model}] Judge call...")
-                    judge_score_percent, judge_conf, jnotes = call_judge(
+                    judge_score_percent, judge_conf, jnotes, judge_tok_in, judge_tok_out = call_judge(
                         task_prompt, final_answer, gold_answer
                     )
                     eval_method = "judge"
@@ -1009,6 +1118,8 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     evaluation_method    = eval_method,
                     token_input          = token_input,
                     token_output         = token_output,
+                    judge_token_input    = judge_tok_in  if eval_method == "judge" else None,
+                    judge_token_output   = judge_tok_out if eval_method == "judge" else None,
                     token_reasoning      = token_reasoning,
                     evaluated_at_utc     = datetime.now(timezone.utc),
                     evaluation_notes     = notes,
