@@ -790,6 +790,12 @@ def call_llm_json(
             )
             raise RuntimeError("Alawyer: no data event received in SSE response")
         if "error" in payload:
+            err = payload["error"]
+            # empty_answer means Alawyer had no result for this query — treat as
+            # an empty response (score 0) rather than a fatal pipeline error.
+            if isinstance(err, dict) and err.get("message") == "empty_answer":
+                logger.warning("[alawyer] empty_answer — no result for this query, returning empty")
+                return "", None, (None, None, None)
             raise RuntimeError(f"Alawyer upstream error: {payload['error']}")
 
         raw_answer = (payload.get("response") or "").strip()
