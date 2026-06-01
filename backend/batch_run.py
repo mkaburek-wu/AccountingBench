@@ -16,6 +16,7 @@ Options:
     --sheet         Sheet name to read (default: Questions)
     --user          User ID to attribute submissions to (default: BATCH_USER_ID
                     from .env, falls back to "batch_admin")
+    --limit         Only process the first N tasks (useful for testing)
     --dry-run       Parse and validate the Excel without writing to DB or
                     running any models
     --sequential    Run tasks one after another (default: all in parallel
@@ -55,6 +56,7 @@ from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
     log_summary,
+    test_endpoints,
     BATCH_USER_ID,
 )
 
@@ -368,6 +370,7 @@ def main():
     parser.add_argument("--file",          required=True,  help="Path to Excel file")
     parser.add_argument("--sheet",         default="Questions", help="Sheet name (default: Questions)")
     parser.add_argument("--user",          default=None,   help="User ID to attribute submissions to")
+    parser.add_argument("--limit",         type=int, default=None, help="Only process the first N tasks")
     parser.add_argument("--dry-run",       action="store_true", help="Parse Excel only, no DB writes")
     parser.add_argument("--sequential",    action="store_true", help="Run tasks one by one (default: parallel)")
     parser.add_argument("--max-workers",   type=int, default=DEFAULT_MAX_WORKERS, help=f"Max parallel tasks (default: {DEFAULT_MAX_WORKERS})")
@@ -380,8 +383,11 @@ def main():
 
     # ── Read Excel ────────────────────────────────────────────────────────────
     df = read_excel(args.file, args.sheet)
+    if args.limit:
+        df = df.head(args.limit)
+        logger.info(f"--limit {args.limit}: processing first {len(df)} task(s).")
 
-    # ── Dry run — just print what would happen ────────────────────────────────
+    # ── Dry run — just print what would happen + probe endpoints ─────────────
     if args.dry_run:
         logger.info("=== DRY RUN — no writes ===")
         for i, (_, row) in enumerate(df.iterrows()):
@@ -390,6 +396,8 @@ def main():
             prompt_preview = safe(row.get("prompt"))[:80].replace("\n", " ")
             logger.info(f"  Row {i+1}: {qid} | {ptype} | {prompt_preview}...")
         logger.info(f"=== {len(df)} task(s) would be processed ===")
+        models = [m.strip() for m in os.getenv("OPENAI_MODEL_LIST", "").split(",") if m.strip()]
+        test_endpoints(models)
         return
 
     # ── Ensure batch user exists ──────────────────────────────────────────────

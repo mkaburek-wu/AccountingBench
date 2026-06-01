@@ -847,15 +847,22 @@ def call_llm_json(
                 ],
             )
         else:
-            resp = resolved_client.chat.completions.create(
-                model=_get_model_api_id(model),
-                temperature=temperature,
-                timeout=_timeout,
-                messages=[
+            cfg        = MODEL_REGISTRY.get(model) or {}
+            extra_body = dict(cfg.get("extra_body") or {})
+            if cfg.get("allowed_providers"):
+                extra_body["allowed_providers"] = cfg["allowed_providers"]
+            kwargs: dict = {
+                "model":      _get_model_api_id(model),
+                "timeout":    _timeout,
+                "messages":   [
                     {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
                     {"role": "user",   "content": prompt},
                 ],
-            )
+                "extra_body": extra_body or None,
+            }
+            if not cfg.get("no_temperature"):
+                kwargs["temperature"] = temperature
+            resp = resolved_client.chat.completions.create(**kwargs)
         raw_text = resp.choices[0].message.content or ""
 
     text         = extract_json_object(raw_text)

@@ -117,6 +117,7 @@ from backend.batch_utils import (
     create_submission,
     get_existing_model_outputs,
     log_summary,
+    test_endpoints,
     BATCH_USER_ID,
 )
 
@@ -341,6 +342,7 @@ def main():
         for i, (tid, qid, models) in enumerate(work_items, 1):
             logger.info(f"  [{i}/{len(work_items)}] {qid} — would run: {models}")
         logger.info("Dry run complete. No changes made.")
+        test_endpoints(requested_models)
         return
 
     # ── Run tasks ─────────────────────────────────────────────────────────────

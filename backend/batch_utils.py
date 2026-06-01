@@ -7,6 +7,7 @@ Do not add script-specific logic here.
 
 import logging
 import os
+import requests
 from datetime import datetime, timezone
 
 from backend.database import SessionLocal
@@ -94,3 +95,67 @@ def log_summary(results: list, title: str = "SUMMARY") -> None:
             logger.info(f"  {r['question_id']}: {r['error']}")
 
     logger.info("=" * 60)
+
+
+def test_endpoints(models: list) -> None:
+    """Probe each model's API endpoint without consuming benchmark tokens.
+
+    Tries GET /models/{id} first; falls back to GET /models (list) for
+    providers that don't expose individual model lookup (e.g. InceptionLabs).
+    """
+    from backend.processing.pipeline import MODEL_REGISTRY, _get_model_api_id
+
+    logger.info("")
+    logger.info("=== ENDPOINT CHECK ===")
+    ok = failed = skipped = 0
+
+    for model in models:
+        cfg      = MODEL_REGISTRY.get(model) or {}
+        api_type = (cfg.get("api_type") or "").strip().lower()
+        base_url = (cfg.get("base_url") or "").rstrip("/")
+        api_key  = cfg.get("api_key") or ""
+        model_id = _get_model_api_id(model)
+
+        if api_type == "alawyer":
+            logger.info(f"  SKIP  {model}: alawyer (no /models endpoint)")
+            skipped += 1
+            continue
+        if not base_url:
+            logger.warning(f"  SKIP  {model}: no base_url configured")
+            skipped += 1
+            continue
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+        url     = f"{base_url}/models/{model_id}"
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                logger.info(f"  OK    {model}  →  {model_id}")
+                ok += 1
+            elif resp.status_code == 404:
+                # Fall back to listing all models for providers that don't
+                # support individual model lookup.
+                list_resp = requests.get(f"{base_url}/models", headers=headers, timeout=10)
+                if list_resp.status_code == 200:
+                    listed_ids = [m.get("id") for m in (list_resp.json().get("data") or [])]
+                    if model_id in listed_ids:
+                        logger.info(f"  OK    {model}  →  {model_id}  (found via /models list)")
+                        ok += 1
+                    else:
+                        logger.error(f"  FAIL  {model}  →  {model_id}  (not found in /models list)")
+                        failed += 1
+                else:
+                    logger.error(f"  FAIL  {model}  →  {model_id}  (404 — model not found)")
+                    failed += 1
+            elif resp.status_code == 401:
+                logger.error(f"  FAIL  {model}  →  {model_id}  (401 — unauthorized, check API key)")
+                failed += 1
+            else:
+                logger.warning(f"  WARN  {model}  →  {model_id}  (HTTP {resp.status_code})")
+                failed += 1
+        except Exception as e:
+            logger.error(f"  FAIL  {model}  →  {model_id}  (connection error: {e})")
+            failed += 1
+
+    logger.info(f"=== {ok} OK  |  {failed} failed  |  {skipped} skipped ===")
+    logger.info("")

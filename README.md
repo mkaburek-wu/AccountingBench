@@ -412,17 +412,40 @@ MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_k
 
 | `api_type` | Protocol | Used for |
 |---|---|---|
-| `openai_v1` | OpenAI Chat / Responses API | Azure-hosted OpenAI, DeepSeek, Mistral, Kimi, Mercury |
-| `anthropic_foundry` | Anthropic Messages API | Claude models via Azure AI Foundry |
+| `openai_v1` | OpenAI Chat / Responses API | OpenAI, Cortecs, DeepSeek, Mistral, Kimi, Mercury |
 | `alawyer` | Custom SSE (POST `/api/v1/completions`) | Alawyer Austrian legal AI |
 
-Each model entry can include a `"timeout"` key (seconds) to override the default 240s. This is important for slow models:
+**Optional keys per model entry:**
+
+| Key | Type | Description |
+|---|---|---|
+| `timeout` | number | Per-model timeout in seconds (default: 240). Use 600+ for slow models like Kimi. |
+| `model_id` | string | API model ID to send to the provider. Use when the registry key differs from the provider's model name (e.g. Cortecs model IDs use different casing). |
+| `allowed_providers` | list | Restrict Cortecs routing to specific backend providers, e.g. `["amazon_ireland"]`. Useful to avoid providers that don't support certain parameters. |
+| `no_temperature` | bool | If `true`, omits the `temperature` parameter from the API call. Required for newer Claude models (4.7+) where temperature is deprecated by Anthropic. |
+| `extra_body` | object | Any additional fields to pass in the request body (merged at the top level). Useful for provider-specific parameters. |
+
+**Example — Claude model on Cortecs routed to Amazon Bedrock:**
+
+```json
+"claude-opus-4-7": {
+    "api_type": "openai_v1",
+    "base_url": "https://api.cortecs.ai/v1",
+    "api_key": "...",
+    "model_id": "claude-opus4-7",
+    "allowed_providers": ["amazon_ireland"],
+    "no_temperature": true
+}
+```
+
+**Example — slow model with extended timeout:**
 
 ```json
 "Kimi-K2.6": {
     "api_type": "openai_v1",
-    "base_url": "https://...",
+    "base_url": "https://api.cortecs.ai/v1",
     "api_key": "...",
+    "model_id": "kimi-k2.6",
     "timeout": 600
 }
 ```
@@ -440,11 +463,14 @@ Each model entry can include a `"timeout"` key (seconds) to override the default
 
 Then set `ALAWYER_API_KEY=your-key` separately in `.env`.
 
+**Cortecs model IDs:** The Cortecs API uses its own model ID strings that differ from the display names. Always verify the exact ID via `GET https://api.cortecs.ai/v1/models` and set `model_id` accordingly. Use `allowed_providers` to pin routing to a specific backend (e.g. `amazon_ireland` instead of the default Google Vertex AI for Claude models).
+
 **Alawyer-specific notes:**
 - API rate limit is **10 requests per minute** — use `--max-workers 1` or `--max-workers 2` when running `rerun_model.py`
 - Each call takes 1–10 minutes; `timeout` is set to 660s (11 minutes) by default
-- Alawyer returns free-form legal text, not JSON. The pipeline passes the response directly as the answer. Scoring works best on `open_text` and `journal_entry` tasks (judge-evaluated); choice tasks will score 0
+- Alawyer returns free-form legal text, not JSON. The pipeline extracts a structured answer via a secondary judge call. Scoring works best on `open_text` and `journal_entry` tasks; choice tasks will score 0
 - Confidence is not available from the Alawyer API — `avg_model_confidence` will be `null`
+- When Alawyer has no answer for a query it returns `{"error": {"message": "empty_answer"}}` — the pipeline treats this as an empty response (score 0) rather than a fatal error
 
 ---
 
@@ -562,15 +588,19 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | `--skip-existing` | off | Skip tasks whose `question_id` is already in the database |
 | `--sequential` | off | Run tasks one at a time instead of in parallel |
 | `--max-workers` | `4` | Maximum number of tasks to run in parallel |
-| `--dry-run` | off | Parse the Excel file and print what would happen — no DB writes |
+| `--limit` | off | Only process the first N tasks (useful for testing) |
+| `--dry-run` | off | Parse the Excel file, print what would happen, and probe all model API endpoints — no DB writes |
 | `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
 | `--user` | `batch_admin` | User ID to attribute submissions to |
 
 ### 8.3 Common Commands
 
 ```bash
-# Preview what would be imported (no writes)
+# Preview what would be imported + probe all model API endpoints (no writes)
 python -m backend.batch_run --file backend\tasks.xlsx --dry-run
+
+# Test on a single task before a full run
+python -m backend.batch_run --file backend\tasks.xlsx --approved --limit 1 --sequential
 
 # Import and run all tasks, mark as approved, skip already-imported ones
 python -m backend.batch_run --file backend\tasks.xlsx --approved --skip-existing
@@ -672,7 +702,7 @@ The script asks for confirmation before deleting anything. It preserves `setting
 | `--models` | *(from `.env`)* | Comma-separated model name(s) from `MODEL_REGISTRY_JSON`. If omitted, `OPENAI_MODEL_LIST` from `.env` is used. |
 | `--max-workers` | `10` | Max parallel tasks. Rule of thumb: `floor(50 / num_models)` |
 | `--sequential` | off | Run one task at a time |
-| `--dry-run` | off | Print plan without writing to DB or calling APIs |
+| `--dry-run` | off | Print plan, probe all model API endpoints — no DB writes or API calls |
 | `--limit` | off | Only process first N tasks (useful for testing) |
 | `--user` | `batch_admin` | User ID for created submissions |
 
