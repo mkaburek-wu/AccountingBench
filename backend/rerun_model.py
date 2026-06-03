@@ -111,7 +111,7 @@ logger = logging.getLogger("rerun_model")
 from sqlalchemy import func
 from backend.database import SessionLocal
 from backend.models   import BenchmarkTask
-from backend.processing.pipeline import run_pipeline
+from backend.processing.pipeline import run_pipeline, InsufficientBalanceError
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
@@ -155,10 +155,14 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
         db.close()
         db = None
 
-        run_pipeline(sub.id)
-
-        logger.info(f"{prefix} [DONE] {task_qid} → submission {sub.id} — complete.")
-        result["status"] = "done"
+        pipeline_status = run_pipeline(sub.id)
+        if pipeline_status == "error":
+            logger.warning(f"{prefix} [FAIL] {task_qid} → submission {sub.id} — all models failed.")
+            result["status"] = "error"
+            result["error"]  = "All models failed"
+        else:
+            logger.info(f"{prefix} [DONE] {task_qid} → submission {sub.id} — complete.")
+            result["status"] = "done"
 
     except Exception as e:
         logger.error(f"{prefix} [ERROR] {task_qid}: {e}", exc_info=True)
@@ -349,24 +353,29 @@ def main():
     results   = []
     total     = len(work_items)
 
-    if args.sequential or total == 1:
-        logger.info(f"Running {total} task(s) sequentially...")
-        for i, (tid, qid, models) in enumerate(work_items, 1):
-            logger.info(f"\n{'─' * 60}")
-            logger.info(f"  Task {i}/{total}: {qid}")
-            logger.info(f"{'─' * 60}")
-            results.append(process_task(tid, qid, models, args.user, args.dry_run, i, total))
-    else:
-        max_workers = min(args.max_workers, total)
-        logger.info(f"Running {total} task(s) in parallel (max_workers={max_workers})...")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(process_task, tid, qid, models,
-                                args.user, args.dry_run, i + 1, total): qid
-                for i, (tid, qid, models) in enumerate(work_items)
-            }
-            for future in as_completed(futures):
-                results.append(future.result())
+    try:
+        if args.sequential or total == 1:
+            logger.info(f"Running {total} task(s) sequentially...")
+            for i, (tid, qid, models) in enumerate(work_items, 1):
+                logger.info(f"\n{'─' * 60}")
+                logger.info(f"  Task {i}/{total}: {qid}")
+                logger.info(f"{'─' * 60}")
+                results.append(process_task(tid, qid, models, args.user, args.dry_run, i, total))
+        else:
+            max_workers = min(args.max_workers, total)
+            logger.info(f"Running {total} task(s) in parallel (max_workers={max_workers})...")
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(process_task, tid, qid, models,
+                                    args.user, args.dry_run, i + 1, total): qid
+                    for i, (tid, qid, models) in enumerate(work_items)
+                }
+                for future in as_completed(futures):
+                    results.append(future.result())
+    except InsufficientBalanceError as e:
+        logger.error(f"INSUFFICIENT BALANCE — stopping run: {e}")
+        logger.error("Top up your API account balance and restart the script.")
+        sys.exit(1)
 
     log_summary(results, title="RERUN SUMMARY")
 

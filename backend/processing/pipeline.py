@@ -71,6 +71,11 @@ load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 logger = logging.getLogger(__name__)
 
+
+class InsufficientBalanceError(RuntimeError):
+    """Raised when any provider returns an insufficient-balance error.
+    Propagates out of run_pipeline so batch scripts can exit immediately."""
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -1079,12 +1084,25 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
                         except Exception as e:
                             error_str    = str(e)
+                            if 'Insufficient Balance' in error_str:
+                                if attempt == 0:
+                                    # Retry once — Cortecs occasionally returns false balance errors
+                                    logger.warning(
+                                        f"  [{current_model}] Trial {t} — 'Insufficient Balance' "
+                                        f"(may be transient), retrying in 30s: {e}"
+                                    )
+                                    time.sleep(30)
+                                    continue
+                                raise InsufficientBalanceError(
+                                    f"[{current_model}] Insufficient balance confirmed after retry — stopping run."
+                                ) from e
                             is_not_found = '404' in error_str or 'DeploymentNotFound' in error_str
                             is_alawyer   = any(s in error_str for s in [
                                 'no data event', 'Read timed out', 'ConnectionError',
                                 'RemoteDisconnected', 'Connection reset',
                             ])
-                            is_transient = is_alawyer or any(c in error_str for c in ['429', '500', '502', '503'])
+                            is_timeout   = 'timed out' in error_str.lower()
+                            is_transient = is_alawyer or is_timeout or any(c in error_str for c in ['429', '500', '502', '503'])
 
                             if is_not_found:
                                 logger.warning(
@@ -1094,7 +1112,8 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                                 return f"SKIP:{current_model}"
 
                             elif attempt == 0 and is_transient:
-                                delay = 30 if is_alawyer else 5
+                                is_rate_limited = '429' in error_str
+                                delay = 30 if is_alawyer else 60 if is_rate_limited else 5
                                 logger.warning(
                                     f"  [{current_model}] Trial {t} transient error, "
                                     f"retrying in {delay}s: {e}"
@@ -1196,7 +1215,17 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 logger.info(f"[PIPELINE] [{current_model}] Done. Score: {score_str}")
                 return current_model
 
+            except InsufficientBalanceError:
+                thread_db.close()
+                raise  # propagate — stops the entire run
             except Exception as e:
+                # Judge/consolidation calls are outside the retry loop — treat
+                # Insufficient Balance here as fatal (already retried at trial level).
+                if 'Insufficient Balance' in str(e):
+                    thread_db.close()
+                    raise InsufficientBalanceError(
+                        f"[{current_model}] Insufficient balance (judge/consolidation call) — stopping run."
+                    ) from e
                 logger.error(f"[PIPELINE] [{current_model}] Error: {e}", exc_info=True)
                 thread_db.rollback()
                 return f"ERROR:{current_model}"
@@ -1220,7 +1249,12 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
             }
 
             for future in as_completed(futures):
-                result = future.result()
+                try:
+                    result = future.result()
+                except InsufficientBalanceError:
+                    for f in futures:
+                        f.cancel()
+                    raise
                 if result.startswith("ERROR:"):
                     failed_models.append(result.replace("ERROR:", ""))
                     logger.warning(f"[PIPELINE] Model failed: {result}")
@@ -1249,6 +1283,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
         submission.completed_at = datetime.now(timezone.utc)
         db.commit()
+        return submission.status  # "done" or "error"
 
     except Exception as e:
         logger.error(f"[PIPELINE] Submission {submission_id} — fatal error: {e}", exc_info=True)
@@ -1260,6 +1295,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 db.commit()
         except Exception:
             pass
+        return "error"
 
     finally:
         if close_db:
