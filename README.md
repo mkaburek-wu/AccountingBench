@@ -397,7 +397,27 @@ The real benchmark pipeline in `backend/processing/pipeline.py`:
 - Each model runs 3 independent trials, then a consolidation call, then a judge call
 - Scoring: `single_choice`/`multi_choice` → SC/MC formula; `open_text`/`open_numeric`/`journal_entry` → LLM-as-judge
 - Writes one `benchmark_outputs` row per model
-- Handles timeouts, 404s (model not found), 429/500/503 (retried once after 5s)
+- A submission is marked `done` **only when every model produces output** — any failure or skip sets `status = "error"` and raises `IncompleteRunError`, stopping the batch script cleanly
+
+**Error handling:**
+
+| Error type | Behaviour |
+|---|---|
+| Transient (429, 5xx, timeout, connection reset) | Retry once — 60s delay for 429, 5s for others |
+| Not found (404) | Skip model, task marked incomplete → stop |
+| Any model fails or is skipped | `IncompleteRunError` raised → stop script after running tasks finish |
+| Insufficient balance | Retry once after 30s; stop script if confirmed |
+
+**Recovery after a stopped run** (no data is lost — resume in two steps):
+```bash
+# 1. Re-run tasks that were never started (not yet in DB)
+python -m backend.batch_run --file backend\tasks.xlsx --approved --skip-existing
+
+# 2. Fill in missing model outputs on any partially-failed task
+python -m backend.rerun_model
+```
+
+> **Note:** `cleanup_failed.py` is only needed if you want to completely reset a task (e.g. the task data itself was wrong). For normal interrupted runs, the two-step resume above is sufficient.
 
 ### 6.5 Model Configuration
 
@@ -610,6 +630,10 @@ python -m backend.batch_run --file backend\tasks.xlsx --approved --sequential
 
 # Control parallelism explicitly
 python -m backend.batch_run --file backend\tasks.xlsx --approved --max-workers 4
+
+# Resume an interrupted run (fix model config first, then):
+python -m backend.batch_run --file backend\tasks.xlsx --approved --skip-existing  # tasks not yet in DB
+python -m backend.rerun_model                                                      # missing model outputs
 ```
 
 ### 8.4 Parallelism and DB Connection Limits
@@ -681,7 +705,9 @@ The script asks for confirmation before deleting anything. It preserves `setting
 
 ## 9. Model Re-run (`rerun_model.py`)
 
-`backend/rerun_model.py` runs one or more **new** models against all tasks already in the database. Use this when you add a new model to your Azure deployment and want to benchmark it without re-importing everything from Excel.
+`backend/rerun_model.py` runs one or more models against all tasks already in the database. Use it when:
+- Adding a **new model** to the benchmark (without re-importing from Excel)
+- **Resuming an interrupted run** — it automatically detects which models are missing outputs for each task and only runs those, skipping everything already complete
 
 ### 9.1 Key Differences from `batch_run.py`
 
@@ -722,6 +748,9 @@ Filters are applied at the SQL query level (`IN` clause) before the skip-existin
 ### 9.3 Common Commands
 
 ```bash
+# Resume an interrupted run — fills in ALL missing model outputs across all tasks
+python -m backend.rerun_model
+
 # Step 1 — always dry-run first to see what would happen (no API calls, no DB writes)
 python -m backend.rerun_model --models "Kimi-K2.6" --dry-run
 

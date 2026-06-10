@@ -76,6 +76,13 @@ class InsufficientBalanceError(RuntimeError):
     """Raised when any provider returns an insufficient-balance error.
     Propagates out of run_pipeline so batch scripts can exit immediately."""
 
+
+class IncompleteRunError(RuntimeError):
+    """Raised when any model failed or was skipped for a task.
+    All models must produce output for benchmark comparability.
+    Propagates out of run_pipeline so batch scripts can stop cleanly,
+    letting already-running parallel tasks finish before exiting."""
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -1262,28 +1269,25 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     skipped_models.append(result.replace("SKIP:", ""))
                     logger.warning(f"[PIPELINE] Model skipped (not found): {result}")
 
-        # ── 7. Mark as done (or error if all models failed) ───────────────────
+        # ── 7. Mark done only when every model produced output ────────────────
         submission = db.query(Submission).filter_by(id=submission_id).first()
-
-        completed = len(models_to_run) - len(skipped_models)
-        if len(failed_models) == completed:
-            # Every non-skipped model failed
-            submission.status = "error"
-            logger.error(f"[PIPELINE] Submission {submission_id} — all models failed.")
-        else:
-            # At least one model succeeded
-            submission.status = "done"
-            if failed_models or skipped_models:
-                logger.warning(
-                    f"[PIPELINE] Submission {submission_id} — done. "
-                    f"Failed: {failed_models} Skipped: {skipped_models}"
-                )
-            else:
-                logger.info(f"[PIPELINE] Submission {submission_id} — all models complete.")
-
         submission.completed_at = datetime.now(timezone.utc)
+
+        if failed_models or skipped_models:
+            submission.status = "error"
+            db.commit()
+            raise IncompleteRunError(
+                f"Submission {submission_id} incomplete — "
+                f"failed: {failed_models}, skipped: {skipped_models}"
+            )
+
+        submission.status = "done"
         db.commit()
-        return submission.status  # "done" or "error"
+        logger.info(f"[PIPELINE] Submission {submission_id} — all models complete.")
+        return "done"
+
+    except (InsufficientBalanceError, IncompleteRunError):
+        raise  # propagate — do not swallow
 
     except Exception as e:
         logger.error(f"[PIPELINE] Submission {submission_id} — fatal error: {e}", exc_info=True)

@@ -51,7 +51,7 @@ load_dotenv(os.path.join(_root, ".env"))
 
 from backend.database import SessionLocal
 from backend.models import BenchmarkTask, Submission
-from backend.processing.pipeline import run_pipeline, InsufficientBalanceError
+from backend.processing.pipeline import run_pipeline, InsufficientBalanceError, IncompleteRunError
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
@@ -355,6 +355,10 @@ def process_row(row: pd.Series, args, user_id: str, index: int = 0, total: int =
             logger.info(f"{prefix} [DONE] {qid} → submission {sub.id} — pipeline complete.")
             result["status"] = "done"
 
+    except (InsufficientBalanceError, IncompleteRunError):
+        if db:
+            db.close()
+        raise  # propagate to main loop
     except Exception as e:
         logger.error(f"{prefix} [ERROR] {qid}: {e}", exc_info=True)
         result["status"] = "error"
@@ -417,31 +421,51 @@ def main():
     rows = [row for _, row in df.iterrows()]
     results = []
 
-    try:
-        if args.sequential or len(rows) == 1:
-            logger.info(f"Running {len(rows)} task(s) sequentially...")
-            for i, row in enumerate(rows, start=1):
-                logger.info(f"")
-                logger.info(f"{'─' * 60}")
-                logger.info(f"  Task {i}/{len(rows)}: {safe(row.get('question_id'))}")
-                logger.info(f"{'─' * 60}")
+    stop_error: Exception | None = None
+
+    if args.sequential or len(rows) == 1:
+        logger.info(f"Running {len(rows)} task(s) sequentially...")
+        for i, row in enumerate(rows, start=1):
+            logger.info(f"")
+            logger.info(f"{'─' * 60}")
+            logger.info(f"  Task {i}/{len(rows)}: {safe(row.get('question_id'))}")
+            logger.info(f"{'─' * 60}")
+            try:
                 results.append(process_row(row, args, user_id, index=i, total=len(rows)))
-        else:
-            max_workers = min(args.max_workers, len(rows))
-            logger.info(f"Running {len(rows)} task(s) in parallel batches of {max_workers}...")
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(process_row, row, args, user_id, i + 1, len(rows)): row
-                    for i, row in enumerate(rows)
-                }
-                for future in as_completed(futures):
+            except (InsufficientBalanceError, IncompleteRunError) as e:
+                stop_error = e
+                break
+    else:
+        max_workers = min(args.max_workers, len(rows))
+        logger.info(f"Running {len(rows)} task(s) in parallel batches of {max_workers}...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(process_row, row, args, user_id, i + 1, len(rows)): row
+                for i, row in enumerate(rows)
+            }
+            for future in as_completed(futures):
+                try:
                     results.append(future.result())
-    except InsufficientBalanceError as e:
-        logger.error(f"INSUFFICIENT BALANCE — stopping run: {e}")
-        logger.error("Top up your API account balance and restart the script.")
-        sys.exit(1)
+                except (InsufficientBalanceError, IncompleteRunError) as e:
+                    if stop_error is None:
+                        stop_error = e
+                        for f in futures:
+                            f.cancel()  # cancel queued (not yet started) tasks
 
     log_summary(results, title="BATCH RUN SUMMARY")
+
+    if stop_error is not None:
+        if isinstance(stop_error, InsufficientBalanceError):
+            logger.error(f"STOPPED — insufficient balance: {stop_error}")
+            logger.error("Top up your API account balance, then resume:")
+            logger.error("  1. python -m backend.batch_run --file <file> --approved --skip-existing")
+            logger.error("  2. python -m backend.rerun_model   (fills in any missing model outputs)")
+        else:
+            logger.error(f"STOPPED — incomplete task: {stop_error}")
+            logger.error("Fix the failing model config, then resume:")
+            logger.error("  1. python -m backend.batch_run --file <file> --approved --skip-existing")
+            logger.error("  2. python -m backend.rerun_model   (fills in any missing model outputs)")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

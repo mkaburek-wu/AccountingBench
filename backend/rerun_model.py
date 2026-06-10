@@ -111,7 +111,7 @@ logger = logging.getLogger("rerun_model")
 from sqlalchemy import func
 from backend.database import SessionLocal
 from backend.models   import BenchmarkTask
-from backend.processing.pipeline import run_pipeline, InsufficientBalanceError
+from backend.processing.pipeline import run_pipeline, InsufficientBalanceError, IncompleteRunError
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
@@ -164,6 +164,10 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
             logger.info(f"{prefix} [DONE] {task_qid} → submission {sub.id} — complete.")
             result["status"] = "done"
 
+    except (InsufficientBalanceError, IncompleteRunError):
+        if db:
+            db.close()
+        raise  # propagate to main loop
     except Exception as e:
         logger.error(f"{prefix} [ERROR] {task_qid}: {e}", exc_info=True)
         result["status"] = "error"
@@ -350,34 +354,51 @@ def main():
         return
 
     # ── Run tasks ─────────────────────────────────────────────────────────────
-    results   = []
-    total     = len(work_items)
+    results    = []
+    total      = len(work_items)
+    stop_error: Exception | None = None
 
-    try:
-        if args.sequential or total == 1:
-            logger.info(f"Running {total} task(s) sequentially...")
-            for i, (tid, qid, models) in enumerate(work_items, 1):
-                logger.info(f"\n{'─' * 60}")
-                logger.info(f"  Task {i}/{total}: {qid}")
-                logger.info(f"{'─' * 60}")
+    if args.sequential or total == 1:
+        logger.info(f"Running {total} task(s) sequentially...")
+        for i, (tid, qid, models) in enumerate(work_items, 1):
+            logger.info(f"\n{'─' * 60}")
+            logger.info(f"  Task {i}/{total}: {qid}")
+            logger.info(f"{'─' * 60}")
+            try:
                 results.append(process_task(tid, qid, models, args.user, args.dry_run, i, total))
-        else:
-            max_workers = min(args.max_workers, total)
-            logger.info(f"Running {total} task(s) in parallel (max_workers={max_workers})...")
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(process_task, tid, qid, models,
-                                    args.user, args.dry_run, i + 1, total): qid
-                    for i, (tid, qid, models) in enumerate(work_items)
-                }
-                for future in as_completed(futures):
+            except (InsufficientBalanceError, IncompleteRunError) as e:
+                stop_error = e
+                break
+    else:
+        max_workers = min(args.max_workers, total)
+        logger.info(f"Running {total} task(s) in parallel (max_workers={max_workers})...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(process_task, tid, qid, models,
+                                args.user, args.dry_run, i + 1, total): qid
+                for i, (tid, qid, models) in enumerate(work_items)
+            }
+            for future in as_completed(futures):
+                try:
                     results.append(future.result())
-    except InsufficientBalanceError as e:
-        logger.error(f"INSUFFICIENT BALANCE — stopping run: {e}")
-        logger.error("Top up your API account balance and restart the script.")
-        sys.exit(1)
+                except (InsufficientBalanceError, IncompleteRunError) as e:
+                    if stop_error is None:
+                        stop_error = e
+                        for f in futures:
+                            f.cancel()  # cancel queued (not yet started) tasks
 
     log_summary(results, title="RERUN SUMMARY")
+
+    if stop_error is not None:
+        if isinstance(stop_error, InsufficientBalanceError):
+            logger.error(f"STOPPED — insufficient balance: {stop_error}")
+            logger.error("Top up your API account balance, then resume:")
+            logger.error("  python -m backend.rerun_model   (picks up all missing model outputs)")
+        else:
+            logger.error(f"STOPPED — incomplete task: {stop_error}")
+            logger.error("Fix the failing model config, then resume:")
+            logger.error("  python -m backend.rerun_model   (picks up all missing model outputs)")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
