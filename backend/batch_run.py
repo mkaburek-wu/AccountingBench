@@ -36,7 +36,6 @@ Expected Excel columns (all others are ignored):
 
 import argparse
 import json
-import re
 import logging
 import os
 import sys
@@ -57,6 +56,8 @@ from backend.batch_utils import (
     create_submission,
     log_summary,
     test_endpoints,
+    resolve_attached_files,
+    check_attached_files,
     BATCH_USER_ID,
 )
 
@@ -150,77 +151,6 @@ def parse_options(raw) -> dict | None:
     # Store as-is under key "raw" so nothing is lost
     return {"raw": s}
 
-
-def resolve_attached_files(raw, uploads_dir):
-    """
-    Given the attached_files cell value from the Excel, find the actual
-    file(s) on disk and return a pipe-separated string of absolute paths
-    suitable for the pipeline's resolve_attached_documents_text().
-
-    Supports:
-      - Filenames only:     "document.pdf"
-      - Relative paths:     "uploads/document.pdf"
-      - Absolute paths:     "C:\\...\\document.pdf"  (used as-is if exists)
-      - Multiple files:     "doc1.pdf | doc2.pdf"
-      - URLs (http/https):  passed through unchanged
-      - NaN / empty:        returns None
-    """
-    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
-        return None
-    s = str(raw).strip()
-    if not s:
-        return None
-
-    resolved = []
-    for entry in s.split("|"):
-        entry = entry.strip()
-        if not entry:
-            continue
-
-        # URLs pass through unchanged — pipeline will download them
-        if re.match(r"^https?://", entry, re.IGNORECASE):
-            resolved.append(entry)
-            logger.info(f"    Attached file (URL): {entry}")
-            continue
-
-        # Absolute path — use as-is if it exists
-        if os.path.isabs(entry) and os.path.exists(entry):
-            resolved.append(entry)
-            logger.info(f"    Attached file (absolute): {entry}")
-            continue
-
-        # Relative path or bare filename — search in uploads_dir
-        # 1. Try it directly relative to uploads_dir
-        candidate = os.path.join(uploads_dir, entry)
-        if os.path.exists(candidate):
-            resolved.append(os.path.abspath(candidate))
-            logger.info(f"    Attached file found: {candidate}")
-            continue
-
-        # 2. Try bare filename only (strip any directory prefix from the entry)
-        filename = os.path.basename(entry)
-        candidate2 = os.path.join(uploads_dir, filename)
-        if os.path.exists(candidate2):
-            resolved.append(os.path.abspath(candidate2))
-            logger.info(f"    Attached file found: {candidate2}")
-            continue
-
-        # 3. Search recursively under uploads_dir
-        found = None
-        for root, _, files in os.walk(uploads_dir):
-            if filename in files:
-                found = os.path.join(root, filename)
-                break
-        if found:
-            resolved.append(os.path.abspath(found))
-            logger.info(f"    Attached file found (recursive search): {found}")
-            continue
-
-        # Not found — warn but keep the raw entry so pipeline logs the error
-        logger.warning(f"    Attached file NOT found: \'{entry}\' (searched in {uploads_dir})")
-        resolved.append(entry)
-
-    return " | ".join(resolved) if resolved else None
 
 
 def read_excel(file_path: str, sheet_name: str) -> pd.DataFrame:
@@ -405,6 +335,117 @@ def main():
             prompt_preview = safe(row.get("prompt"))[:80].replace("\n", " ")
             logger.info(f"  Row {i+1}: {qid} | {ptype} | {prompt_preview}...")
         logger.info(f"=== {len(df)} task(s) would be processed ===")
+
+        # ── 1. Required field validation ──────────────────────────────────────
+        logger.info("")
+        logger.info("=== REQUIRED FIELDS ===")
+        field_errors = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            qid = safe(row.get("question_id")) or f"row {i + 1}"
+            for col in REQUIRED_COLUMNS:
+                val = safe(row.get(col))
+                if not val:
+                    field_errors.append((qid, col))
+                    logger.warning(f"  MISS  {qid}  →  '{col}' is empty")
+        if not field_errors:
+            logger.info(f"  All required fields present in {len(df)} row(s). [OK]")
+        else:
+            logger.warning(f"=== {len(field_errors)} missing required field(s) ===")
+
+        # ── 2. Duplicate question_id check ────────────────────────────────────
+        logger.info("")
+        logger.info("=== DUPLICATE IDs ===")
+        seen_ids: dict[str, int] = {}
+        for i, (_, row) in enumerate(df.iterrows()):
+            qid = safe(row.get("question_id"))
+            if not qid:
+                continue
+            if qid in seen_ids:
+                logger.warning(f"  DUP   '{qid}' — rows {seen_ids[qid] + 1} and {i + 1}")
+            else:
+                seen_ids[qid] = i
+        dup_count = len(df) - len(seen_ids)
+        if dup_count == 0:
+            logger.info(f"  No duplicate question_ids found. [OK]")
+        else:
+            logger.warning(f"=== {dup_count} duplicate question_id(s) found ===")
+
+        # ── 3. Enum value validation ──────────────────────────────────────────
+        VALID_ANSWER_TYPES  = {"single_choice", "multi_choice", "open_text",
+                               "open_numeric", "journal_entry"}
+        VALID_TASK_TYPES    = {"interpretation_of_law", "calculation", "journal_entry"}
+        VALID_CATEGORIES    = {"tax", "financial accounting", "management accounting"}
+        VALID_EDU_LEVELS    = {"professional examinations", "university master's",
+                               "secondary vocational"}
+
+        logger.info("")
+        logger.info("=== ENUM VALUES ===")
+        enum_errors = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            qid = safe(row.get("question_id")) or f"row {i + 1}"
+            checks = [
+                ("answer_type",    safe(row.get("answer_type")).lower(),    VALID_ANSWER_TYPES),
+                ("task_type",      safe(row.get("task_type")).lower(),      VALID_TASK_TYPES),
+                ("category",       safe(row.get("category")).lower(),       VALID_CATEGORIES),
+                ("education_level",safe(row.get("education_level")).lower(),VALID_EDU_LEVELS),
+            ]
+            for col, val, valid_set in checks:
+                if val and val not in valid_set:
+                    enum_errors.append((qid, col, val))
+                    logger.warning(
+                        f"  BAD   {qid}  →  {col}='{val}' "
+                        f"(valid: {sorted(valid_set)})"
+                    )
+        if not enum_errors:
+            logger.info(f"  All enum values valid. [OK]")
+        else:
+            logger.warning(f"=== {len(enum_errors)} invalid enum value(s) ===")
+
+        # ── 4. Skip-existing preview (only when --skip-existing is set) ───────
+        if args.skip_existing:
+            logger.info("")
+            logger.info("=== SKIP-EXISTING PREVIEW ===")
+            db = SessionLocal()
+            try:
+                from backend.models import BenchmarkTask as _BT
+                existing_ids = {
+                    r[0] for r in db.query(_BT.question_id).all()
+                }
+                qids_in_sheet = [safe(row.get("question_id")) for _, row in df.iterrows()]
+                will_skip = [q for q in qids_in_sheet if q in existing_ids]
+                will_run  = [q for q in qids_in_sheet if q not in existing_ids]
+                logger.info(f"  Already in DB (will skip): {len(will_skip)}")
+                logger.info(f"  New tasks (will run):      {len(will_run)}")
+                if not will_run:
+                    logger.warning("  All tasks already exist — nothing would be imported.")
+            finally:
+                db.close()
+
+        # ── 5. File check ─────────────────────────────────────────────────────
+        logger.info("")
+        logger.info("=== FILE CHECK ===")
+        tasks_with_files = total_found = total_missing = 0
+        for _, row in df.iterrows():
+            qid = safe(row.get("question_id"))
+            raw = row.get("attached_files")
+            found, missing = check_attached_files(raw, args.uploads_dir)
+            if not found and not missing:
+                continue
+            tasks_with_files += 1
+            total_found   += len(found)
+            total_missing += len(missing)
+            for entry in missing:
+                logger.warning(f"  MISS  {qid}  →  '{entry}' not found in {args.uploads_dir}")
+        if tasks_with_files == 0:
+            logger.info("  No attached files referenced in this sheet.")
+        else:
+            status = "OK" if total_missing == 0 else f"{total_missing} MISSING"
+            logger.info(
+                f"=== {tasks_with_files} task(s) with attachments: "
+                f"{total_found} found, {total_missing} missing [{status}] ==="
+            )
+
+        # ── 6. Endpoint check ─────────────────────────────────────────────────
         models = [m.strip() for m in os.getenv("OPENAI_MODEL_LIST", "").split(",") if m.strip()]
         test_endpoints(models)
         return

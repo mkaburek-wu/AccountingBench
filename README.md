@@ -609,15 +609,29 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | `--sequential` | off | Run tasks one at a time instead of in parallel |
 | `--max-workers` | `4` | Maximum number of tasks to run in parallel |
 | `--limit` | off | Only process the first N tasks (useful for testing) |
-| `--dry-run` | off | Parse the Excel file, print what would happen, and probe all model API endpoints — no DB writes |
+| `--dry-run` | off | Full pre-flight validation — no DB writes, no API calls (see §8.3) |
 | `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
 | `--user` | `batch_admin` | User ID to attribute submissions to |
 
 ### 8.3 Common Commands
 
+**`--dry-run` runs these checks in order (no DB writes, no API calls):**
+
+| # | Check | What it catches |
+|---|---|---|
+| 1 | Required fields | Rows with empty `question_id`, `prompt`, `answer_type`, `gold_answer`, `regulatory_framework`, `category`, or `education_level` |
+| 2 | Duplicate IDs | Same `question_id` appearing more than once in the sheet |
+| 3 | Enum values | Invalid values for `answer_type`, `task_type`, `category`, `education_level` |
+| 4 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
+| 5 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
+| 6 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
+
 ```bash
-# Preview what would be imported + probe all model API endpoints (no writes)
+# Full pre-flight check before a real run (always do this first)
 python -m backend.batch_run --file backend\tasks.xlsx --dry-run
+
+# Pre-flight check including skip-existing preview
+python -m backend.batch_run --file backend\tasks.xlsx --dry-run --skip-existing
 
 # Test on a single task before a full run
 python -m backend.batch_run --file backend\tasks.xlsx --approved --limit 1 --sequential

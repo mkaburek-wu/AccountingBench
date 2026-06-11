@@ -7,7 +7,9 @@ Do not add script-specific logic here.
 
 import logging
 import os
+import re
 import requests
+import pandas as pd
 from datetime import datetime, timezone
 
 from backend.database import SessionLocal
@@ -95,6 +97,114 @@ def log_summary(results: list, title: str = "SUMMARY") -> None:
             logger.info(f"  {r['question_id']}: {r['error']}")
 
     logger.info("=" * 60)
+
+
+def check_attached_files(raw, uploads_dir: str) -> tuple[list[str], list[str]]:
+    """Check which files in an attached_files cell can be resolved on disk.
+    Returns (found_paths, missing_entries) — no side effects, no logging.
+    Useful for dry-run validation before a real import.
+    """
+    found: list[str] = []
+    missing: list[str] = []
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return found, missing
+    s = str(raw).strip()
+    if not s:
+        return found, missing
+
+    for entry in s.split("|"):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if re.match(r"^https?://", entry, re.IGNORECASE):
+            found.append(entry)
+            continue
+        if os.path.isabs(entry) and os.path.exists(entry):
+            found.append(entry)
+            continue
+        candidate = os.path.join(uploads_dir, entry)
+        if os.path.exists(candidate):
+            found.append(os.path.abspath(candidate))
+            continue
+        filename = os.path.basename(entry)
+        candidate2 = os.path.join(uploads_dir, filename)
+        if os.path.exists(candidate2):
+            found.append(os.path.abspath(candidate2))
+            continue
+        found_path = None
+        for root, _, files in os.walk(uploads_dir):
+            if filename in files:
+                found_path = os.path.join(root, filename)
+                break
+        if found_path:
+            found.append(os.path.abspath(found_path))
+        else:
+            missing.append(entry)
+
+    return found, missing
+
+
+def resolve_attached_files(raw, uploads_dir: str) -> str | None:
+    """Resolve the attached_files cell value from an Excel row to a
+    pipe-separated string of absolute paths suitable for the pipeline.
+
+    Supports:
+      - Filenames only:    "document.pdf"
+      - Relative paths:   "uploads/document.pdf"
+      - Absolute paths:   "C:\\...\\document.pdf"  (used as-is if exists)
+      - Multiple files:   "doc1.pdf | doc2.pdf"
+      - URLs (http/https): passed through unchanged
+      - NaN / empty:      returns None
+    """
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+
+    resolved = []
+    for entry in s.split("|"):
+        entry = entry.strip()
+        if not entry:
+            continue
+
+        if re.match(r"^https?://", entry, re.IGNORECASE):
+            resolved.append(entry)
+            logger.info(f"    Attached file (URL): {entry}")
+            continue
+
+        if os.path.isabs(entry) and os.path.exists(entry):
+            resolved.append(entry)
+            logger.info(f"    Attached file (absolute): {entry}")
+            continue
+
+        candidate = os.path.join(uploads_dir, entry)
+        if os.path.exists(candidate):
+            resolved.append(os.path.abspath(candidate))
+            logger.info(f"    Attached file found: {candidate}")
+            continue
+
+        filename = os.path.basename(entry)
+        candidate2 = os.path.join(uploads_dir, filename)
+        if os.path.exists(candidate2):
+            resolved.append(os.path.abspath(candidate2))
+            logger.info(f"    Attached file found: {candidate2}")
+            continue
+
+        found = None
+        for root, _, files in os.walk(uploads_dir):
+            if filename in files:
+                found = os.path.join(root, filename)
+                break
+        if found:
+            resolved.append(os.path.abspath(found))
+            logger.info(f"    Attached file found (recursive search): {found}")
+            continue
+
+        logger.warning(f"    Attached file NOT found: '{entry}' (searched in {uploads_dir})")
+        resolved.append(entry)
+
+    return " | ".join(resolved) if resolved else None
 
 
 def test_endpoints(models: list) -> None:
