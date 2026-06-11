@@ -621,10 +621,9 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 |---|---|---|
 | 1 | Required fields | Rows with empty `question_id`, `prompt`, `answer_type`, `gold_answer`, `regulatory_framework`, `category`, or `education_level` |
 | 2 | Duplicate IDs | Same `question_id` appearing more than once in the sheet |
-| 3 | Enum values | Invalid values for `answer_type`, `task_type`, `category`, `education_level` |
-| 4 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
-| 5 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
-| 6 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
+| 3 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
+| 4 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
+| 5 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
 
 ```bash
 # Full pre-flight check before a real run (always do this first)

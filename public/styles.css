@@ -1141,10 +1141,12 @@ section        { padding: 72px 40px; max-width: 1400px; margin: 0 auto; box-sizi
   section[style*="padding-top:36px"],
   section[style*="padding-top: 36px"],
   section[style*="padding-top:52px"],
-  section[style*="padding-top: 52px"] { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  section[style*="padding-top: 52px"],
+  section[style*="padding-top:72px"],
+  section[style*="padding-top: 72px"] { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
 
   /* Footer */
-  footer         { padding: 28px 16px 24px; }
+  footer         { padding: 28px 16px calc(80px + env(safe-area-inset-bottom, 0px)); }
   .footer-top    { flex-direction: column; gap: 18px; margin-bottom: 20px; padding-bottom: 20px; }
   .footer-logo   { font-size: 16px; }
   .footer-tagline { font-size: 12px; }

@@ -370,38 +370,7 @@ def main():
         else:
             logger.warning(f"=== {dup_count} duplicate question_id(s) found ===")
 
-        # ── 3. Enum value validation ──────────────────────────────────────────
-        VALID_ANSWER_TYPES  = {"single_choice", "multi_choice", "open_text",
-                               "open_numeric", "journal_entry"}
-        VALID_TASK_TYPES    = {"interpretation_of_law", "calculation", "journal_entry"}
-        VALID_CATEGORIES    = {"tax", "financial accounting", "management accounting"}
-        VALID_EDU_LEVELS    = {"professional examinations", "university master's",
-                               "secondary vocational"}
-
-        logger.info("")
-        logger.info("=== ENUM VALUES ===")
-        enum_errors = []
-        for i, (_, row) in enumerate(df.iterrows()):
-            qid = safe(row.get("question_id")) or f"row {i + 1}"
-            checks = [
-                ("answer_type",    safe(row.get("answer_type")).lower(),    VALID_ANSWER_TYPES),
-                ("task_type",      safe(row.get("task_type")).lower(),      VALID_TASK_TYPES),
-                ("category",       safe(row.get("category")).lower(),       VALID_CATEGORIES),
-                ("education_level",safe(row.get("education_level")).lower(),VALID_EDU_LEVELS),
-            ]
-            for col, val, valid_set in checks:
-                if val and val not in valid_set:
-                    enum_errors.append((qid, col, val))
-                    logger.warning(
-                        f"  BAD   {qid}  →  {col}='{val}' "
-                        f"(valid: {sorted(valid_set)})"
-                    )
-        if not enum_errors:
-            logger.info(f"  All enum values valid. [OK]")
-        else:
-            logger.warning(f"=== {len(enum_errors)} invalid enum value(s) ===")
-
-        # ── 4. Skip-existing preview (only when --skip-existing is set) ───────
+        # ── 3. Skip-existing preview (only when --skip-existing is set) ───────
         if args.skip_existing:
             logger.info("")
             logger.info("=== SKIP-EXISTING PREVIEW ===")
