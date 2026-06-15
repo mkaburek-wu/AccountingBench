@@ -399,11 +399,28 @@ The real benchmark pipeline in `backend/processing/pipeline.py`:
 - Writes one `benchmark_outputs` row per model
 - A submission is marked `done` **only when every model produces output** — any failure or skip sets `status = "error"` and raises `IncompleteRunError`, stopping the batch script cleanly
 
+**Trial integrity rule:**
+
+Each model runs 3 independent trials. If any trial requires a retry (due to a transient error), the model run is aborted immediately with a `RuntimeError`. This prevents benchmarking a model under degraded conditions — benchmark scores must come from clean, uninterrupted runs. Rerun the affected model once the API is stable.
+
+**Judge enrichment:**
+
+For open-ended tasks (`open_text`, `open_numeric`, `journal_entry`), the LLM judge receives three additional fields from the task record:
+
+| Field | Used for | Effect |
+|---|---|---|
+| `grading_criteria` | `open_text`, `journal_entry` | Rubric shown to the judge as `BEWERTUNGSKRITERIEN` |
+| `acceptable_variants` | all open types | Pipe-separated alternative valid answers shown as `AKZEPTABLE VARIANTEN` |
+| `numeric_tol` | `open_numeric` only | Tolerance band — answers within ±N are fully correct |
+
+These fields are read from `benchmark_tasks` and must be set before the pipeline runs. The dry-run field consistency check (see §8.3) flags tasks where required fields are missing.
+
 **Error handling:**
 
 | Error type | Behaviour |
 |---|---|
 | Transient (429, 5xx, timeout, connection reset) | Retry once — 60s delay for 429, 5s for others |
+| Any trial needs a retry | `RuntimeError` raised — model run aborted to preserve benchmark integrity |
 | Not found (404) | Skip model, task marked incomplete → stop |
 | Any model fails or is skipped | `IncompleteRunError` raised → stop script after running tasks finish |
 | Insufficient balance | Retry once after 30s; stop script if confirmed |
@@ -622,8 +639,9 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | 1 | Required fields | Rows with empty `question_id`, `prompt`, `answer_type`, `gold_answer`, `regulatory_framework`, `category`, or `education_level` |
 | 2 | Duplicate IDs | Same `question_id` appearing more than once in the sheet |
 | 3 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
-| 4 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
-| 5 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
+| 4 | Field consistency | `open_text`/`journal_entry` tasks missing `grading_criteria`; `open_numeric` tasks missing `numeric_tolerance` (judge will have no rubric/tolerance without these) |
+| 5 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
+| 6 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
 
 ```bash
 # Full pre-flight check before a real run (always do this first)
@@ -681,7 +699,18 @@ The script logs `[X/N]` counters on every line so you can track exactly which ta
 
 In parallel mode the `[X/N]` prefix appears on every log line, making it possible to follow individual tasks even when output is interleaved.
 
-### 8.6 Debug Logging
+### 8.6 Error Log File
+
+Every run (both `batch_run.py` and `rerun_model.py`) automatically writes a timestamped error log to the `logs/` folder in the project root:
+
+```
+logs/batch_run_errors_20260615_161145.log
+logs/rerun_model_errors_20260615_161145.log
+```
+
+Only `WARNING` and above is written to the file — `INFO` output stays in the terminal only. The log path is printed at the start of every run. Review this file after a run to see all model errors and warnings without scrolling through the full terminal output.
+
+### 8.8 Debug Logging
 
 To see the full prompt sent to each model and the raw response, enable DEBUG logging by adding this line after the logger setup in `batch_run.py`:
 
@@ -691,7 +720,7 @@ logging.getLogger("backend.processing.pipeline").setLevel(logging.DEBUG)
 
 This shows `[LLM→]` (prompt sent) and `[LLM←]` (raw response) lines for every model call. Remove or comment out this line to return to normal INFO logging.
 
-### 8.7 Attached Files
+### 8.9 Attached Files
 
 If a task references a PDF, the script searches for it in this order:
 
@@ -704,7 +733,7 @@ If a task references a PDF, the script searches for it in this order:
 
 PDF content is extracted and injected into the prompt as `DOKUMENT-INHALT (extrahiert):` before the question text.
 
-### 8.8 Resetting the Database
+### 8.10 Resetting the Database
 
 During development, use `reset_db.py` to wipe all tasks, submissions, runs and outputs:
 
@@ -812,11 +841,18 @@ Before creating any submission, the script queries `benchmark_outputs` for exist
 
 Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/batch_utils.py`:
 
-- `create_submission()` — creates a pending Submission row
-- `ensure_batch_user()` — creates the batch user in DB if missing
-- `get_existing_model_outputs()` — checks which models already have outputs for a task
-- `log_summary()` — standardised run summary
-- `BATCH_USER_ID` / `BATCH_USER_EMAIL` — shared constants
+| Helper | Description |
+|---|---|
+| `create_submission()` | Creates a pending Submission row |
+| `ensure_batch_user()` | Creates the batch user in DB if missing |
+| `get_existing_model_outputs()` | Checks which models already have outputs for a task |
+| `log_summary()` | Standardised run summary |
+| `setup_error_log(script_name)` | Adds a WARNING+ `FileHandler` to the root logger; writes `logs/<script_name>_errors_<timestamp>.log`. Called automatically at the start of every run. |
+| `check_field_consistency(tasks)` | Validates judge-relevant fields: warns when `grading_criteria` is missing for `open_text`/`journal_entry` tasks or `numeric_tolerance` is missing for `open_numeric` tasks. Called during `--dry-run`. |
+| `check_attached_files()` | Checks which attached file paths can be resolved (dry-run only) |
+| `resolve_attached_files()` | Resolves attached file paths for real runs |
+| `test_endpoints()` | Probes each model's API endpoint (dry-run only) |
+| `BATCH_USER_ID` / `BATCH_USER_EMAIL` | Shared constants |
 
 ---
 
@@ -1226,5 +1262,5 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.7 · May 2026*
+*AccountingBench Developer Documentation · Version 1.8 · June 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*

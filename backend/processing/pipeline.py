@@ -517,19 +517,36 @@ def build_open_final_prompt(question: str, a1: str, a2: str, a3: str) -> str:
     )
 
 
-def build_judge_prompt(question: str, final_answer: str, gold_answer: str) -> str:
-    return (
+def build_judge_prompt(
+    question: str,
+    final_answer: str,
+    gold_answer: str,
+    grading_criteria: str = "",
+    acceptable_variants: str = "",
+    numeric_tol: Optional[float] = None,
+) -> str:
+    parts = [
         "Du bist ein strenger Evaluator für Accounting-Antworten.\n"
         "Vergleiche STUDENT_ANSWER mit GOLD_ANSWER und bewerte die Korrektheit.\n"
         "Gib ausschließlich JSON zurück:\n"
         '{"score_percent": 0, "confidence": 0.0, "notes": ""}\n'
         "- score_percent ist 0..100\n"
         "- confidence ist 0..1\n"
-        "- notes max 200 Zeichen\n\n"
-        f"FRAGE:\n{question}\n\n"
-        f"GOLD_ANSWER:\n{gold_answer}\n\n"
-        f"STUDENT_ANSWER:\n{final_answer}\n"
-    )
+        "- notes max 200 Zeichen",
+        f"FRAGE:\n{question}",
+        f"GOLD_ANSWER:\n{gold_answer}",
+    ]
+    if acceptable_variants:
+        parts.append(f"AKZEPTABLE VARIANTEN:\n{acceptable_variants}")
+    if numeric_tol is not None:
+        parts.append(
+            f"NUMERISCHE TOLERANZ: ±{numeric_tol} "
+            f"(Antworten innerhalb dieser Toleranz gelten als vollständig korrekt)"
+        )
+    if grading_criteria:
+        parts.append(f"BEWERTUNGSKRITERIEN:\n{grading_criteria}")
+    parts.append(f"STUDENT_ANSWER:\n{final_answer}")
+    return "\n\n".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -906,13 +923,23 @@ def call_llm_json(
 
 
 def call_judge(
-    question: str, final_answer: str, gold_answer: str
+    question: str,
+    final_answer: str,
+    gold_answer: str,
+    grading_criteria: str = "",
+    acceptable_variants: str = "",
+    numeric_tol: Optional[float] = None,
 ) -> Tuple[float, Optional[float], str, Optional[int], Optional[int]]:
     resolved_client, api_mode = _get_client_for_model(JUDGE_MODEL)
     if api_mode == "anthropic_foundry":
         raise RuntimeError("JUDGE_MODEL must be an OpenAI-compatible deployment.")
 
-    prompt = build_judge_prompt(question, final_answer, gold_answer)
+    prompt = build_judge_prompt(
+        question, final_answer, gold_answer,
+        grading_criteria=grading_criteria,
+        acceptable_variants=acceptable_variants,
+        numeric_tol=numeric_tol,
+    )
 
     if _is_responses_only_model(JUDGE_MODEL):
         resp     = resolved_client.responses.create(
@@ -993,13 +1020,15 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
         # Snapshot the task fields we need — the task object must not cross
         # thread boundaries (SQLAlchemy objects are not thread-safe either).
-        task_id       = task.id
-        task_prompt   = safe_str(task.prompt).strip()
-        task_context  = safe_str(task.context).strip()
-        task_options  = task.options
-        task_attached = safe_str(task.attached_files).strip()
-        gold_answer   = safe_str(task.gold_answer).strip()
-        numeric_tol   = parse_tolerance(task.numeric_tolerance)
+        task_id             = task.id
+        task_prompt         = safe_str(task.prompt).strip()
+        task_context        = safe_str(task.context).strip()
+        task_options        = task.options
+        task_attached       = safe_str(task.attached_files).strip()
+        gold_answer         = safe_str(task.gold_answer).strip()
+        numeric_tol         = parse_tolerance(task.numeric_tolerance)
+        grading_criteria    = safe_str(task.grading_criteria).strip()
+        acceptable_variants = safe_str(task.acceptable_variants).strip()
 
         kind = normalize_task_type(
             safe_str(task.answer_type),
@@ -1082,6 +1111,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
                     # Retry once on transient errors (429, 500, 503)
                     # Skip immediately on permanent errors (404)
+                    trial_needed_retry = False
                     for attempt in range(2):
                         try:
                             ans, conf, (t_in, t_out, t_reason) = call_llm_json(
@@ -1098,6 +1128,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                                         f"  [{current_model}] Trial {t} — 'Insufficient Balance' "
                                         f"(may be transient), retrying in 30s: {e}"
                                     )
+                                    trial_needed_retry = True
                                     time.sleep(30)
                                     continue
                                 raise InsufficientBalanceError(
@@ -1125,9 +1156,17 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                                     f"  [{current_model}] Trial {t} transient error, "
                                     f"retrying in {delay}s: {e}"
                                 )
+                                trial_needed_retry = True
                                 time.sleep(delay)
                             else:
                                 raise  # permanent error or retry also failed
+
+                    if trial_needed_retry:
+                        raise RuntimeError(
+                            f"[{current_model}] Trial {t} required a retry — "
+                            f"stopping model run to preserve benchmark integrity. "
+                            f"Rerun this task once the model is stable."
+                        )
 
                     if t == 1:
                         token_input     = t_in
@@ -1183,7 +1222,10 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     )
                     logger.info(f"  [{current_model}] Judge call...")
                     judge_score_percent, judge_conf, jnotes, judge_tok_in, judge_tok_out = call_judge(
-                        task_prompt, final_answer, gold_answer
+                        task_prompt, final_answer, gold_answer,
+                        grading_criteria=grading_criteria,
+                        acceptable_variants=acceptable_variants,
+                        numeric_tol=numeric_tol if kind == "open_numeric" else None,
                     )
                     eval_method = "judge"
                     notes       = f"Final via consolidation; Judge once; kind={kind}. {jnotes}"

@@ -22,6 +22,31 @@ BATCH_USER_ID    = os.environ.get("BATCH_USER_ID",    "batch_admin")
 BATCH_USER_EMAIL = os.environ.get("BATCH_USER_EMAIL", "batch@accountingbench.local")
 
 
+def setup_error_log(script_name: str) -> str:
+    """Add a WARNING+ FileHandler to the root logger.
+
+    Creates logs/<script_name>_errors_<timestamp>.log in the project root.
+    Returns the path so the caller can print it to the user.
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logs_dir     = os.path.join(project_root, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path  = os.path.join(logs_dir, f"{script_name}_errors_{timestamp}.log")
+
+    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh.setLevel(logging.WARNING)
+    fh.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logging.getLogger().addHandler(fh)
+
+    logger.info(f"Error log: {log_path}")
+    return log_path
+
+
 def ensure_batch_user(db) -> None:
     """Create the batch user row in the users table if it doesn't exist yet."""
     existing = db.query(User).filter_by(id=BATCH_USER_ID).first()
@@ -205,6 +230,54 @@ def resolve_attached_files(raw, uploads_dir: str) -> str | None:
         resolved.append(entry)
 
     return " | ".join(resolved) if resolved else None
+
+
+def check_field_consistency(tasks: list[dict]) -> int:
+    """Check that judge-relevant fields are populated where the pipeline requires them.
+
+    Each dict in `tasks` must have:
+        question_id, answer_type, grading_criteria, numeric_tolerance
+
+    Rules (aligned with pipeline.py judge call):
+      - open_text / journal_entry  → grading_criteria must be non-empty
+      - open_numeric               → numeric_tolerance must be set
+
+    Returns the number of warnings emitted.
+    """
+    logger.info("")
+    logger.info("=== FIELD CONSISTENCY ===")
+    warnings = 0
+
+    for t in tasks:
+        qid         = t.get("question_id") or "?"
+        answer_type = (t.get("answer_type") or "").strip().lower()
+        grading     = (t.get("grading_criteria") or "").strip()
+        tol         = t.get("numeric_tolerance")
+        tol_set     = tol is not None and str(tol).strip() not in ("", "nan", "None")
+
+        if answer_type in ("open_text", "journal_entry") and not grading:
+            logger.warning(
+                f"  MISS  {qid}  →  'grading_criteria' empty for {answer_type} task "
+                f"(judge will have no rubric)"
+            )
+            warnings += 1
+
+        if answer_type == "open_numeric" and not tol_set:
+            logger.warning(
+                f"  MISS  {qid}  →  'numeric_tolerance' not set for open_numeric task "
+                f"(judge has no tolerance band)"
+            )
+            warnings += 1
+
+    if warnings == 0:
+        logger.info(
+            f"  grading_criteria and numeric_tolerance present where required "
+            f"in {len(tasks)} task(s). [OK]"
+        )
+    else:
+        logger.warning(f"=== {warnings} field consistency warning(s) ===")
+
+    return warnings
 
 
 def test_endpoints(models: list) -> None:

@@ -117,7 +117,9 @@ from backend.batch_utils import (
     create_submission,
     get_existing_model_outputs,
     log_summary,
+    setup_error_log,
     test_endpoints,
+    check_field_consistency,
     BATCH_USER_ID,
 )
 
@@ -256,6 +258,7 @@ def main():
         help="Run only specific tasks. Comma-separated question_id values, e.g. 'q_0001,q_0042'.",
     )
     args = parser.parse_args()
+    setup_error_log("rerun_model")
 
     # Resolve model list: --models overrides OPENAI_MODEL_LIST from .env
     if args.models:
@@ -350,6 +353,27 @@ def main():
         for i, (tid, qid, models) in enumerate(work_items, 1):
             logger.info(f"  [{i}/{len(work_items)}] {qid} — would run: {models}")
         logger.info("Dry run complete. No changes made.")
+
+        # Field consistency check — re-query only the tasks that would run
+        task_ids = [tid for tid, _, _ in work_items]
+        if task_ids:
+            db_check = SessionLocal()
+            try:
+                tasks_to_check = db_check.query(BenchmarkTask).filter(
+                    BenchmarkTask.id.in_(task_ids)
+                ).all()
+                check_field_consistency([
+                    {
+                        "question_id":      t.question_id,
+                        "answer_type":      t.answer_type,
+                        "grading_criteria": t.grading_criteria,
+                        "numeric_tolerance": t.numeric_tolerance,
+                    }
+                    for t in tasks_to_check
+                ])
+            finally:
+                db_check.close()
+
         test_endpoints(requested_models)
         return
 

@@ -39,7 +39,7 @@ import json
 import logging
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -55,9 +55,11 @@ from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
     log_summary,
+    setup_error_log,
     test_endpoints,
     resolve_attached_files,
     check_attached_files,
+    check_field_consistency,
     BATCH_USER_ID,
 )
 
@@ -320,6 +322,8 @@ def main():
     parser.add_argument("--approved",      action="store_true", help="Mark tasks as approved + is_public=True")
     args = parser.parse_args()
 
+    setup_error_log("batch_run")
+
     # ── Read Excel ────────────────────────────────────────────────────────────
     df = read_excel(args.file, args.sheet)
     if args.limit:
@@ -389,6 +393,17 @@ def main():
                     logger.warning("  All tasks already exist — nothing would be imported.")
             finally:
                 db.close()
+
+        # ── 4. Field consistency check ────────────────────────────────────────
+        check_field_consistency([
+            {
+                "question_id":      safe(row.get("question_id")) or f"row {i + 1}",
+                "answer_type":      safe(row.get("answer_type")),
+                "grading_criteria": safe(row.get("grading_criteria")),
+                "numeric_tolerance": row.get("numeric_tolerance"),
+            }
+            for i, (_, row) in enumerate(df.iterrows())
+        ])
 
         # ── 5. File check ─────────────────────────────────────────────────────
         logger.info("")
@@ -461,6 +476,8 @@ def main():
                         stop_error = e
                         for f in futures:
                             f.cancel()  # cancel queued (not yet started) tasks
+                except CancelledError:
+                    pass  # future was cancelled because stop_error was set
 
     log_summary(results, title="BATCH RUN SUMMARY")
 
