@@ -783,9 +783,25 @@ The script asks for confirmation before deleting anything. It preserves `setting
 | `--answer-type` | `answer_type` | `single_choice`, `multi_choice`, `open_text`, `open_numeric`, `journal_entry` |
 | `--education-level` | `education_level` | `Professional Examinations`, `University Master's`, `Secondary Vocational` |
 | `--regulatory-framework` | `regulatory_framework` | `Austrian Tax Law`, `IFRS`, `National GAAP`, `Mixed Accounting Framework`, `Mixed: Accounting + Tax` |
-| `--question-ids` | `question_id` | Specific IDs, e.g. `q_0001,q_0042` |
+| `--question-ids` | `question_id` | Exact IDs, prefixes, or ranges — see below |
 
-Filters are applied at the SQL query level (`IN` clause) before the skip-existing check, so they compose cleanly with `--limit` and `--dry-run`.
+Filters are applied at the SQL query level before the skip-existing check, so they compose cleanly with `--limit` and `--dry-run`.
+
+#### `--question-ids` syntax
+
+Each comma-separated token can be one of three forms (mix freely):
+
+| Token form | Example | Matches |
+|---|---|---|
+| Exact | `11908783_0028` | that single task |
+| Prefix | `11908783` | all `11908783_*` tasks |
+| Range | `11908783_0001:11908783_0050` | `_0001` through `_0050` inclusive (lexicographic) |
+
+Multiple tokens are combined with OR logic:
+
+```bash
+--question-ids "11908783,12345678_0001:12345678_0010,99999999_0042"
+```
 
 ### 9.3 Common Commands
 
@@ -817,8 +833,11 @@ python -m backend.rerun_model --models "alawyer" --task-type "calculation" --reg
 # Run only open-ended answer types (best suited for Alawyer)
 python -m backend.rerun_model --models "alawyer" --answer-type "open_text,journal_entry" --max-workers 1
 
-# Re-run specific tasks by ID
-python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "q_0001,q_0042"
+# Re-run specific tasks by ID (exact, prefix, and range — comma-separated, mix freely)
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783_0028"
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783"
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783_0001:11908783_0050"
+python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783,12345678_0001:12345678_0010"
 ```
 
 ### 9.4 Recommended max-workers by model count

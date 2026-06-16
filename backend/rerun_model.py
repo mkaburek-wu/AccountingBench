@@ -108,7 +108,7 @@ logging.basicConfig(
 logger = logging.getLogger("rerun_model")
 
 # ── Imports (after env is loaded) ─────────────────────────────────────────────
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from backend.database import SessionLocal
 from backend.models   import BenchmarkTask
 from backend.processing.pipeline import run_pipeline, InsufficientBalanceError, IncompleteRunError
@@ -179,6 +179,53 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
             db.close()
 
     return result
+
+
+# ── Question-ID filter helpers ────────────────────────────────────────────────
+
+def _parse_question_ids(raw: str | None) -> list[dict] | None:
+    """Parse --question-ids into a list of filter specs.
+
+    Each comma-separated token becomes one dict:
+      {"type": "exact",  "value": "11908783_0028"}
+      {"type": "prefix", "value": "11908783"}
+      {"type": "range",  "start": "11908783_0001", "end": "11908783_0050"}
+
+    A token without '_' and without ':' is treated as a prefix.
+    A token with ':' is treated as a range (start:end, both inclusive).
+    Otherwise it is an exact match.
+    """
+    if not raw:
+        return None
+    specs = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if ":" in token:
+            parts = token.split(":", 1)
+            specs.append({"type": "range", "start": parts[0].strip(), "end": parts[1].strip()})
+        elif "_" not in token:
+            specs.append({"type": "prefix", "value": token})
+        else:
+            specs.append({"type": "exact", "value": token})
+    return specs or None
+
+
+def _build_qid_filter(specs: list[dict]):
+    """Build a SQLAlchemy OR filter from the list produced by _parse_question_ids."""
+    conditions = []
+    for spec in specs:
+        if spec["type"] == "exact":
+            conditions.append(BenchmarkTask.question_id == spec["value"])
+        elif spec["type"] == "prefix":
+            conditions.append(BenchmarkTask.question_id.like(f"{spec['value']}_%"))
+        elif spec["type"] == "range":
+            conditions.append(
+                (BenchmarkTask.question_id >= spec["start"]) &
+                (BenchmarkTask.question_id <= spec["end"])
+            )
+    return or_(*conditions)
 
 
 def main():
@@ -255,7 +302,13 @@ def main():
     parser.add_argument(
         "--question-ids", default=None,
         dest="question_ids",
-        help="Run only specific tasks. Comma-separated question_id values, e.g. 'q_0001,q_0042'.",
+        help=(
+            "Filter tasks by question_id. Comma-separated tokens, each of which can be:\n"
+            "  exact   — '11908783_0028'\n"
+            "  prefix  — '11908783'  (matches all 11908783_* tasks)\n"
+            "  range   — '11908783_0001:11908783_0050'  (inclusive, lexicographic)\n"
+            "Example: '11908783,12345678_0001:12345678_0010,99999999_0042'"
+        ),
     )
     args = parser.parse_args()
     setup_error_log("rerun_model")
@@ -283,7 +336,7 @@ def main():
     filter_answer_type = _split(args.answer_type)
     filter_edu_level   = _split(args.education_level)
     filter_reg_fw      = _split(args.regulatory_framework)
-    filter_qids        = _split(args.question_ids)
+    filter_qids        = _parse_question_ids(args.question_ids)
 
     logger.info(f"Models requested:        {requested_models}")
     logger.info(f"Max workers:             {args.max_workers}")
@@ -295,7 +348,7 @@ def main():
     if filter_answer_type: logger.info(f"Filter answer_type:      {filter_answer_type}")
     if filter_edu_level:   logger.info(f"Filter education_level:  {filter_edu_level}")
     if filter_reg_fw:      logger.info(f"Filter reg. framework:   {filter_reg_fw}")
-    if filter_qids:        logger.info(f"Filter question_ids:     {filter_qids}")
+    if filter_qids:        logger.info(f"Filter question_ids:     {filter_qids!r}")
 
     # ── Load tasks from DB (with optional filters) ────────────────────────────
     db = SessionLocal()
@@ -318,7 +371,7 @@ def main():
         if filter_reg_fw:
             query = query.filter(func.lower(BenchmarkTask.regulatory_framework).in_([_norm(v) for v in filter_reg_fw]))
         if filter_qids:
-            query = query.filter(BenchmarkTask.question_id.in_(filter_qids))
+            query = query.filter(_build_qid_filter(filter_qids))
 
         all_tasks = query.all()
         logger.info(f"Found {len(all_tasks)} tasks matching filters.")

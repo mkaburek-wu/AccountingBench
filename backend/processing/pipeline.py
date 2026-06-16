@@ -422,6 +422,11 @@ def resolve_attached_documents_text(attached_raw: str) -> str:
             if data[:4] == b"%PDF":
                 txt = _pdf_bytes_to_text(data)
                 txt = _truncate_text(txt, ATTACHMENTS_MAX_CHARS)
+                char_count = len(txt) if txt else 0
+                logger.info(
+                    f"[attachment {idx}/{len(urls)}] loaded PDF: {url!r} "
+                    f"({len(data)} bytes → {char_count} chars)"
+                )
                 chunks.append(
                     f"[DOKUMENT {idx}] Quelle: {url}\n\n{txt}"
                     if txt else
@@ -429,9 +434,17 @@ def resolve_attached_documents_text(attached_raw: str) -> str:
                 )
             else:
                 snippet = _truncate_text(data[:4000].decode("utf-8", errors="replace"), 4000)
+                logger.info(
+                    f"[attachment {idx}/{len(urls)}] loaded non-PDF: {url!r} "
+                    f"({len(data)} bytes)"
+                )
                 chunks.append(f"[DOKUMENT {idx}] Quelle: {url}\n\n(Kein PDF. Snippet:)\n{snippet}")
         except Exception as e:
-            chunks.append(f"[DOKUMENT {idx}] Quelle: {url}\n\n(FEHLER: {type(e).__name__}: {e})")
+            logger.error(
+                f"[attachment {idx}/{len(urls)}] failed to load: {url!r} — "
+                f"{type(e).__name__}: {e}"
+            )
+            raise
     return ("\n\n" + "-" * 40 + "\n\n").join(chunks).strip()
 
 
@@ -731,13 +744,18 @@ def call_llm_json(
         return answer, conf, (token_in, token_out, None)
 
     # Alawyer — Austrian legal AI (SSE streaming, custom endpoint)
-    # Docs: Alawyer_API_DOCS.pdf — POST /api/v1/completions with {"query": "...", "mode": "max"}
+    # Docs: Alawyer_API_Docs_030626.pdf — POST /api/v1/completions
+    # Supports native json_schema response_format — no secondary extraction call needed.
     # Rate limit: 10 req/min. Use --max-workers 1 or 2 when running rerun_model.
     if api_mode == "alawyer":
         cfg      = resolved_client  # config dict stored in CLIENT_CACHE
         base_url = cfg["base_url"].rstrip("/")
         api_key  = cfg["api_key"]
         timeout  = cfg["timeout"]
+
+        # Strip the JSON format instruction appended by build_trial_prompt —
+        # response_format handles that natively; the instruction confuses the model.
+        alawyer_query = re.split(r"\nGIB AUSSCHLIESSLICH JSON ZURÜCK", prompt)[0].strip()
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -747,7 +765,28 @@ def call_llm_json(
         resp = req_lib.post(
             f"{base_url}/api/v1/completions",
             headers=headers,
-            json={"query": prompt, "mode": "max"},
+            json={
+                "query": alawyer_query,
+                "mode":  "max",
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "legal_answer",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "answer": {"type": "string"},
+                                "confidence": {
+                                    "type": "number",
+                                    "description": "Confidence in the answer, between 0 and 1.",
+                                },
+                            },
+                            "required": ["answer", "confidence"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+            },
             timeout=timeout,
             stream=True,
         )
@@ -827,27 +866,26 @@ def call_llm_json(
                 return "", None, (None, None, None)
             raise RuntimeError(f"Alawyer upstream error: {payload['error']}")
 
-        raw_answer = (payload.get("response") or "").strip()
-        usage      = payload.get("usage") or {}
-        token_in   = usage.get("prompt_tokens")
-        token_out  = usage.get("completion_tokens")
+        raw_response = (payload.get("response") or "").strip()
+        usage        = payload.get("usage") or {}
+        token_in     = usage.get("prompt_tokens")
+        token_out    = usage.get("completion_tokens")
 
-        logger.debug(f"[LLM←] alawyer | raw_answer={raw_answer[:200]!r}")
+        logger.debug(f"[LLM←] alawyer | raw_response={raw_response[:200]!r}")
 
-        # Alawyer returns natural-language legal analysis, not JSON.
-        # Use gpt-5-mini to extract the structured answer from it.
-        # Extract the actual question from the full trial prompt (which may be prefixed
-        # by large document chunks) to give the extraction step the right context.
-        frage_match = re.search(r"FRAGE:\n(.*?)(?:\n\nOPTIONEN:|\n\nGIB AUSSCHLIESSLICH|$)", prompt, re.DOTALL)
-        task_question_ctx = frage_match.group(1).strip()[:2000] if frage_match else prompt[:2000]
-        extraction_prompt = (
-            "Ein Rechts-KI-System hat die folgende Frage beantwortet. "
-            "Extrahiere die finale Antwort und gib NUR JSON zurück: {\"answer\": \"...\", \"confidence\": 0.0}\n"
-            "WICHTIG: Bei Multiple-Choice-Fragen gib als 'answer' NUR den Buchstaben an (z.B. 'A' oder 'B'). "
-            "Bei offenen Fragen gib die berechnete Zahl oder den Text an. Kein anderer Text.\n\n"
-            f"FRAGE:\n{task_question_ctx}\n\nANTWORT:\n{raw_answer[:3000]}"
-        )
-        answer, conf, _ = call_llm_json(extraction_prompt, model=JUDGE_MODEL, temperature=0.0)
+        # In json_schema mode, response is a JSON-encoded string — parse directly.
+        answer = ""
+        conf   = None
+        try:
+            result = json.loads(raw_response)
+            answer = str(result.get("answer", "")).strip()
+            conf_val = result.get("confidence")
+            if conf_val is not None:
+                conf = max(0.0, min(1.0, float(conf_val)))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            logger.warning(f"[alawyer] Could not parse json_schema response, using raw text: {raw_response[:200]!r}")
+            answer = raw_response
+
         return answer, conf, (token_in, token_out, None)
 
     # GPT-5 / o-series — use Responses API
