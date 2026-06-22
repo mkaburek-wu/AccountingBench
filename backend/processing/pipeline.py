@@ -756,6 +756,13 @@ def call_llm_json(
         # Strip the JSON format instruction appended by build_trial_prompt —
         # response_format handles that natively; the instruction confuses the model.
         alawyer_query = re.split(r"\nGIB AUSSCHLIESSLICH JSON ZURÜCK", prompt)[0].strip()
+        # Add explicit selection hint for choice questions: alawyer has no system prompt
+        # and no format instruction, so without this it lists all options in the answer field.
+        alawyer_query += (
+            "\n\nFalls die Frage Auswahloptionen (A, B, C ...) enthält, gib im Feld \"answer\" "
+            "NUR die Buchstabe(n) der richtigen Antwort(en) an, kommagetrennt "
+            "(z.B. \"A\" oder \"A,C\"). Kein erklärender Text im answer-Feld."
+        )
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -775,7 +782,15 @@ def call_llm_json(
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "answer": {"type": "string"},
+                                "answer": {
+                                    "type": "string",
+                                    "description": (
+                                        "For multiple-choice questions: ONLY the correct letter(s), "
+                                        "comma-separated (e.g. 'A' or 'A,C'). "
+                                        "For single-choice: the one correct letter (e.g. 'B'). "
+                                        "For open questions: concise answer text."
+                                    ),
+                                },
                                 "confidence": {
                                     "type": "number",
                                     "description": "Confidence in the answer, between 0 and 1.",
@@ -874,16 +889,28 @@ def call_llm_json(
         logger.debug(f"[LLM←] alawyer | raw_response={raw_response[:200]!r}")
 
         # In json_schema mode, response is a JSON-encoded string — parse directly.
+        # The inner response may also contain literal newlines inside string values
+        # (same issue as the outer SSE data), so apply the same fix as a fallback.
         answer = ""
         conf   = None
         try:
             result = json.loads(raw_response)
-            answer = str(result.get("answer", "")).strip()
-            conf_val = result.get("confidence")
-            if conf_val is not None:
-                conf = max(0.0, min(1.0, float(conf_val)))
-        except (json.JSONDecodeError, ValueError, TypeError):
-            logger.warning(f"[alawyer] Could not parse json_schema response, using raw text: {raw_response[:200]!r}")
+        except json.JSONDecodeError:
+            try:
+                fixed = raw_response.replace('\r\n', '\\n').replace('\r', '\\n').replace('\n', '\\n')
+                result = json.loads(fixed)
+                logger.warning(f"[alawyer] json_schema response had raw newlines, fixed")
+            except json.JSONDecodeError:
+                logger.warning(f"[alawyer] Could not parse json_schema response, using raw text: {raw_response[:200]!r}")
+                result = None
+        try:
+            if result is not None:
+                answer = str(result.get("answer", "")).strip()
+                conf_val = result.get("confidence")
+                if conf_val is not None:
+                    conf = max(0.0, min(1.0, float(conf_val)))
+        except (ValueError, TypeError):
+            logger.warning(f"[alawyer] Could not extract answer from parsed response: {result!r}")
             answer = raw_response
 
         return answer, conf, (token_in, token_out, None)
