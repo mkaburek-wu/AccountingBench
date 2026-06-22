@@ -119,18 +119,23 @@ def safe(val, default=""):
 def parse_options(raw) -> dict | None:
     """
     Options column may be:
-      - a JSON string: {"a": "text", "b": "text"}
-      - a pipe-separated string: "a) text | b) text | c) text"
+      - JSON string:             {"A": "text", "B": "text"}
+      - pipe-separated:          "A) text | B) text | C) text"
+      - parenthesis-prefixed:    "(A) text (B) text (C) text"   ← e.g. Excel blob
+      - letter-prefix per line:  "A) text\\nB) text"
       - NaN / empty
-    Returns a dict or None.
+    Returns a dict with uppercase letter keys, or None.
+    Falls back to {"raw": s} only when no format matched — which will
+    trigger a WARNING during --dry-run via check_field_consistency.
     """
+    import re as _re
     if raw is None or (isinstance(raw, float) and pd.isna(raw)):
         return None
     s = str(raw).strip()
     if not s:
         return None
 
-    # Try JSON first
+    # 1. Try JSON first
     try:
         parsed = json.loads(s)
         if isinstance(parsed, dict):
@@ -138,19 +143,33 @@ def parse_options(raw) -> dict | None:
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Try pipe-separated "a) text | b) text" format
+    # 2. Pipe-separated: handles both "A) text | B) text" and "(A) text | (B) text"
     if "|" in s:
         result = {}
         for part in s.split("|"):
             part = part.strip()
-            if part and len(part) > 2 and part[1] == ")":
-                key = part[0].lower()
-                val = part[2:].strip()
-                result[key] = val
+            m = _re.match(r'^\(?([A-Za-z])\)\s*(.*)', part, _re.DOTALL)
+            if m:
+                result[m.group(1).upper()] = m.group(2).strip()
         if result:
             return result
 
-    # Store as-is under key "raw" so nothing is lost
+    # 3. Parenthesis-prefixed "(A) text (B) text" — common Excel blob format
+    paren_hits = _re.findall(
+        r'\(([A-Za-z])\)\s*(.+?)(?=\s*\([A-Za-z]\)\s*|\Z)', s, _re.DOTALL
+    )
+    if paren_hits:
+        return {k.upper(): v.strip() for k, v in paren_hits}
+
+    # 4. Letter-prefix per line "A) text\nB) text"
+    letter_hits = _re.findall(
+        r'(?:^|\n)([A-Za-z])\)\s*(.+?)(?=\n[A-Za-z]\)|\Z)', s, _re.DOTALL
+    )
+    if letter_hits:
+        return {k.upper(): v.strip() for k, v in letter_hits}
+
+    # Nothing matched — store raw so data is not lost.
+    # check_field_consistency will emit a WARNING during --dry-run.
     return {"raw": s}
 
 
@@ -401,6 +420,8 @@ def main():
                 "answer_type":      safe(row.get("answer_type")),
                 "grading_criteria": safe(row.get("grading_criteria")),
                 "numeric_tolerance": row.get("numeric_tolerance"),
+                "options":          parse_options(row.get("options")),
+                "gold_answer":      safe(row.get("gold_answer")),
             }
             for i, (_, row) in enumerate(df.iterrows())
         ])

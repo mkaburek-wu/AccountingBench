@@ -421,6 +421,8 @@ def main():
                         "answer_type":      t.answer_type,
                         "grading_criteria": t.grading_criteria,
                         "numeric_tolerance": t.numeric_tolerance,
+                        "options":          t.options,
+                        "gold_answer":      t.gold_answer,
                     }
                     for t in tasks_to_check
                 ])

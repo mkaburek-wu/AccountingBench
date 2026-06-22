@@ -232,15 +232,29 @@ def resolve_attached_files(raw, uploads_dir: str) -> str | None:
     return " | ".join(resolved) if resolved else None
 
 
+VALID_ANSWER_TYPES = {
+    "single_choice", "multi_choice", "open_text", "open_numeric", "journal_entry"
+}
+
+
 def check_field_consistency(tasks: list[dict]) -> int:
     """Check that judge-relevant fields are populated where the pipeline requires them.
 
     Each dict in `tasks` must have:
         question_id, answer_type, grading_criteria, numeric_tolerance
 
+    Optional keys:
+        options     — checked for broken {"raw": ...} format on choice tasks.
+        gold_answer — checked for semicolon delimiter on choice tasks.
+
     Rules (aligned with pipeline.py judge call):
+      - answer_type must be one of VALID_ANSWER_TYPES
       - open_text / journal_entry  → grading_criteria must be non-empty
       - open_numeric               → numeric_tolerance must be set
+      - single_choice / multi_choice with options={"raw": ...} → import format error
+        (pipeline will derive valid_choices=["RAW"] and score all answers as 0)
+      - single_choice / multi_choice gold_answer must use "," not ";" as delimiter
+        (gold_set() splits on comma only — semicolons are never recognised)
 
     Returns the number of warnings emitted.
     """
@@ -254,6 +268,14 @@ def check_field_consistency(tasks: list[dict]) -> int:
         grading     = (t.get("grading_criteria") or "").strip()
         tol         = t.get("numeric_tolerance")
         tol_set     = tol is not None and str(tol).strip() not in ("", "nan", "None")
+
+        if answer_type not in VALID_ANSWER_TYPES:
+            valid_list = ", ".join(sorted(VALID_ANSWER_TYPES))
+            logger.warning(
+                f"  TYPE  {qid}  →  answer_type={answer_type!r} is not a recognised type "
+                f"(valid: {valid_list}). Task will not be scored correctly."
+            )
+            warnings += 1
 
         if answer_type in ("open_text", "journal_entry") and not grading:
             logger.warning(
@@ -269,10 +291,39 @@ def check_field_consistency(tasks: list[dict]) -> int:
             )
             warnings += 1
 
+        # Detect options stored as {"raw": "..."} — means parse_options could not
+        # parse the format. The pipeline will derive valid_choices=["RAW"] and
+        # filter out all model answers, scoring every response as 0.
+        if answer_type in ("single_choice", "multi_choice") and "options" in t:
+            opts = t.get("options")
+            if isinstance(opts, dict) and list(opts.keys()) == ["raw"]:
+                raw_preview = str(opts.get("raw", ""))[:60]
+                logger.warning(
+                    f"  OPTS  {qid}  →  options in unrecognised format (stored as "
+                    f'{{\"raw\": \"...\"}}) — all model answers will score 0. '
+                    f"Fix the options column format before importing. "
+                    f"Raw: {raw_preview!r}"
+                )
+                warnings += 1
+
+        # gold_answer for choice tasks must use "," as delimiter.
+        # gold_set() splits on comma only — semicolons are silently ignored,
+        # causing every model answer to be marked incorrect.
+        if answer_type in ("single_choice", "multi_choice") and "gold_answer" in t:
+            gold = (t.get("gold_answer") or "").strip()
+            if ";" in gold:
+                fixed = gold.replace(";", ",")
+                logger.warning(
+                    f"  GOLD  {qid}  →  gold_answer uses ';' as delimiter: {gold!r}. "
+                    f"gold_set() only splits on ',' — change to {fixed!r} or scoring "
+                    f"will always return 0."
+                )
+                warnings += 1
+
     if warnings == 0:
         logger.info(
-            f"  grading_criteria and numeric_tolerance present where required "
-            f"in {len(tasks)} task(s). [OK]"
+            f"  answer_type, grading_criteria, numeric_tolerance, options, and "
+            f"gold_answer format OK in {len(tasks)} task(s). [OK]"
         )
     else:
         logger.warning(f"=== {warnings} field consistency warning(s) ===")
