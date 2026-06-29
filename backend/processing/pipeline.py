@@ -37,7 +37,6 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests as req_lib
@@ -49,9 +48,9 @@ from backend.database import SessionLocal
 from backend.models import BenchmarkOutput, BenchmarkRun, BenchmarkTask, Submission
 
 try:
-    from pypdf import PdfReader
+    import fitz as _fitz  # PyMuPDF — much more reliable than pypdf for real-world PDFs
 except Exception:
-    PdfReader = None
+    _fitz = None
 
 try:
     from huggingface_hub import hf_hub_download
@@ -386,18 +385,11 @@ def _download_url_to_cache(url: str) -> str:
 
 
 def _pdf_bytes_to_text(pdf_bytes: bytes) -> str:
-    if PdfReader is None:
-        raise RuntimeError("pypdf not available. Install: pip install pypdf")
-    reader = PdfReader(BytesIO(pdf_bytes))
-    texts  = []
-    for page in reader.pages:
-        try:
-            t = page.extract_text() or ""
-        except Exception:
-            t = ""
-        if t.strip():
-            texts.append(t.strip())
-    return "\n\n".join(texts).strip()
+    if _fitz is None:
+        raise RuntimeError("PyMuPDF not available. Install: pip install pymupdf")
+    doc = _fitz.open(stream=pdf_bytes, filetype="pdf")
+    texts = [page.get_text() for page in doc]
+    return "\n\n".join(t for t in texts if t.strip()).strip()
 
 
 def _truncate_text(text: str, max_chars: int) -> str:
@@ -427,11 +419,13 @@ def resolve_attached_documents_text(attached_raw: str) -> str:
                     f"[attachment {idx}/{len(urls)}] loaded PDF: {url!r} "
                     f"({len(data)} bytes → {char_count} chars)"
                 )
-                chunks.append(
-                    f"[DOKUMENT {idx}] Quelle: {url}\n\n{txt}"
-                    if txt else
-                    f"[DOKUMENT {idx}] Quelle: {url}\n\n(Kein Text extrahierbar.)"
-                )
+                if not txt:
+                    raise RuntimeError(
+                        f"PDF_NO_TEXT: attachment {url!r} yielded no extractable text "
+                        f"({len(data)} bytes). The file is likely a scanned image PDF "
+                        f"with no text layer."
+                    )
+                chunks.append(f"[DOKUMENT {idx}] Quelle: {url}\n\n{txt}")
             else:
                 snippet = _truncate_text(data[:4000].decode("utf-8", errors="replace"), 4000)
                 logger.info(
