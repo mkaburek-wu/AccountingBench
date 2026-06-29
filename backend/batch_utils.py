@@ -169,6 +169,38 @@ def check_attached_files(raw, uploads_dir: str) -> tuple[list[str], list[str]]:
     return found, missing
 
 
+def check_pdf_readability(paths: list[str]) -> int:
+    """Try to extract text from each local PDF path.
+    Warns if any PDF yields no text — the same condition that raises PDF_NO_TEXT at runtime.
+    Skips URLs and non-PDF files. Returns the number of warnings emitted.
+    """
+    try:
+        import fitz as _fitz
+    except Exception:
+        logger.warning("  PDF   PyMuPDF not available — skipping PDF readability check")
+        return 0
+
+    warnings = 0
+    for path in paths:
+        if re.match(r"^https?://", path, re.IGNORECASE):
+            continue
+        if not path.lower().endswith(".pdf"):
+            continue
+        try:
+            doc = _fitz.open(path)
+            text = "".join(page.get_text() for page in doc).strip()
+            if not text:
+                logger.warning(
+                    f"  PDF   {path!r}  →  no extractable text "
+                    f"(scanned image PDF). Will raise PDF_NO_TEXT at runtime."
+                )
+                warnings += 1
+        except Exception as exc:
+            logger.warning(f"  PDF   {path!r}  →  could not open: {exc}")
+            warnings += 1
+    return warnings
+
+
 def resolve_attached_files(raw, uploads_dir: str) -> str | None:
     """Resolve the attached_files cell value from an Excel row to a
     pipe-separated string of absolute paths suitable for the pipeline.

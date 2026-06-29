@@ -82,6 +82,12 @@ class IncompleteRunError(RuntimeError):
     Propagates out of run_pipeline so batch scripts can stop cleanly,
     letting already-running parallel tasks finish before exiting."""
 
+
+class TaskLevelError(RuntimeError):
+    """Raised when the task itself is broken (e.g. unreadable PDF attachment).
+    Every model would fail identically, so the run is stopped immediately.
+    Propagates out of run_pipeline so batch scripts can stop cleanly."""
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -274,7 +280,7 @@ def _split_attached_files(raw: str) -> List[str]:
     s = (raw or "").strip()
     if not s:
         return []
-    parts   = re.split(r"[\n\r;,]+", s)
+    parts   = re.split(r"[\n\r;,|]+", s)
     cleaned = []
     for p in parts:
         u = (p.strip().strip('"').strip("'").strip()
@@ -1334,6 +1340,12 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     raise InsufficientBalanceError(
                         f"[{current_model}] Insufficient balance (judge/consolidation call) — stopping run."
                     ) from e
+                if 'PDF_NO_TEXT' in str(e):
+                    thread_db.close()
+                    raise TaskLevelError(str(e)) from e
+                if isinstance(e, FileNotFoundError) and 'Local attached file not found' in str(e):
+                    thread_db.close()
+                    raise TaskLevelError(str(e)) from e
                 logger.error(f"[PIPELINE] [{current_model}] Error: {e}", exc_info=True)
                 thread_db.rollback()
                 return f"ERROR:{current_model}"
@@ -1363,6 +1375,10 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     for f in futures:
                         f.cancel()
                     raise
+                except TaskLevelError:
+                    for f in futures:
+                        f.cancel()
+                    raise
                 if result.startswith("ERROR:"):
                     failed_models.append(result.replace("ERROR:", ""))
                     logger.warning(f"[PIPELINE] Model failed: {result}")
@@ -1389,6 +1405,18 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
 
     except (InsufficientBalanceError, IncompleteRunError):
         raise  # propagate — do not swallow
+
+    except TaskLevelError as e:
+        logger.error(f"[PIPELINE] Submission {submission_id} — task-level error (stopping run): {e}")
+        try:
+            sub = db.query(Submission).filter_by(id=submission_id).first()
+            if sub:
+                sub.status       = "error"
+                sub.completed_at = datetime.now(timezone.utc)
+                db.commit()
+        except Exception:
+            pass
+        return "error"
 
     except Exception as e:
         logger.error(f"[PIPELINE] Submission {submission_id} — fatal error: {e}", exc_info=True)

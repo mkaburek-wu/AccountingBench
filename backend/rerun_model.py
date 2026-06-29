@@ -120,6 +120,8 @@ from backend.batch_utils import (
     setup_error_log,
     test_endpoints,
     check_field_consistency,
+    check_attached_files,
+    check_pdf_readability,
     BATCH_USER_ID,
 )
 
@@ -426,6 +428,19 @@ def main():
                     }
                     for t in tasks_to_check
                 ])
+                uploads_dir = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "backend", "uploads",
+                )
+                for t in tasks_to_check:
+                    if t.attached_files:
+                        found, missing = check_attached_files(t.attached_files, uploads_dir)
+                        for entry in missing:
+                            logger.warning(
+                                f"  MISS  {t.question_id}  →  '{entry}' not found in {uploads_dir}"
+                            )
+                        if found:
+                            check_pdf_readability(found)
             finally:
                 db_check.close()
 

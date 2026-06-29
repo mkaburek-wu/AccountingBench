@@ -60,6 +60,7 @@ from backend.batch_utils import (
     resolve_attached_files,
     check_attached_files,
     check_field_consistency,
+    check_pdf_readability,
     BATCH_USER_ID,
 )
 
@@ -441,6 +442,8 @@ def main():
             total_missing += len(missing)
             for entry in missing:
                 logger.warning(f"  MISS  {qid}  →  '{entry}' not found in {args.uploads_dir}")
+            if found:
+                check_pdf_readability(found)
         if tasks_with_files == 0:
             logger.info("  No attached files referenced in this sheet.")
         else:
@@ -469,7 +472,7 @@ def main():
 
     stop_error: Exception | None = None
 
-    if args.sequential or len(rows) == 1:
+    if args.sequential or len(rows) == 1 or args.max_workers == 1:
         logger.info(f"Running {len(rows)} task(s) sequentially...")
         for i, row in enumerate(rows, start=1):
             logger.info(f"")
