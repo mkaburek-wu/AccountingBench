@@ -1,10 +1,10 @@
-# AccountingBench — Claude Code Instructions
+# CLAUDE.md
 
-This file gives Claude context about the AccountingBench project when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
-## Project Overview
+# AccountingBench — Claude Code Instructions
 
 AccountingBench is an academic LLM benchmarking platform evaluating AI models on accounting tasks (Tax, Financial Accounting, Management Accounting). Built at WU Vienna by the Financial Accounting & Auditing Group and the Board Service Center.
 
@@ -77,8 +77,8 @@ Always run commands from the project root `AccountingBench/`:
 # Install dependencies
 python -m pip install fastapi uvicorn sqlalchemy alembic python-dotenv pyjwt cryptography httpx anthropic openai pandas openpyxl pymupdf python-multipart stripe requests
 
-# Run migrations
-python -m alembic upgrade head
+# Run migrations (alembic.ini lives in backend/, not the project root)
+python -m alembic -c backend/alembic.ini upgrade head
 
 # Start backend
 python -m uvicorn backend.main:app --reload --port 8000
@@ -88,6 +88,8 @@ python -m uvicorn backend.main:app --reload --port 8000
 ```
 DATABASE_URL=sqlite:////Users/yourname/Documents/AccountingBench/backend/accountingbench.db
 ```
+
+Set `DEBUG_PIPELINE=true` in `.env` to enable DEBUG-level logging of full prompts and model responses — essential for diagnosing pipeline scoring issues.
 
 ---
 
@@ -107,6 +109,16 @@ SQLite pool is configured in `backend/database.py`:
 - Kimi-K2.6 needs `"timeout": 600` — it is slow
 - `OPENAI_API_KEY` must be set (can be `not-used`) even if all models use `MODEL_REGISTRY_JSON`
 - Never change `run_pipeline()` signature — it is called from both web API and batch scripts
+- PDF extraction uses PyMuPDF (`fitz`), not `pypdf`. Scanned image PDFs (no text layer) raise a `PDF_NO_TEXT` error, which the pipeline records as `ERROR:{model}` — do not reintroduce `pypdf`
+
+**Constants in `pipeline.py` — must stay fixed across all runs for score comparability:**
+
+| Constant | Value |
+|---|---|
+| `JUDGE_MODEL` | `"gpt-5-mini"` |
+| `N_TRIALS` | `3` |
+| `SYSTEM_PROMPT_VERSION` | `"v3_types"` |
+| `DATASET_VERSION` | `"v3"` |
 
 ---
 
@@ -117,6 +129,17 @@ SQLite pool is configured in `backend/database.py`:
 - **All render logic** → `public/data.js`. HTML only has empty containers with IDs.
 - Script load order in HTML: `results.js` → `data.js` → `main.js`
 - No build step — files are served directly. Test with VS Code Live Server on port 5500.
+
+**HTML pages:**
+
+| File | Purpose |
+|---|---|
+| `index.html` | Overview: scrolling ticker, hero section, mini leaderboard |
+| `leaderboard.html` | Full sortable leaderboard + radar/bar charts |
+| `dashboard.html` | Cost/speed scatter, token bars, calibration chart, KPI cards |
+| `methodology.html` | Tabbed benchmark methodology documentation |
+| `about.html` | Team and affiliation cards |
+| `privacy.html` | Privacy policy |
 
 ---
 
@@ -138,12 +161,19 @@ SQLite pool is configured in `backend/database.py`:
 python -m backend.batch_run --file backend/tasks.xlsx --approved --skip-existing
 python -m backend.batch_run --file backend/tasks.xlsx --approved --max-workers 4
 python -m backend.batch_run --file backend/tasks.xlsx --dry-run
+python -m backend.batch_run --file backend/tasks.xlsx --sheet "Questions"  # default sheet name
 
 # rerun_model.py — run new model on existing DB tasks
 python -m backend.rerun_model --models "ModelName" --dry-run
 python -m backend.rerun_model --models "ModelName" --limit 1 --sequential
 python -m backend.rerun_model --models "ModelName" --max-workers 15
 python -m backend.rerun_model --models "ModelA,ModelB" --max-workers 4
+python -m backend.rerun_model --models "ModelName" --category "Tax"
+python -m backend.rerun_model --models "ModelName" --task-type "calculation"
+python -m backend.rerun_model --models "ModelName" --question-ids "q_0001,q_0042"
+
+# inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
+python -m backend.inspect_db [task_id]
 
 # reset_db.py — wipe all tasks/submissions (dev only)
 python reset_db.py
