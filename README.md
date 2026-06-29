@@ -422,6 +422,8 @@ These fields are read from `benchmark_tasks` and must be set before the pipeline
 | Transient (429, 5xx, timeout, connection reset) | Retry once — 60s delay for 429, 5s for others |
 | Any trial needs a retry | `RuntimeError` raised — model run aborted to preserve benchmark integrity |
 | Not found (404) | Skip model, task marked incomplete → stop |
+| PDF attachment yields no extractable text (scanned image PDF) | `TaskLevelError` raised → all model threads cancelled immediately → run stops |
+| Attached file not found on disk | `TaskLevelError` raised → all model threads cancelled immediately → run stops |
 | Any model fails or is skipped | `IncompleteRunError` raised → stop script after running tasks finish |
 | Insufficient balance | Retry once after 30s; stop script if confirmed |
 
@@ -623,8 +625,8 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | `--sheet` | `Questions` | Sheet name to read from |
 | `--approved` | off | Mark tasks as `validation_status=approved` and `is_public=True` immediately |
 | `--skip-existing` | off | Skip tasks whose `question_id` is already in the database |
-| `--sequential` | off | Run tasks one at a time instead of in parallel |
-| `--max-workers` | `4` | Maximum number of tasks to run in parallel |
+| `--sequential` | off | Run tasks one at a time instead of in parallel. `--max-workers 1` is equivalent. |
+| `--max-workers` | `4` | Maximum number of tasks to run in parallel. Setting this to `1` behaves identically to `--sequential`. |
 | `--limit` | off | Only process the first N tasks (useful for testing) |
 | `--dry-run` | off | Full pre-flight validation — no DB writes, no API calls (see §8.3) |
 | `--uploads-dir` | `backend/uploads` | Folder to search for attached files referenced in the Excel |
@@ -640,7 +642,7 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | 2 | Duplicate IDs | Same `question_id` appearing more than once in the sheet |
 | 3 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
 | 4 | Field consistency | `open_text`/`journal_entry` tasks missing `grading_criteria`; `open_numeric` tasks missing `numeric_tolerance` (judge will have no rubric/tolerance without these) |
-| 5 | Attached files | Which referenced files can / cannot be found under `--uploads-dir` |
+| 5 | Attached files + PDF readability | Which referenced files can / cannot be found under `--uploads-dir`; warns if any PDF has no extractable text (scanned image — would raise `PDF_NO_TEXT` at runtime) |
 | 6 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
 
 ```bash
@@ -869,6 +871,7 @@ Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/bat
 | `setup_error_log(script_name)` | Adds a WARNING+ `FileHandler` to the root logger; writes `logs/<script_name>_errors_<timestamp>.log`. Called automatically at the start of every run. |
 | `check_field_consistency(tasks)` | Validates judge-relevant fields: warns when `grading_criteria` is missing for `open_text`/`journal_entry` tasks or `numeric_tolerance` is missing for `open_numeric` tasks. Called during `--dry-run`. |
 | `check_attached_files()` | Checks which attached file paths can be resolved (dry-run only) |
+| `check_pdf_readability()` | Opens each local PDF with PyMuPDF and warns if no text is extractable (scanned image PDF); same condition that raises `PDF_NO_TEXT` at runtime (dry-run only) |
 | `resolve_attached_files()` | Resolves attached file paths for real runs |
 | `test_endpoints()` | Probes each model's API endpoint (dry-run only) |
 | `BATCH_USER_ID` / `BATCH_USER_EMAIL` | Shared constants |
@@ -993,7 +996,7 @@ Install all packages with:
 
 ```bash
 python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
-    python-dotenv aiofiles python-multipart pandas openpyxl pypdf \
+    python-dotenv aiofiles python-multipart pandas openpyxl pymupdf \
     requests openai anthropic "PyJWT[crypto]" stripe slowapi
 ```
 
