@@ -79,6 +79,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Real benchmark pipeline | ✅ Done | `pipeline.py` — parallel models, LLM judge, per-model timeouts |
 | Batch import + runner | ✅ Done | `batch_run.py` — Excel → DB → pipeline, parallelism control |
 | Model re-run script | ✅ Done | `rerun_model.py` — run new models on existing DB tasks, with task filters |
+| Pre-computed results importer | ✅ Done | `import_precomputed_results.py` — imports already-scored tasks/outputs from an external run, no live API calls |
 | Shared batch utilities | ✅ Done | `batch_utils.py` — shared helpers for batch scripts |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
@@ -138,6 +139,7 @@ accountingbench/
     ├── import_tasks.py            ← One-time Excel → database migration
     ├── batch_run.py               ← Batch import + pipeline runner (see §8)
     ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §9)
+    ├── import_precomputed_results.py ← Import already-scored tasks/outputs from Excel, no API calls (see §9.8)
     ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
@@ -878,6 +880,59 @@ Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/bat
 
 ---
 
+### 9.8 Pre-computed Results Importer (`import_precomputed_results.py`)
+
+`backend/import_precomputed_results.py` imports tasks **and already-scored model outputs** from an Excel file produced by an external run (e.g. a colleague's own offline evaluation script). Unlike `batch_run.py` and `rerun_model.py`, it **never calls a model API or the judge** — it writes `benchmark_tasks` / `benchmark_runs` / `benchmark_outputs` rows directly from the spreadsheet data. Use it when someone hands you a finished results file instead of a task-only Excel to run through the live pipeline.
+
+**Expected Excel layout** — two sheets in the same workbook:
+
+| Sheet | Layout |
+|---|---|
+| `Questions` | Same layout as `batch_run.py`'s ground-truth template (`question_id`, `task_type`, `prompt`, `answer_type`, `gold_answer`, ...) |
+| `Outputs` | One row per `(question_id, model)` pair: `Model`, `run_id`, `question_id`, `model_answer_1/2/3`, `model_confidence_1/2/3`, `final_answer`, `avg_model_confidence`, `score_percent_sc_mc`, `judge_score_percent`, `judge_confidence`, `final_score_percent`, `evaluation_method`, `token_input`, `token_output`, `token_reasoning`, `evaluated_at_utc`, `evaluation_notes` |
+
+**All flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--file` | *(required)* | Path to the Excel file |
+| `--questions-sheet` | `Questions` | Sheet name for tasks |
+| `--outputs-sheet` | `Outputs` | Sheet name for model outputs |
+| `--dry-run` | off | Parse + validate only — no DB writes |
+| `--limit` | off | Only process the first N tasks (useful for testing) |
+| `--user` | `batch_admin` | User ID to attribute submissions to |
+| `--rename-model` | *(none)* | Rename a model on import, e.g. `"DeepSeek-V3.2-2:DeepSeek-V3.2"`. Repeatable. Applied on top of `DEFAULT_RENAMES` in the script (used to fold naming variants from an external run into the model name already used elsewhere in the DB) |
+| `--skip-existing` | off | Skip `(task, model)` pairs that already have a `benchmark_output` row — same dedup logic as `rerun_model.py`, via `get_existing_model_outputs()` |
+
+**Validation (runs on every invocation, dry-run or not):** for every task in `Questions`, confirms there's at least one matching row in `Outputs`, flags missing models and duplicate `(question_id, model)` rows before anything is written.
+
+**What gets written per task:**
+- One `BenchmarkTask` row (via the same `upsert_task()` used by `batch_run.py` — `source="batch_import"`, `is_public=True`, `validation_status="approved"`)
+- One `Submission` row, set directly to `status="done"` with `completed_at` set (no pending → processing → done flow, since there's no live run to track)
+- One shared `run_id` per task (`run_import_<timestamp>_<uuid8>`), used across all of that task's models — matches the same semantics `run_pipeline()` uses (`run_id` groups the models run together *for one task*)
+- One `BenchmarkRun` + one `BenchmarkOutput` row per model, populated straight from the matching `Outputs` row (`judge_token_input`/`judge_token_output` are left `null` if the source sheet doesn't have them)
+
+```bash
+# Pre-flight check — no DB writes, no API calls
+python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx --dry-run
+
+# Test on the first 2 tasks
+python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx --limit 2
+
+# Full import
+python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx
+
+# Re-run safely after a partial import — already-imported (task, model) pairs are skipped
+python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx --skip-existing
+
+# Fold an extra model-naming variant into an existing model name on import
+python -m backend.import_precomputed_results --file backend/uploads/results.xlsx --rename-model "gpt-5.4-preview:gpt-5.4"
+```
+
+Attached files referenced in the `Questions` sheet are resolved the same way as in `batch_run.py` — via `resolve_attached_files()`, recursively searching `backend/uploads/` by filename if the original (often external-machine) absolute path doesn't exist locally. See §8.9.
+
+---
+
 ## 10. Frontend Pages
 
 ### 10.1 Public Site (`public/`)
@@ -1284,5 +1339,5 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.8 · June 2026*
+*AccountingBench Developer Documentation · Version 1.9 · July 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*
