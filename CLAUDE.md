@@ -34,6 +34,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/batch_run.py` — imports tasks from Excel and runs full pipeline on all models
 - `backend/rerun_model.py` — runs new model(s) on existing DB tasks (no Excel needed)
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
+- `backend/recompute_results.py` — recomputes `public/results.js` score fields from a `benchmark_tasks`/`benchmark_outputs` Excel export (e.g. a fresh full rerun); diffs against the current file before writing, see below
 - `backend/processing/pipeline.py` — the real benchmark pipeline (do not break this)
 
 ---
@@ -66,6 +67,22 @@ byEdu: { prof: {...}, master: {...}, voc: {...} }  ← full breakdown by edu lev
 n, priceIn, priceOut, cost, tokTask, speed   ← efficiency
 calib: [{x, y, n}]                           ← confidence calibration
 ```
+
+---
+
+## Recomputing Scores from a Fresh Excel Export
+
+When a full/partial benchmark rerun is exported to Excel (sheets `benchmark_tasks` + `benchmark_outputs`, same layout as the DB tables), use `backend/recompute_results.py` instead of hand-editing scores:
+
+```bash
+python -m backend.recompute_results
+```
+
+It recomputes every score field (category/task-type/answer-type/regulatory-framework/byEdu/n/cost/tokTask/calib) per model from the Excel data, then **diffs the result against the current `public/results.js`** before writing anything:
+- Models listed in `UPDATED_MODELS` (edit this list in the script) get their block replaced and the whole array re-sorted by `overall` descending.
+- All other models are checked field-by-field against their current values — the script refuses to write if any of their **scores** differ unexpectedly (this is the safety gate; it only ever touches the models you told it to).
+- `priceIn`/`priceOut`/`speed` are always carried over unchanged from the current file (no pricing/timing data lives in these exports) — edit them by hand afterward if pricing changed.
+- `token_reasoning` handling is per-model (see `ADD_REASONING_TOKENS` in the script) — it's already folded into `token_output` for some models (gpt-5.x, Kimi) but additive for others (grok, mercury-2); check this assumption before trusting `tokTask`/`cost` for a new model.
 
 ---
 

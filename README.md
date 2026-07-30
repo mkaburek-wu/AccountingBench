@@ -84,6 +84,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Idempotent result writes | ✅ Done | `pipeline.py` upserts on `(task_id, model_name)`; DB-level UNIQUE constraint makes duplicates impossible (see §3.3) |
 | Per-task model scoping | ✅ Done | `rerun_model.py` runs only the models a task is actually missing (see §9.10) |
 | Maintenance scripts | ✅ Done | `dedup_outputs.py`, `backfill_sc_mc_scores.py`, `fix_broken_options.py` — one-off data repairs (see §9.9) |
+| Results.js recompute script | ✅ Done | `recompute_results.py` — recomputes `public/results.js` scores from a benchmark_tasks/benchmark_outputs Excel export, with a diff gate against unintended models (see §10.3) |
 | Data-quality dry-run gate | ✅ Done | `--dry-run` flags buried option markers, option-letter gaps, unwinnable golds, unparseable tolerances (see §8.3) |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
@@ -147,6 +148,7 @@ accountingbench/
     ├── dedup_outputs.py           ← Maintenance: remove duplicate/orphaned run+output rows (see §9.9)
     ├── backfill_sc_mc_scores.py   ← Maintenance: recompute stale SC/MC scores (see §9.9)
     ├── fix_broken_options.py      ← Maintenance: re-parse options stuck as {"raw": ...} (see §9.9)
+    ├── recompute_results.py       ← Recomputes public/results.js from a benchmark_tasks/benchmark_outputs Excel export (see §10.3)
     ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
@@ -1131,6 +1133,22 @@ Contains `BENCHMARK_RESULTS` (one object per model) and `BENCHMARK_META` (datase
 | `note` | Optional warning shown in leaderboard |
 
 **To update dataset composition** (`BENCHMARK_META.categories`, `taskTypes`, `questionFormats`, `educationLevels`, `regulatoryFrameworks_data`): change the `tasks` count — percentages recalculate automatically.
+
+#### Recomputing scores from a fresh Excel export (`recompute_results.py`)
+
+When a colleague hands you a full/partial rerun as an Excel file with `benchmark_tasks` + `benchmark_outputs` sheets (same column layout as the DB tables — `category`, `task_type`, `answer_type`, `regulatory_framework`, `education_level` on the tasks sheet; `model_name`, `final_score_percent`, `token_input`, `token_output`, `token_reasoning`, `avg_model_confidence`/`judge_confidence` on the outputs sheet), don't hand-edit `results.js` — use:
+
+```bash
+python -m backend.recompute_results
+```
+
+Edit the `XLSX_PATH` and `UPDATED_MODELS` constants at the top of the script first (which file to read, and which model names in the array should actually get replaced). The script then:
+
+1. Recomputes every score field (category/task-type/answer-type/regulatory-framework/`byEdu`/`n`/`cost`/`tokTask`/`calib`) per model directly from the Excel rows, using exact-string-match masks (a hybrid/unknown `task_type`, `answer_type`, or `regulatory_framework` value counts toward `overall` only, matching the site's existing convention — e.g. `open_numeric` answers or `interpretation_of_law_and_journal_entry` tasks).
+2. **Diffs every model NOT in `UPDATED_MODELS`** against the current `results.js` and refuses to write if any of their score fields differ — this is the safety gate that catches an export covering more models than you expected.
+3. Re-sorts the full array by `overall` descending and rewrites `public/results.js`, leaving `BENCHMARK_META` and the untouched models' object bodies byte-for-byte identical (only their comment-header rank number may change).
+
+`priceIn`, `priceOut`, and `speed` are always carried over unchanged from the current file — these exports carry no pricing/timing data, so update them by hand if pricing changed. `token_reasoning` is folded into `token_output` for some models but additive for others (see `ADD_REASONING_TOKENS` in the script) — verify this per-model assumption before trusting `tokTask`/`cost` for a model not already in that mapping.
 
 #### `data.js` — render functions
 
