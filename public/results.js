@@ -123,7 +123,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 69.0, tax: 65.0, financial: 69.3, management: null, interpLaw: 60.0, calculation: 66.0, journal: 75.1, multiChoice: 100.0, openText: 70.5, singleChoice: 50.0, journalEntry: 75.3, austrianTax: 67.1, mixedAcc: null, ugb: 75.3, ifrs: null },
     },
     n: '564', priceIn: 5.0, priceOut: 30.0, cost: 0.034374, tokTask: 1546, speed: 57,
-    calib: [{x:0.25,y:75.0,n:1}, {x:0.35,y:0.0,n:1}, {x:0.45,y:23.3,n:3}, {x:0.55,y:35.0,n:14}, {x:0.65,y:37.5,n:17}, {x:0.75,y:65.7,n:111}, {x:0.85,y:80.6,n:240}, {x:0.95,y:95.2,n:177}],
+    calib: [{x:0.25,y:75.0,n:1}, {x:0.35,y:0.0,n:1}, {x:0.45,y:23.3,n:3}, {x:0.55,y:35.0,n:14}, {x:0.65,y:38.8,n:19}, {x:0.75,y:65.9,n:109}, {x:0.85,y:80.6,n:240}, {x:0.95,y:95.2,n:177}],
   },
 
   // ── 2. claude-opus-4-7 ───────────────────────────────────
@@ -140,7 +140,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 60.2, tax: 38.3, financial: 61.4, management: null, interpLaw: 77.5, calculation: 38.4, journal: 71.5, multiChoice: 75.0, openText: 52.1, singleChoice: 75.0, journalEntry: 74.5, austrianTax: 56.9, mixedAcc: null, ugb: 71.2, ifrs: null },
     },
     n: '564', priceIn: 5, priceOut: 25, cost: 0.030248, tokTask: 1933, speed: 37,
-    calib: [{x:0.25,y:0.0,n:3}, {x:0.35,y:14.7,n:15}, {x:0.45,y:31.8,n:11}, {x:0.55,y:29.7,n:31}, {x:0.65,y:58.2,n:47}, {x:0.75,y:68.6,n:134}, {x:0.85,y:83.3,n:220}, {x:0.95,y:97.7,n:103}],
+    calib: [{x:0.25,y:0.0,n:3}, {x:0.35,y:14.7,n:15}, {x:0.45,y:31.8,n:11}, {x:0.55,y:29.7,n:31}, {x:0.65,y:57.4,n:49}, {x:0.75,y:68.9,n:133}, {x:0.85,y:83.4,n:219}, {x:0.95,y:97.7,n:103}],
   },
 
   // ── 3. gpt-5.4 ───────────────────────────────────
@@ -156,11 +156,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 90.6, tax: 77.8, financial: 91.7, management: 92.9, interpLaw: 90.6, calculation: null, journal: null, multiChoice: 90.6, openText: 100.0, singleChoice: 90.0, journalEntry: null, austrianTax: 75.8, mixedAcc: 91.7, ugb: 88.3, ifrs: 98.0 },
       voc:    { overall: 58.3, tax: 23.3, financial: 60.3, management: null, interpLaw: 79.5, calculation: 31.5, journal: 72.4, multiChoice: 100.0, openText: 48.7, singleChoice: 75.0, journalEntry: 74.1, austrianTax: 54.0, mixedAcc: null, ugb: 72.7, ifrs: null },
     },
-    n: '564', priceIn: 2.5, priceOut: 15.0, cost: 0.023853, tokTask: 1997, speed: 83.3,
-    calib: [
-      {x:0.45,y:17.9,n:7},{x:0.55,y:17.7,n:25},{x:0.65,y:44.8,n:23},
-      {x:0.75,y:58.2,n:86},{x:0.85,y:69.1,n:142},{x:0.95,y:90.8,n:231},
-    ],
+    n: '564', priceIn: 2.5, priceOut: 15.0, cost: 0.024196, tokTask: 2017, speed: 83.3,
+    calib: [{x:0.15,y:0.0,n:2}, {x:0.25,y:85.0,n:2}, {x:0.35,y:0.0,n:2}, {x:0.45,y:17.9,n:7}, {x:0.55,y:17.7,n:25}, {x:0.65,y:44.6,n:25}, {x:0.75,y:57.1,n:87}, {x:0.85,y:68.5,n:152}, {x:0.95,y:90.6,n:262}],
   },
 
   // ── 4. gpt-5.2 ───────────────────────────────────
@@ -176,12 +173,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 90.0, tax: 77.8, financial: 90.7, management: 92.9, interpLaw: 90.0, calculation: null, journal: null, multiChoice: 91.0, openText: 95.0, singleChoice: 80.0, journalEntry: null, austrianTax: 75.8, mixedAcc: 90.6, ugb: 88.7, ifrs: 98.0 },
       voc:    { overall: 57.2, tax: 13.3, financial: 59.7, management: null, interpLaw: 70.0, calculation: 28.8, journal: 76.0, multiChoice: 100.0, openText: 49.0, singleChoice: 62.5, journalEntry: 76.4, austrianTax: 52.1, mixedAcc: null, ugb: 74.2, ifrs: null },
     },
-    n: '564', priceIn: 1.75, priceOut: 14.0, cost: 0.017876, tokTask: 1699, speed: 79.8,
-    calib: [
-      {x:0.15,y:21.2,n:4},{x:0.25,y:7.5,n:4},{x:0.35,y:10.9,n:16},
-      {x:0.45,y:21.9,n:18},{x:0.55,y:42.8,n:35},{x:0.65,y:59.0,n:138},
-      {x:0.75,y:71.4,n:162},{x:0.85,y:94.8,n:99},{x:0.95,y:100.0,n:44},
-    ],
+    n: '564', priceIn: 1.75, priceOut: 14.0, cost: 0.018492, tokTask: 1741, speed: 79.8,
+    calib: [{x:0.15,y:21.2,n:4}, {x:0.25,y:7.5,n:4}, {x:0.35,y:10.9,n:16}, {x:0.45,y:21.9,n:18}, {x:0.55,y:42.1,n:36}, {x:0.65,y:60.3,n:155}, {x:0.75,y:73.8,n:183}, {x:0.85,y:94.1,n:101}, {x:0.95,y:100.0,n:47}],
   },
 
   // ── 5. claude-opus-4-6 ───────────────────────────────────
@@ -214,12 +207,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 90.7, tax: 86.8, financial: 90.6, management: 92.4, interpLaw: 90.7, calculation: null, journal: null, multiChoice: 90.7, openText: 100.0, singleChoice: 90.0, journalEntry: null, austrianTax: 85.6, mixedAcc: 92.4, ugb: 86.1, ifrs: 99.0 },
       voc:    { overall: 59.2, tax: 33.3, financial: 60.6, management: null, interpLaw: 87.0, calculation: 30.9, journal: 71.8, multiChoice: 75.0, openText: 47.1, singleChoice: 87.5, journalEntry: 76.8, austrianTax: 55.4, mixedAcc: null, ugb: 71.5, ifrs: null },
     },
-    n: '564', priceIn: 3.0, priceOut: 15.0, cost: 0.015551, tokTask: 1578, speed: 44.5,
-    calib: [
-      {x:0.25,y:9.1,n:16},{x:0.35,y:20.4,n:14},{x:0.45,y:30.9,n:23},
-      {x:0.55,y:42.3,n:37},{x:0.65,y:53.2,n:63},{x:0.75,y:65.7,n:117},
-      {x:0.85,y:82.5,n:123},{x:0.95,y:97.1,n:69},
-    ],
+    n: '564', priceIn: 3.0, priceOut: 15.0, cost: 0.015827, tokTask: 1594, speed: 44.5,
+    calib: [{x:0.05,y:70.0,n:1}, {x:0.15,y:13.3,n:3}, {x:0.25,y:9.0,n:15}, {x:0.35,y:19.0,n:15}, {x:0.45,y:33.1,n:25}, {x:0.55,y:46.4,n:61}, {x:0.65,y:53.6,n:86}, {x:0.75,y:63.4,n:149}, {x:0.85,y:80.0,n:136}, {x:0.95,y:95.9,n:73}],
   },
 
   // ── 7. gpt-5-mini ───────────────────────────────────
@@ -236,7 +225,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 50.9, tax: 21.0, financial: 52.6, management: null, interpLaw: 77.5, calculation: 23.5, journal: 63.2, multiChoice: 75.0, openText: 40.5, singleChoice: 75.0, journalEntry: 65.0, austrianTax: 47.7, mixedAcc: null, ugb: 61.5, ifrs: null },
     },
     n: '564', priceIn: 0.25, priceOut: 2.0, cost: 0.003254, tokTask: 2048, speed: 79.3,
-    calib: [{x:0.05,y:11.7,n:3}, {x:0.15,y:11.6,n:17}, {x:0.25,y:29.1,n:29}, {x:0.35,y:31.3,n:28}, {x:0.45,y:42.2,n:26}, {x:0.55,y:43.6,n:42}, {x:0.65,y:51.4,n:74}, {x:0.75,y:47.9,n:85}, {x:0.85,y:69.6,n:128}, {x:0.95,y:86.2,n:132}],
+    calib: [{x:0.05,y:11.7,n:3}, {x:0.15,y:11.6,n:17}, {x:0.25,y:29.1,n:29}, {x:0.35,y:31.3,n:28}, {x:0.45,y:42.2,n:26}, {x:0.55,y:43.6,n:44}, {x:0.65,y:51.4,n:75}, {x:0.75,y:48.4,n:83}, {x:0.85,y:69.6,n:127}, {x:0.95,y:86.2,n:132}],
   },
 
   // ── 8. Kimi-K2.6 ───────────────────────────────────
@@ -254,7 +243,7 @@ const BENCHMARK_RESULTS = [
     },
     n: '549/564', priceIn: 0.95, priceOut: 4, cost: 0.052311, tokTask: 13524, speed: 41.7,
     note: '15 tasks not completed for this model. Scored on 549/564 tasks.',
-    calib: [{x:0.05,y:35.0,n:2}, {x:0.15,y:0.0,n:1}, {x:0.45,y:0.0,n:2}, {x:0.55,y:17.0,n:5}, {x:0.65,y:26.0,n:7}, {x:0.75,y:18.4,n:19}, {x:0.85,y:37.6,n:225}, {x:0.95,y:77.4,n:288}],
+    calib: [{x:0.05,y:35.0,n:2}, {x:0.15,y:0.0,n:1}, {x:0.45,y:0.0,n:2}, {x:0.55,y:17.0,n:5}, {x:0.65,y:19.2,n:10}, {x:0.75,y:21.2,n:16}, {x:0.85,y:37.6,n:225}, {x:0.95,y:77.4,n:288}],
   },
 
   // ── 9. Mistral-Large-3 ───────────────────────────────────
@@ -287,11 +276,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 80.0, tax: 68.7, financial: 76.3, management: 91.2, interpLaw: 80.0, calculation: null, journal: null, multiChoice: 82.8, openText: 90.0, singleChoice: 50.0, journalEntry: null, austrianTax: 65.9, mixedAcc: 83.2, ugb: 63.4, ifrs: 97.3 },
       voc:    { overall: 47.5, tax: 27.7, financial: 48.6, management: null, interpLaw: 74.5, calculation: 22.7, journal: 57.5, multiChoice: 75.0, openText: 35.6, singleChoice: 75.0, journalEntry: 63.9, austrianTax: 43.0, mixedAcc: null, ugb: 62.2, ifrs: null },
     },
-    n: '564', priceIn: 0.2, priceOut: 0.5, cost: 0.00124, tokTask: 2797, speed: 171.7,
-    calib: [
-      {x:0.55,y:5.0,n:4},{x:0.65,y:2.5,n:8},{x:0.75,y:8.4,n:20},
-      {x:0.85,y:30.8,n:212},{x:0.95,y:68.4,n:274},
-    ],
+    n: '564', priceIn: 0.2, priceOut: 0.5, cost: 0.001301, tokTask: 2917, speed: 171.7,
+    calib: [{x:0.25,y:35.0,n:2}, {x:0.55,y:5.0,n:4}, {x:0.65,y:2.2,n:9}, {x:0.75,y:14.5,n:22}, {x:0.85,y:31.7,n:221}, {x:0.95,y:68.4,n:306}],
   },
 
   // ── 11. gpt-4o ───────────────────────────────────
@@ -307,12 +293,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 89.3, tax: 79.9, financial: 89.7, management: 91.8, interpLaw: 89.3, calculation: null, journal: null, multiChoice: 90.1, openText: 100.0, singleChoice: 80.0, journalEntry: null, austrianTax: 78.0, mixedAcc: 89.9, ugb: 90.1, ifrs: 100.0 },
       voc:    { overall: 36.1, tax: 6.7, financial: 37.7, management: null, interpLaw: 80.0, calculation: 12.3, journal: 38.5, multiChoice: 100.0, openText: 24.1, singleChoice: 75.0, journalEntry: 41.1, austrianTax: 34.1, mixedAcc: null, ugb: 42.5, ifrs: null },
     },
-    n: '564', priceIn: 2.5, priceOut: 10.0, cost: 0.003193, tokTask: 681, speed: 134.2,
-    calib: [
-      {x:0.05,y:0.0,n:4},{x:0.15,y:0.0,n:3},{x:0.25,y:8.0,n:5},
-      {x:0.35,y:12.5,n:4},{x:0.45,y:8.8,n:4},{x:0.55,y:22.5,n:4},
-      {x:0.85,y:59.1,n:238},{x:0.95,y:57.5,n:188},
-    ],
+    n: '564', priceIn: 2.5, priceOut: 10.0, cost: 0.003213, tokTask: 682, speed: 134.2,
+    calib: [{x:0.05,y:2.5,n:81}, {x:0.15,y:0.0,n:3}, {x:0.25,y:6.7,n:6}, {x:0.35,y:12.5,n:4}, {x:0.45,y:8.8,n:4}, {x:0.55,y:26.0,n:5}, {x:0.65,y:20.0,n:1}, {x:0.75,y:52.0,n:2}, {x:0.85,y:57.2,n:259}, {x:0.95,y:56.0,n:199}],
   },
 
   // ── 12. DeepSeek-V3.2 ───────────────────────────────────
@@ -329,7 +311,7 @@ const BENCHMARK_RESULTS = [
       voc:    { overall: 31.1, tax: 21.0, financial: 31.6, management: null, interpLaw: 67.0, calculation: 12.0, journal: 32.7, multiChoice: 75.0, openText: 24.6, singleChoice: 62.5, journalEntry: 25.3, austrianTax: 32.0, mixedAcc: null, ugb: 27.9, ifrs: null },
     },
     n: '564', priceIn: 0.28, priceOut: 0.42, cost: 0.000313, tokTask: 925, speed: 35.7,
-    calib: [{x:0.05,y:30.0,n:2}, {x:0.15,y:6.0,n:5}, {x:0.25,y:0.0,n:6}, {x:0.35,y:4.0,n:5}, {x:0.45,y:0.0,n:4}, {x:0.55,y:3.3,n:6}, {x:0.65,y:12.7,n:12}, {x:0.75,y:17.8,n:26}, {x:0.85,y:44.2,n:419}, {x:0.95,y:81.2,n:79}],
+    calib: [{x:0.05,y:30.0,n:2}, {x:0.15,y:6.0,n:5}, {x:0.25,y:0.0,n:6}, {x:0.35,y:4.0,n:5}, {x:0.45,y:0.0,n:4}, {x:0.55,y:3.3,n:6}, {x:0.65,y:12.5,n:13}, {x:0.75,y:24.3,n:54}, {x:0.85,y:45.3,n:390}, {x:0.95,y:81.2,n:79}],
   },
 
   // ── 13. mercury-2 ───────────────────────────────────
@@ -345,12 +327,8 @@ const BENCHMARK_RESULTS = [
       master: { overall: 82.4, tax: 66.0, financial: 81.8, management: 89.2, interpLaw: 82.4, calculation: null, journal: null, multiChoice: 82.4, openText: 100.0, singleChoice: 80.0, journalEntry: null, austrianTax: 62.9, mixedAcc: 86.9, ugb: 73.0, ifrs: 99.0 },
       voc:    { overall: 37.9, tax: 21.0, financial: 38.9, management: null, interpLaw: 77.0, calculation: 16.7, journal: 40.1, multiChoice: 75.0, openText: 26.1, singleChoice: 75.0, journalEntry: 46.1, austrianTax: 35.4, mixedAcc: null, ugb: 46.3, ifrs: null },
     },
-    n: '564', priceIn: 0.25, priceOut: 0.75, cost: 0.000885, tokTask: 1492, speed: 1023.0,
-    calib: [
-      {x:0.25,y:2.0,n:5},{x:0.35,y:0.0,n:5},{x:0.45,y:13.3,n:6},
-      {x:0.55,y:7.5,n:4},{x:0.65,y:5.0,n:9},{x:0.75,y:13.8,n:6},
-      {x:0.85,y:31.2,n:30},{x:0.95,y:47.6,n:453},
-    ],
+    n: '564', priceIn: 0.25, priceOut: 0.75, cost: 0.000923, tokTask: 1541, speed: 1023.0,
+    calib: [{x:0.15,y:20.0,n:2}, {x:0.25,y:2.0,n:5}, {x:0.35,y:0.0,n:5}, {x:0.45,y:13.3,n:6}, {x:0.55,y:7.5,n:4}, {x:0.65,y:5.0,n:9}, {x:0.75,y:13.8,n:6}, {x:0.85,y:31.0,n:34}, {x:0.95,y:47.0,n:493}],
   },
 
 ];

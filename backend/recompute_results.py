@@ -1,29 +1,48 @@
 """
-One-off script: recompute per-model benchmark scores from a fresh Excel export
-and compare against the current public/results.js.
+Regenerate public/results.js from benchmark results.
+
+Computes every BENCHMARK_RESULTS field per model (category / task-type /
+answer-type / framework / education-level scores, byEdu breakdown, calibration
+bins, tokens and cost), diffs the result against what results.js currently
+says, and — with --write — rewrites the BENCHMARK_RESULTS array in place.
+
+The database is the source of truth: `public/results.js` is a generated
+artefact, so nothing here should ever be edited by hand.
 
 Usage (from project root):
-    python -m backend.recompute_results
+    # report only — computes, diffs, writes nothing. Exits 1 on a score change.
+    python -m backend.recompute_results --check
 
-Reads backend/uploads/300726_results_N564.xlsx (sheets benchmark_tasks,
-benchmark_outputs), computes every BENCHMARK_RESULTS field per model, diffs
-the 10 "should be unchanged" models against the current results.js, and
-prints ready-to-paste JS blocks for the 3 models that actually changed
-(gpt-5.5, claude-opus-4-7, Kimi-K2.6).
+    # regenerate results.js (refuses to write if an unexpected score moved)
+    python -m backend.recompute_results --write
+
+    # restrict the "expected to change" set; every other model is diff-checked
+    # strictly and must match results.js exactly
+    python -m backend.recompute_results --write --models "gpt-5.5,Kimi-K2.6"
+
+    # reproduce an older run from an Excel export instead of the live DB
+    python -m backend.recompute_results --check --from-excel backend/uploads/300726_results_N564.xlsx
+
+Models named by --models are treated as "expected to change" and are written
+with freshly computed values. Every other model is compared field-by-field
+against results.js; any score difference is treated as unexpected and blocks a
+--write. With no --models, every model in the data is refreshed.
 """
-import re
+import argparse
 import json
+import re
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-XLSX_PATH = ROOT / "backend" / "uploads" / "300726_results_N564.xlsx"
 RESULTS_JS_PATH = ROOT / "public" / "results.js"
 
-UPDATED_MODELS = [
-    "gpt-5.5", "claude-opus-4-7", "Kimi-K2.6",
-    "claude-opus-4-6", "Mistral-Large-3", "DeepSeek-V3.2", "gpt-5-mini",
+# Task-metadata columns the score partitioning needs, in both data sources.
+TASK_COLUMNS = [
+    "id", "category", "task_type", "answer_type",
+    "regulatory_framework", "education_level",
 ]
 
 SCORE_FIELDS = [
@@ -40,15 +59,63 @@ SCORE_FIELDS = [
 ADD_REASONING_TOKENS = {"grok-4-fast-reasoning", "mercury-2"}
 
 
-def load_data():
-    tasks = pd.read_excel(XLSX_PATH, sheet_name="benchmark_tasks")
-    outputs = pd.read_excel(XLSX_PATH, sheet_name="benchmark_outputs")
-    task_meta = tasks[["id", "category", "task_type", "answer_type",
-                        "regulatory_framework", "education_level"]].rename(
-        columns={"id": "task_id"}
-    )
-    df = outputs.merge(task_meta, on="task_id", how="left")
-    return df
+def _merge(tasks: pd.DataFrame, outputs: pd.DataFrame) -> pd.DataFrame:
+    """Attach task metadata to each output row (shared by both data sources)."""
+    task_meta = tasks[TASK_COLUMNS].rename(columns={"id": "task_id"})
+    return outputs.merge(task_meta, on="task_id", how="left")
+
+
+def load_data_from_db(public_only: bool = True) -> pd.DataFrame:
+    """Read benchmark rows straight from the database — the default source.
+
+    Reading the DB rather than a dated Excel export removes the manual
+    export step, and with it the risk of publishing numbers computed from a
+    snapshot that predates the latest repair or re-run.
+
+    Only public tasks are counted by default, matching what the site reports.
+    """
+    from backend.database import SessionLocal
+    from backend.models import BenchmarkOutput, BenchmarkTask
+
+    db = SessionLocal()
+    try:
+        task_q = db.query(*[getattr(BenchmarkTask, c) for c in TASK_COLUMNS])
+        if public_only:
+            task_q = task_q.filter(BenchmarkTask.is_public.is_(True))
+        tasks = pd.DataFrame(task_q.all(), columns=TASK_COLUMNS)
+
+        out_cols = [
+            "task_id", "model_name", "final_score_percent",
+            "avg_model_confidence", "judge_confidence",
+            "token_input", "token_output", "token_reasoning",
+        ]
+        outputs = pd.DataFrame(
+            db.query(*[getattr(BenchmarkOutput, c) for c in out_cols]).all(),
+            columns=out_cols,
+        )
+    finally:
+        db.close()
+
+    # Inner-join semantics: outputs belonging to non-public tasks are dropped.
+    df = _merge(tasks, outputs)
+    return df[df["category"].notna()].copy() if public_only else df
+
+
+def load_data_from_excel(xlsx_path: Path) -> pd.DataFrame:
+    """Read from a DB→Excel export. Kept so an earlier published run can be
+    reproduced exactly, and as an independent cross-check of the DB path."""
+    tasks = pd.read_excel(xlsx_path, sheet_name="benchmark_tasks")
+    outputs = pd.read_excel(xlsx_path, sheet_name="benchmark_outputs")
+    return _merge(tasks, outputs)
+
+
+def count_tasks(df: pd.DataFrame) -> int:
+    """Total distinct tasks in the dataset — the denominator for `n`/`note`.
+
+    Derived, never hardcoded: the count changes whenever tasks are added or
+    removed, and a stale literal silently mislabels every model's coverage.
+    """
+    return int(df["task_id"].nunique())
 
 
 def avg(series_mask, scores):
@@ -88,6 +155,12 @@ def calibration(sub: pd.DataFrame):
     conf = sub["avg_model_confidence"].fillna(sub["judge_confidence"])
     valid = conf.notna()
     conf = conf[valid]
+    # Round before binning. Confidences are means of three trial values, so many
+    # land exactly on a decile edge — and float noise decides which side. The
+    # same value reads as 0.20000000000000004 from SQLite but 0.2 from an Excel
+    # round-trip, putting it in a different bin and shifting calib counts for
+    # otherwise identical data. Rounding makes the bins reproducible.
+    conf = conf.round(6)
     scores = sub.loc[valid, "final_score_percent"]
     if len(conf) == 0:
         return []
@@ -105,9 +178,12 @@ def calibration(sub: pd.DataFrame):
     return out
 
 
-def compute_model(df: pd.DataFrame, model: str, price_in=None, price_out=None):
+def compute_model(df: pd.DataFrame, model: str, price_in=None, price_out=None,
+                  total_tasks: int | None = None):
     sub = df[df["model_name"] == model].copy()
     n_rows = len(sub)
+    if total_tasks is None:
+        total_tasks = count_tasks(df)
 
     block = score_block(sub)
 
@@ -131,8 +207,9 @@ def compute_model(df: pd.DataFrame, model: str, price_in=None, price_out=None):
     else:
         block["cost"] = None
 
-    block["n"] = str(n_rows) if n_rows == 564 else f"{n_rows}/564"
+    block["n"] = str(n_rows) if n_rows == total_tasks else f"{n_rows}/{total_tasks}"
     block["n_rows"] = n_rows
+    block["total_tasks"] = total_tasks
     block["calib"] = calibration(sub)
     return block
 
@@ -208,9 +285,24 @@ def _extract_top_level_objects(array_text: str):
 
 
 def _js_object_to_json(block: str) -> str:
+    """Convert one JS model object literal into strict JSON.
+
+    Single-quoted JS strings are rewritten to double-quoted JSON strings by
+    regex, which cannot represent an apostrophe *inside* such a string. Rather
+    than silently emitting mangled JSON (an `org` of "O'Reilly", or a
+    hand-edited `note`, would corrupt the whole object and hence the diff), an
+    odd number of quotes is rejected outright.
+    """
+    if block.count("'") % 2 != 0:
+        raise ValueError(
+            "Cannot parse results.js: an odd number of single quotes in a model "
+            "object suggests an apostrophe inside a string value, which this "
+            "converter cannot represent. Use a double-quoted string, or escape "
+            "the apostrophe, in:\n" + block[:200]
+        )
     # quote unquoted object keys: `  name:` -> `  "name":`
     block = re.sub(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:', r'\1"\2":', block)
-    # convert single-quoted strings to double-quoted (values don't contain embedded quotes in this file)
+    # convert single-quoted strings to double-quoted
     block = re.sub(r"'([^']*)'", r'"\1"', block)
     # remove trailing commas before } or ]
     block = re.sub(r',(\s*[}\]])', r'\1', block)
@@ -260,11 +352,13 @@ def format_model_js(model_name: str, computed: dict, cur: dict, comment_num: int
         "{x:%s,y:%s,n:%s}" % (b["x"], b["y"], b["n"]) for b in computed["calib"]
     )
 
+    total = computed.get("total_tasks")
     note_line = ""
-    if computed["n_rows"] < 564:
-        missing = 564 - computed["n_rows"]
+    if total and computed["n_rows"] < total:
+        missing = total - computed["n_rows"]
         unit = "task" if missing == 1 else "tasks"
-        note = f"{missing} {unit} not completed for this model. Scored on {computed['n_rows']}/564 tasks."
+        note = (f"{missing} {unit} not completed for this model. "
+                f"Scored on {computed['n_rows']}/{total} tasks.")
         note_line = f"\n    note: '{note}',"
 
     lines = []
@@ -292,24 +386,81 @@ def format_model_js(model_name: str, computed: dict, cur: dict, comment_num: int
     return "\n".join(lines)
 
 
-def main():
-    df = load_data()
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(
+        description="Regenerate public/results.js from benchmark results.",
+    )
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true",
+                     help="Compute and diff only; write nothing. Exits 1 on an "
+                          "unexpected score change. This is the default.")
+    mode.add_argument("--write", action="store_true",
+                     help="Rewrite the BENCHMARK_RESULTS array in public/results.js "
+                          "(refuses if an unexpected score moved).")
+    p.add_argument("--models", default=None,
+                   help="Comma-separated models expected to change. Every other "
+                        "model is diff-checked strictly. Default: all models.")
+    p.add_argument("--from-excel", default=None, metavar="PATH",
+                   help="Read from a DB→Excel export instead of the live database.")
+    p.add_argument("--include-private", action="store_true",
+                   help="Include non-public tasks (DB source only). Default: "
+                        "public tasks only, matching the site.")
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    if args.from_excel:
+        df = load_data_from_excel(Path(args.from_excel))
+        source = f"Excel export {args.from_excel}"
+    else:
+        df = load_data_from_db(public_only=not args.include_private)
+        source = "database" + ("" if args.include_private else " (public tasks only)")
+
+    total_tasks = count_tasks(df)
     current, raw_blocks = parse_current_results_js()
     all_models = sorted(df["model_name"].dropna().unique().tolist())
 
-    print(f"Models found in export: {all_models}\n")
+    # results.js is the publication surface: name/org/color/priceIn/priceOut/
+    # speed are curated by hand and cannot be derived from the DB. A model with
+    # no entry there is deliberately unpublished (e.g. partial coverage), not an
+    # error — so it is reported and skipped rather than blocking the run.
+    published   = [m for m in all_models if m in current]
+    unpublished = [m for m in all_models if m not in current]
+
+    # Models named by --models are "expected to change"; everything else must
+    # match results.js exactly. With no --models, refresh every published model.
+    if args.models:
+        updated_models = [m.strip() for m in args.models.split(",") if m.strip()]
+        unknown = [m for m in updated_models if m not in all_models]
+        if unknown:
+            print(f"!! --models names models absent from the data: {unknown}")
+            return 1
+    else:
+        updated_models = list(published)
+
+    print(f"Source: {source}")
+    print(f"Tasks:  {total_tasks}")
+    print(f"Models: {len(published)} published, {len(all_models)} in data")
+    if unpublished:
+        print(f"        not in results.js, skipped: {unpublished}")
+    print()
 
     print("=" * 70)
-    print("DEEP DIFF CHECK for models with UNCHANGED task count (should match on every field)")
+    print("DEEP DIFF CHECK for models NOT expected to change (must match on every field)")
     print("=" * 70)
-    unchanged = [m for m in all_models if m not in UPDATED_MODELS]
+    unchanged = [m for m in published if m not in updated_models]
+    if not unchanged:
+        print("  (none — every model is being refreshed)")
     any_mismatch = False  # blocking: score-field mismatches only (n/tokTask/cost/calib drift is expected)
     for m in unchanged:
         cur = current.get(m)
         if cur is None:
             print(f"[{m}] NOT FOUND in current results.js — skipping diff")
             continue
-        computed = compute_model(df, m, price_in=cur.get("priceIn"), price_out=cur.get("priceOut"))
+        computed = compute_model(df, m, price_in=cur.get("priceIn"),
+                                 price_out=cur.get("priceOut"), total_tasks=total_tasks)
         info_mismatches = deep_diff(computed, cur, include_tokens=True)
         score_mismatches = deep_diff(computed, cur, include_tokens=False)
         if score_mismatches:
@@ -326,69 +477,69 @@ def main():
 
     print()
     print("=" * 70)
-    print(f"COMPUTED VALUES for the {len(UPDATED_MODELS)} UPDATED models")
+    print(f"COMPUTED VALUES for the {len(updated_models)} model(s) being refreshed")
     print("=" * 70)
     computed_by_model = {}
-    for m in UPDATED_MODELS:
+    for m in updated_models:
         cur = current.get(m, {})
-        computed = compute_model(df, m, price_in=cur.get("priceIn"), price_out=cur.get("priceOut"))
+        computed = compute_model(df, m, price_in=cur.get("priceIn"),
+                                 price_out=cur.get("priceOut"), total_tasks=total_tasks)
         computed_by_model[m] = computed
         print(f"\n--- {m} ---")
-        print(f"  rows: {computed['n_rows']} / 564 (was {cur.get('n')})")
+        print(f"  rows: {computed['n_rows']} / {total_tasks} (was {cur.get('n')})")
         print(f"  overall: {computed['overall']}  (was {cur.get('overall')})")
         print(f"  cost: {computed['cost']} (was {cur.get('cost')})  tokTask: {computed['tokTask']} (was {cur.get('tokTask')})")
 
     print()
     if any_mismatch:
         print("!! Mismatches found — investigate before editing results.js !!")
-    else:
-        print(f"All {len(unchanged)} unchanged-count models match current results.js exactly. Safe to proceed.")
+    elif unchanged:
+        print(f"All {len(unchanged)} model(s) not expected to change match results.js exactly.")
 
-    print()
-    print("=" * 70)
-    print("JS BLOCKS for the updated models (paste in place of the corresponding current block)")
-    print("=" * 70)
-    # Sort ALL 13 models by new overall score to get correct ranking/comment numbers
+    # Rank the published models by new overall score for the comment numbering.
     all_overalls = []
-    for m in all_models:
+    for m in published:
         cur = current.get(m, {})
-        if m in computed_by_model:
-            overall = computed_by_model[m]["overall"]
-        else:
-            overall = cur.get("overall")
+        overall = computed_by_model[m]["overall"] if m in computed_by_model else cur.get("overall")
         all_overalls.append((m, overall))
     all_overalls.sort(key=lambda t: -(t[1] or 0))
 
-    print("\nNew overall ranking (for reference):")
-    for i, (m, o) in enumerate(all_overalls, 1):
-        marker = " <-- UPDATED" if m in UPDATED_MODELS else ""
-        print(f"  {i:2d}. {m}: {o}{marker}")
-
     print()
-    for m in UPDATED_MODELS:
-        cur = current[m]
-        computed = computed_by_model[m]
-        rank = next(i for i, (name, _) in enumerate(all_overalls, 1) if name == m)
-        print(format_model_js(m, computed, cur, rank))
-        print()
+    print("=" * 70)
+    print("NEW OVERALL RANKING")
+    print("=" * 70)
+    for i, (m, o) in enumerate(all_overalls, 1):
+        was = current.get(m, {}).get("overall")
+        moved = "" if was is None or o is None or abs(o - was) <= 0.05 else f"  (was {was})"
+        print(f"  {i:2d}. {m}: {o}{moved}")
 
     if any_mismatch:
-        print("Refusing to write results.js — unexpected mismatches in unchanged models.")
-        return
+        print("\nRefusing to write: unexpected score changes in models not listed in --models.")
+        print("Re-run with those models included in --models if the change is intended.")
+        return 1
 
-    # Build the full re-sorted array: updated models get freshly generated blocks,
-    # unchanged models keep their EXACT original object text (only the comment number changes).
+    missing_meta = [m for m in updated_models if m not in current]
+    if missing_meta:
+        # name/org/color/priceIn/priceOut/speed are curated by hand and cannot
+        # be derived from the DB, so a brand-new model needs a stub block first.
+        print(f"\n!! No existing results.js entry for: {missing_meta}")
+        print("   Add a block with name/org/color/priceIn/priceOut/speed first; "
+              "the score fields will then be generated.")
+        return 1
+
+    if not args.write:
+        print("\n--check: no changes written. Re-run with --write to update results.js.")
+        return 0
+
+    # Rebuild the array: refreshed models get freshly generated blocks, all
+    # others keep their EXACT original object text so the diff stays minimal.
     blocks = []
     for rank, (m, _overall) in enumerate(all_overalls, 1):
-        if m in UPDATED_MODELS:
-            computed = computed_by_model[m]
-            cur = current[m]
-            blocks.append(format_model_js(m, computed, cur, rank))
+        if m in computed_by_model:
+            blocks.append(format_model_js(m, computed_by_model[m], current[m], rank))
         else:
             header = f"  // ── {rank}. {m} ───────────────────────────────────"
-            body = raw_blocks[m]
-            # re-indent the raw block body to match the 2-space/4-space convention already in it
-            blocks.append(f"{header}\n  {body},")
+            blocks.append(f"{header}\n  {raw_blocks[m]},")
 
     new_array_text = "const BENCHMARK_RESULTS = [\n\n" + "\n\n".join(blocks) + "\n\n];"
 
@@ -398,7 +549,9 @@ def main():
     new_text = text[:array_start] + new_array_text + text[array_end:]
     RESULTS_JS_PATH.write_text(new_text, encoding="utf-8")
     print(f"\nWrote updated BENCHMARK_RESULTS array to {RESULTS_JS_PATH}")
+    print("Review with: git diff public/results.js")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

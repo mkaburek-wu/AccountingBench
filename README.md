@@ -84,7 +84,8 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Idempotent result writes | ✅ Done | `pipeline.py` upserts on `(task_id, model_name)`; DB-level UNIQUE constraint makes duplicates impossible (see §3.3) |
 | Per-task model scoping | ✅ Done | `rerun_model.py` runs only the models a task is actually missing (see §9.10) |
 | Maintenance scripts | ✅ Done | `dedup_outputs.py`, `backfill_sc_mc_scores.py`, `fix_broken_options.py` — one-off data repairs (see §9.9) |
-| Results.js recompute script | ✅ Done | `recompute_results.py` — recomputes `public/results.js` scores from a benchmark_tasks/benchmark_outputs Excel export, with a diff gate against unintended models (see §10.3) |
+| Results.js generator | ✅ Done | `recompute_results.py` — regenerates `public/results.js` from the **database** (or an Excel export), with `--check`/`--write` modes and a diff gate against unintended score changes (see §10.3) |
+| Test suite | ✅ Done | `backend/tests/` — pytest over the scoring, parsing, import and export helpers; no DB or API access (see §11.8) |
 | Data-quality dry-run gate | ✅ Done | `--dry-run` flags buried option markers, option-letter gaps, unwinnable golds, unparseable tolerances (see §8.3) |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
@@ -148,7 +149,13 @@ accountingbench/
     ├── dedup_outputs.py           ← Maintenance: remove duplicate/orphaned run+output rows (see §9.9)
     ├── backfill_sc_mc_scores.py   ← Maintenance: recompute stale SC/MC scores (see §9.9)
     ├── fix_broken_options.py      ← Maintenance: re-parse options stuck as {"raw": ...} (see §9.9)
-    ├── recompute_results.py       ← Recomputes public/results.js from a benchmark_tasks/benchmark_outputs Excel export (see §10.3)
+    ├── recompute_results.py       ← Regenerates public/results.js from the DB (or an Excel export) — see §10.3
+├── tests/                     ← pytest suite: scoring, parsing, import + export helpers (see §11.8)
+│   ├── conftest.py
+│   ├── test_scoring.py
+│   ├── test_options_parsing.py
+│   ├── test_task_import.py
+│   └── test_results_export.py
     ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
@@ -1134,21 +1141,39 @@ Contains `BENCHMARK_RESULTS` (one object per model) and `BENCHMARK_META` (datase
 
 **To update dataset composition** (`BENCHMARK_META.categories`, `taskTypes`, `questionFormats`, `educationLevels`, `regulatoryFrameworks_data`): change the `tasks` count — percentages recalculate automatically.
 
-#### Recomputing scores from a fresh Excel export (`recompute_results.py`)
+#### Regenerating `results.js` (`recompute_results.py`)
 
-When a colleague hands you a full/partial rerun as an Excel file with `benchmark_tasks` + `benchmark_outputs` sheets (same column layout as the DB tables — `category`, `task_type`, `answer_type`, `regulatory_framework`, `education_level` on the tasks sheet; `model_name`, `final_score_percent`, `token_input`, `token_output`, `token_reasoning`, `avg_model_confidence`/`judge_confidence` on the outputs sheet), don't hand-edit `results.js` — use:
+`public/results.js` is a **generated artefact** — never hand-edit the numbers. The database is the source of truth:
 
 ```bash
-python -m backend.recompute_results
+# report only: compute, diff against results.js, write nothing (the default)
+python -m backend.recompute_results --check
+
+# regenerate results.js (refuses to write if an unexpected score moved)
+python -m backend.recompute_results --write
 ```
 
-Edit the `XLSX_PATH` and `UPDATED_MODELS` constants at the top of the script first (which file to read, and which model names in the array should actually get replaced). The script then:
+| Flag | Effect |
+|---|---|
+| `--check` | Compute + diff + report, no writes. Exits non-zero on an unexpected score change, so it is safe in CI or a pre-commit hook. **Default.** |
+| `--write` | Rewrite the `BENCHMARK_RESULTS` array, gated on the diff passing. |
+| `--models "a,b"` | Models *expected* to change. Every other published model is diff-checked strictly and must match `results.js` exactly. Omit to refresh all published models. |
+| `--from-excel PATH` | Read a `benchmark_tasks` + `benchmark_outputs` Excel export instead of the live DB — for reproducing an earlier published run, or as an independent cross-check. |
+| `--include-private` | Include non-public tasks (DB source only). By default only `is_public = 1` tasks count, matching what the site reports. |
 
-1. Recomputes every score field (category/task-type/answer-type/regulatory-framework/`byEdu`/`n`/`cost`/`tokTask`/`calib`) per model directly from the Excel rows, using exact-string-match masks (a hybrid/unknown `task_type`, `answer_type`, or `regulatory_framework` value counts toward `overall` only, matching the site's existing convention — e.g. `open_numeric` answers or `interpretation_of_law_and_journal_entry` tasks).
-2. **Diffs every model NOT in `UPDATED_MODELS`** against the current `results.js` and refuses to write if any of their score fields differ — this is the safety gate that catches an export covering more models than you expected.
-3. Re-sorts the full array by `overall` descending and rewrites `public/results.js`, leaving `BENCHMARK_META` and the untouched models' object bodies byte-for-byte identical (only their comment-header rank number may change).
+What it does:
 
-`priceIn`, `priceOut`, and `speed` are always carried over unchanged from the current file — these exports carry no pricing/timing data, so update them by hand if pricing changed. `token_reasoning` is folded into `token_output` for some models but additive for others (see `ADD_REASONING_TOKENS` in the script) — verify this per-model assumption before trusting `tokTask`/`cost` for a model not already in that mapping.
+1. Recomputes every score field (category / task-type / answer-type / regulatory-framework / `byEdu` / `n` / `cost` / `tokTask` / `calib`) per model, using exact-string-match masks — a hybrid or unknown `task_type`, `answer_type`, or `regulatory_framework` counts toward `overall` only, matching the site's existing convention (e.g. `open_numeric` answers, `interpretation_of_law_and_journal_entry` tasks).
+2. **Diffs every model not named in `--models`** against the current `results.js` and refuses to write if any of their *score* fields differ — the safety gate that catches a dataset covering more models than expected. `n`/`tokTask`/`cost`/`calib` drift is reported but never blocking.
+3. Re-sorts the array by `overall` descending and rewrites the file, leaving `BENCHMARK_META` and the untouched models' object bodies byte-for-byte identical (only their comment-header rank number may change).
+
+Notes and caveats:
+
+- **The task total is derived, not hardcoded.** `n` and the `note` string use the distinct task count in the source, so removing or adding tasks cannot silently mislabel coverage.
+- **Models absent from `results.js` are skipped, not written.** `name`, `org`, `color`, `priceIn`, `priceOut`, and `speed` are curated by hand and cannot be derived from the DB, so a model with no entry is treated as deliberately unpublished (`alawyer`, partial-coverage models). To publish a new model, add a stub block with those six fields first; the score fields are then generated.
+- `priceIn`, `priceOut`, and `speed` are always carried over unchanged — update them by hand when pricing changes.
+- `token_reasoning` is already inside `token_output` for some providers but additive for others (see `ADD_REASONING_TOKENS` in the script). Verify that assumption for any model not already in the mapping before trusting its `tokTask`/`cost`.
+- Confidence values are rounded before calibration binning. Many are means of three trials that land exactly on a decile edge, where float noise (`0.20000000000000004` from SQLite vs `0.2` from an Excel round-trip) would otherwise move rows between bins and make `calib` non-reproducible.
 
 #### `data.js` — render functions
 
@@ -1201,7 +1226,7 @@ Install all packages with:
 ```bash
 python -m pip install fastapi uvicorn sqlalchemy alembic psycopg2-binary \
     python-dotenv aiofiles python-multipart pandas openpyxl pymupdf \
-    requests openai anthropic "PyJWT[crypto]" stripe slowapi
+    requests openai anthropic "PyJWT[crypto]" stripe slowapi pytest
 ```
 
 ---
@@ -1345,6 +1370,29 @@ Pages are served at `http://127.0.0.1:5500/auth-pages/sign-in.html`.
 - For an absolute SQLite path, use 4 slashes: `sqlite:////Users/yourname/Documents/AccountingBench/backend/accountingbench.db`
 - To create a `.env` file (dotfiles are hidden in Finder), use Terminal: `touch .env` then edit in VS Code.
 - If you get `ModuleNotFoundError` for any package, always use `python -m pip install <package>` to guarantee it installs for the Python version returned by `python --version`.
+
+---
+
+### 11.8 Running the Tests
+
+```bash
+python -m pytest backend/tests -v          # from the project root
+python -m pytest backend/tests -q          # quiet
+python -m pytest backend/tests/test_scoring.py -k compact -v    # one area
+```
+
+The suite covers **pure functions only** — scoring, answer parsing, options parsing, the task-import path, and the `results.js` export helpers. It never touches `accountingbench.db` and never calls a model API, so it is safe and fast (~2s) to run at any time. `test_task_import.py` uses a throwaway in-memory SQLite database, never the project one.
+
+| File | Covers |
+|---|---|
+| `test_scoring.py` | `score_sc_mc_percent`, `parse_choice_set`, `parse_choice_id`, `majority_vote`, `gold_set`, `parse_number`, `parse_tolerance`, and that every `ALL_MODELS` entry resolves in `MODEL_REGISTRY` |
+| `test_options_parsing.py` | `parse_options` for each supported sheet format, plus every `check_field_consistency` warning code (`TYPE`/`MISS`/`TOL`/`OPTS`/`GOLD`) |
+| `test_task_import.py` | `upsert_task` — tolerance coercion, approved/private flags, update-in-place, options parsing, year coercion |
+| `test_results_export.py` | `avg`, `score_block`, `calibration` binning, `deep_diff` tolerance, and the `results.js` JS→JSON round-trip |
+
+Most cases are **real regressions found by auditing the live database** — each test's docstring names the failure it guards against, so a change that reintroduces the bug fails loudly instead of silently rescoring the benchmark.
+
+A handful are marked `xfail(strict=True)`. These document *known* latent bugs with 0 occurrences in the current data: an order-sensitive `majority_vote` for multi-choice sets, a comma-less answer scoring 0 in `score_sc_mc_percent`, `parse_choice_id` taking the first letter of a negating answer, and an apostrophe breaking the `results.js` quote conversion. They are *expected* to fail — if one ever passes, the bug has been fixed and the marker should be removed.
 
 ---
 
