@@ -832,6 +832,7 @@ The script asks for confirmation before deleting anything. It preserves `setting
 | `--education-level` | `education_level` | `Professional Examinations`, `University Master's`, `Secondary Vocational` |
 | `--regulatory-framework` | `regulatory_framework` | `Austrian Tax Law`, `IFRS`, `National GAAP`, `Mixed Accounting Framework`, `Mixed: Accounting + Tax` |
 | `--question-ids` | `question_id` | Exact IDs, prefixes, or ranges — see below |
+| `--task-ids` | `id` (integer primary key) | Exact IDs or ranges — see below |
 
 Filters are applied at the SQL query level before the skip-existing check, so they compose cleanly with `--limit` and `--dry-run`.
 
@@ -849,6 +850,21 @@ Multiple tokens are combined with OR logic:
 
 ```bash
 --question-ids "11908783,12345678_0001:12345678_0010,99999999_0042"
+```
+
+#### `--task-ids` syntax
+
+Filters on `BenchmarkTask.id`, the integer primary key (e.g. as printed by `backend/inspect_db.py`), not `question_id`. Each comma-separated token can be one of two forms (mix freely):
+
+| Token form | Example | Matches |
+|---|---|---|
+| Exact | `19` | that single task |
+| Range | `13:543` | ids `13` through `543` inclusive |
+
+Multiple tokens are combined with OR logic:
+
+```bash
+--task-ids "19,13:543,1000:1199"
 ```
 
 ### 9.3 Common Commands
@@ -886,6 +902,10 @@ python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783_0028
 python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783"
 python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783_0001:11908783_0050"
 python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "11908783,12345678_0001:12345678_0010"
+
+# Re-run specific tasks by BenchmarkTask.id (exact and range — comma-separated, mix freely)
+python -m backend.rerun_model --models "Kimi-K2.6" --task-ids "19"
+python -m backend.rerun_model --models "Kimi-K2.6" --task-ids "13:543,1000:1199"
 ```
 
 ### 9.4 Recommended max-workers by model count

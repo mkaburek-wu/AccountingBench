@@ -171,6 +171,7 @@ python -m backend.rerun_model --models "ModelA,ModelB" --max-workers 4
 python -m backend.rerun_model --models "ModelName" --category "Tax"
 python -m backend.rerun_model --models "ModelName" --task-type "calculation"
 python -m backend.rerun_model --models "ModelName" --question-ids "q_0001,q_0042"
+python -m backend.rerun_model --models "ModelName" --task-ids "19,42,100:110"
 
 # inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
 python -m backend.inspect_db [task_id]

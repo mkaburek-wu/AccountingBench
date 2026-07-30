@@ -42,6 +42,9 @@ python -m backend.rerun_model --models "Kimi-K2.6" --regulatory-framework "Austr
 # Run only specific tasks by question_id
 python -m backend.rerun_model --models "Kimi-K2.6" --question-ids "q_0001,q_0042"
 
+# Run only specific tasks by BenchmarkTask.id (integer primary key)
+python -m backend.rerun_model --models "Kimi-K2.6" --task-ids "19,42,100:110"
+
 # Combine filters (all conditions must match)
 python -m backend.rerun_model --models "Kimi-K2.6" --category "Tax" --task-type "calculation" --dry-run
 
@@ -65,6 +68,8 @@ Flags
                         Values: Austrian Tax Law | IFRS | National GAAP |
                                 Mixed Accounting Framework | Mixed: Accounting + Tax
 --question-ids          Run only these specific tasks. Comma-separated question_id values.
+--task-ids              Run only these specific tasks. Comma-separated BenchmarkTask.id
+                        (integer primary key) values, e.g. '19,42,100:110'.
 
 How it works
 ------------
@@ -240,6 +245,54 @@ def _build_qid_filter(specs: list[dict]):
     return or_(*conditions)
 
 
+# ── Task-ID filter helpers (BenchmarkTask.id, the integer primary key) ────────
+
+def _parse_task_ids(raw: str | None) -> list[dict] | None:
+    """Parse --task-ids into a list of filter specs.
+
+    Each comma-separated token becomes one dict:
+      {"type": "exact", "value": 19}
+      {"type": "range", "start": 13, "end": 543}
+
+    A token with ':' is treated as an inclusive range (start:end), matching
+    the --question-ids range syntax. Otherwise it is an exact integer match.
+    """
+    if not raw:
+        return None
+    specs = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if ":" in token:
+            parts = token.split(":", 1)
+            try:
+                start, end = int(parts[0].strip()), int(parts[1].strip())
+            except ValueError:
+                raise ValueError(f"Invalid --task-ids range token: {token!r}")
+            specs.append({"type": "range", "start": start, "end": end})
+        else:
+            try:
+                specs.append({"type": "exact", "value": int(token)})
+            except ValueError:
+                raise ValueError(f"Invalid --task-ids token: {token!r}")
+    return specs or None
+
+
+def _build_task_id_filter(specs: list[dict]):
+    """Build a SQLAlchemy OR filter from the list produced by _parse_task_ids."""
+    conditions = []
+    for spec in specs:
+        if spec["type"] == "exact":
+            conditions.append(BenchmarkTask.id == spec["value"])
+        elif spec["type"] == "range":
+            conditions.append(
+                (BenchmarkTask.id >= spec["start"]) &
+                (BenchmarkTask.id <= spec["end"])
+            )
+    return or_(*conditions)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run new model(s) against all tasks already in the database."
@@ -322,6 +375,17 @@ def main():
             "Example: '11908783,12345678_0001:12345678_0010,99999999_0042'"
         ),
     )
+    parser.add_argument(
+        "--task-ids", default=None,
+        dest="task_ids",
+        help=(
+            "Filter tasks by BenchmarkTask.id (the integer primary key, e.g. 19). "
+            "Comma-separated tokens, each of which can be:\n"
+            "  exact   — '19'\n"
+            "  range   — '13:543'  (inclusive)\n"
+            "Example: '19,42,100:110'"
+        ),
+    )
     args = parser.parse_args()
     setup_error_log("rerun_model")
 
@@ -351,6 +415,7 @@ def main():
     filter_edu_level   = _split(args.education_level)
     filter_reg_fw      = _split(args.regulatory_framework)
     filter_qids        = _parse_question_ids(args.question_ids)
+    filter_task_ids    = _parse_task_ids(args.task_ids)
 
     logger.info(f"Models requested:        {requested_models}")
     logger.info(f"Max workers:             {args.max_workers}")
@@ -363,6 +428,7 @@ def main():
     if filter_edu_level:   logger.info(f"Filter education_level:  {filter_edu_level}")
     if filter_reg_fw:      logger.info(f"Filter reg. framework:   {filter_reg_fw}")
     if filter_qids:        logger.info(f"Filter question_ids:     {filter_qids!r}")
+    if filter_task_ids:    logger.info(f"Filter task_ids:         {filter_task_ids!r}")
 
     # ── Load tasks from DB (with optional filters) ────────────────────────────
     db = SessionLocal()
@@ -386,6 +452,8 @@ def main():
             query = query.filter(func.lower(BenchmarkTask.regulatory_framework).in_([_norm(v) for v in filter_reg_fw]))
         if filter_qids:
             query = query.filter(_build_qid_filter(filter_qids))
+        if filter_task_ids:
+            query = query.filter(_build_task_id_filter(filter_task_ids))
 
         all_tasks = query.all()
         logger.info(f"Found {len(all_tasks)} tasks matching filters.")
