@@ -1,37 +1,54 @@
 """
 AccountingBench — Pre-computed Results Importer
 =================================================
-Imports tasks + already-scored model outputs from an Excel file that was
-produced by an EXTERNAL run (not this repo's run_pipeline()). Unlike
-batch_run.py / rerun_model.py, this script never calls a model API or the
-judge — it writes benchmark_tasks / benchmark_runs / benchmark_outputs rows
-directly from the Excel data.
+Imports already-scored model outputs from an Excel file that was produced
+by an EXTERNAL run (not this repo's run_pipeline()). Unlike batch_run.py /
+rerun_model.py, this script never calls a model API or the judge — it
+writes benchmark_tasks / benchmark_runs / benchmark_outputs rows directly
+from the Excel data.
 
-Expected Excel layout: two sheets in the same workbook.
-  "Questions" — same layout as batch_run.py's ground-truth template
-                (question_id, task_type, prompt, answer_type, gold_answer, ...)
-  "Outputs"   — one row per (question_id, model), with columns:
-                Model, run_id, question_id, ..., model_answer_1/2/3,
-                model_confidence_1/2/3, final_answer, avg_model_confidence,
-                score_percent_sc_mc, judge_score_percent, judge_confidence,
-                final_score_percent, evaluation_method, token_input,
-                token_output, token_reasoning, evaluated_at_utc,
-                evaluation_notes
+Two supported Excel layouts:
+
+  1. Task + output sheets (default) — two sheets in the same workbook:
+       "Questions" — same layout as batch_run.py's ground-truth template
+                     (question_id, task_type, prompt, answer_type,
+                     gold_answer, ...). Tasks are upserted by question_id.
+       "Outputs"   — one row per (question_id, model), see column list below.
+
+  2. Outputs-only (--outputs-only) — a single output sheet, no task sheet.
+     Used when the tasks already exist in the DB (e.g. backfilling results
+     for "old" models against the original dataset) — tasks are looked up
+     by question_id instead of upserted; a task not found in the DB is an
+     error for that row, not a fabricated task.
+
+Output sheet columns (either layout): Model, question_id,
+model_answer_1/2/3, model_confidence_1/2/3, final_answer,
+avg_model_confidence, score_percent_sc_mc, judge_score_percent,
+judge_confidence, final_score_percent, evaluation_method, token_input,
+token_output, token_reasoning, evaluated_at_utc, evaluation_notes
 
 Usage (run from the accountingbench/ root):
     python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx --dry-run
     python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx --limit 2
     python -m backend.import_precomputed_results --file backend/uploads/results_IFRS_n44.xlsx
 
+    # Outputs-only — tasks already exist in the DB, just backfill model results
+    python -m backend.import_precomputed_results --file backend/output_old_models.xlsx --outputs-sheet Output --outputs-only --dry-run
+    python -m backend.import_precomputed_results --file backend/output_old_models.xlsx --outputs-sheet Output --outputs-only --skip-existing
+
 Options:
     --file          Path to the Excel file (required)
-    --questions-sheet  Sheet name for tasks (default: Questions)
+    --questions-sheet  Sheet name for tasks (default: Questions). Ignored with --outputs-only.
     --outputs-sheet    Sheet name for model outputs (default: Outputs)
+    --outputs-only     Skip the Questions sheet — look up existing tasks in the
+                        DB by question_id instead of upserting them. A task
+                        missing from the DB is reported as an error, not created.
     --dry-run       Parse and validate only, no DB writes
     --limit         Only process the first N tasks (useful for testing)
     --user          User ID to attribute submissions to (default: BATCH_USER_ID from .env)
     --rename-model  Rename a model on import, e.g. "DeepSeek-V3.2-2:DeepSeek-V3.2".
                     Repeatable. Applied to the Outputs sheet before grouping.
+    --skip-existing Skip (task, model) pairs that already have a benchmark_output row
 """
 
 import argparse
@@ -136,13 +153,13 @@ def apply_renames(df: pd.DataFrame, renames: dict) -> pd.DataFrame:
     return df
 
 
-def import_task(db, q_row: pd.Series, out_rows: pd.DataFrame, user_id: str, skip_existing: bool) -> dict:
-    qid = safe(q_row.get("question_id"))
+def write_outputs(
+    db, task: BenchmarkTask, out_rows: pd.DataFrame, user_id: str, skip_existing: bool, source_filename: str
+) -> dict:
+    qid = task.question_id
     result = {"question_id": qid, "status": "unknown", "submission_id": None, "error": None, "models": None}
 
     try:
-        task = upsert_task(db, q_row, approved=True, user_id=user_id, uploads_dir=DEFAULT_UPLOADS_DIR)
-
         if skip_existing:
             requested_models = out_rows["Model"].dropna().tolist()
             already_have = get_existing_model_outputs(db, task.id, requested_models)
@@ -177,7 +194,7 @@ def import_task(db, q_row: pd.Series, out_rows: pd.DataFrame, user_id: str, skip
                 system_prompt_version=SYSTEM_PROMPT_VERSION,
                 dataset_version=DATASET_VERSION,
                 judge_model=JUDGE_MODEL,
-                inference_notes="Imported from results_IFRS_n44.xlsx (external run)",
+                inference_notes=f"Imported from {source_filename} (external run)",
             ))
 
             db.add(BenchmarkOutput(
@@ -224,8 +241,12 @@ def main():
         description="Import already-scored tasks/outputs from an Excel file (no live model calls)."
     )
     parser.add_argument("--file", required=True, help="Path to the Excel file")
-    parser.add_argument("--questions-sheet", default="Questions", help="Sheet name for tasks (default: Questions)")
+    parser.add_argument("--questions-sheet", default="Questions", help="Sheet name for tasks (default: Questions). Ignored with --outputs-only")
     parser.add_argument("--outputs-sheet", default="Outputs", help="Sheet name for model outputs (default: Outputs)")
+    parser.add_argument(
+        "--outputs-only", action="store_true",
+        help="Skip the Questions sheet — look up existing tasks in the DB by question_id instead of upserting them",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Parse and validate only, no DB writes")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N tasks")
     parser.add_argument("--user", default=None, help="User ID to attribute submissions to")
@@ -248,15 +269,24 @@ def main():
         old, new = spec.split(":", 1)
         renames[old.strip()] = new.strip()
 
-    q_df = read_excel(args.file, args.questions_sheet)
     out_df = read_outputs(args.file, args.outputs_sheet)
     out_df = apply_renames(out_df, renames)
 
-    if args.limit:
-        q_df = q_df.head(args.limit)
-        logger.info(f"--limit {args.limit}: processing first {len(q_df)} task(s).")
+    q_row_by_qid = {}
+    if args.outputs_only:
+        q_df = None
+        qids = sorted(out_df["question_id"].dropna().unique().tolist())
+        if args.limit:
+            qids = qids[: args.limit]
+            logger.info(f"--limit {args.limit}: processing first {len(qids)} task(s).")
+    else:
+        q_df = read_excel(args.file, args.questions_sheet)
+        if args.limit:
+            q_df = q_df.head(args.limit)
+            logger.info(f"--limit {args.limit}: processing first {len(q_df)} task(s).")
+        qids = [safe(r.get("question_id")) for _, r in q_df.iterrows()]
+        q_row_by_qid = {safe(r.get("question_id")): r for _, r in q_df.iterrows()}
 
-    qids = [safe(r.get("question_id")) for _, r in q_df.iterrows()]
     out_by_qid = {qid: grp for qid, grp in out_df.groupby("question_id")}
 
     all_models = sorted(out_df["Model"].dropna().unique().tolist())
@@ -264,6 +294,19 @@ def main():
 
     # ── Validation (always runs, even outside --dry-run) ──────────────────────
     problems = []
+    if args.outputs_only:
+        db = SessionLocal()
+        try:
+            existing = {
+                r.question_id
+                for r in db.query(BenchmarkTask.question_id).filter(BenchmarkTask.question_id.in_(qids)).all()
+            }
+        finally:
+            db.close()
+        missing_tasks = [qid for qid in qids if qid not in existing]
+        for qid in missing_tasks:
+            problems.append(f"{qid}: no matching task in the database (--outputs-only requires existing tasks)")
+
     for qid in qids:
         rows = out_by_qid.get(qid)
         if rows is None or rows.empty:
@@ -289,7 +332,8 @@ def main():
         for qid in qids:
             rows = out_by_qid.get(qid)
             n = len(rows) if rows is not None else 0
-            logger.info(f"  {qid}: would insert 1 task + {n} run/output pairs")
+            action = "would backfill outputs for" if args.outputs_only else "would insert 1 task +"
+            logger.info(f"  {qid}: {action} {n} run/output pairs")
         logger.info(f"=== {len(qids)} task(s), {sum(len(out_by_qid.get(q, [])) for q in qids)} output row(s) would be processed ===")
         return
 
@@ -300,9 +344,9 @@ def main():
     finally:
         db.close()
 
+    source_filename = os.path.basename(args.file)
     results = []
-    for _, q_row in q_df.iterrows():
-        qid = safe(q_row.get("question_id"))
+    for qid in qids:
         rows = out_by_qid.get(qid)
         if rows is None or rows.empty:
             logger.warning(f"[SKIP] {qid} — no Outputs rows, task not imported.")
@@ -311,7 +355,20 @@ def main():
 
         db = SessionLocal()
         try:
-            result = import_task(db, q_row, rows, user_id, args.skip_existing)
+            if args.outputs_only:
+                task = db.query(BenchmarkTask).filter_by(question_id=qid).first()
+                if not task:
+                    logger.error(f"[ERROR] {qid} — task not found in DB (outputs-only mode).")
+                    results.append({
+                        "question_id": qid, "status": "error", "submission_id": None,
+                        "error": "task not found in DB",
+                    })
+                    continue
+            else:
+                task = upsert_task(
+                    db, q_row_by_qid[qid], approved=True, user_id=user_id, uploads_dir=DEFAULT_UPLOADS_DIR
+                )
+            result = write_outputs(db, task, rows, user_id, args.skip_existing, source_filename)
         finally:
             db.close()
         results.append(result)

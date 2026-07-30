@@ -50,7 +50,9 @@ load_dotenv(os.path.join(_root, ".env"))
 
 from backend.database import SessionLocal
 from backend.models import BenchmarkTask, Submission
-from backend.processing.pipeline import run_pipeline, InsufficientBalanceError, IncompleteRunError
+from backend.processing.pipeline import (
+    run_pipeline, InsufficientBalanceError, IncompleteRunError, parse_tolerance,
+)
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
@@ -237,13 +239,14 @@ def upsert_task(db, row: pd.Series, approved: bool, user_id: str, uploads_dir: s
         validated_by              = safe(row.get("validated_by")) or None,
     )
 
-    # numeric_tolerance
+    # numeric_tolerance — use parse_tolerance(), not float(). The ground-truth
+    # sheets express tolerances as "+/- 1", "± 5", "+/- 0,01" etc., and bare
+    # float() rejects all of those, silently storing None and leaving the judge
+    # with no tolerance band. parse_tolerance() handles both plain numbers and
+    # these annotated forms.
     tol_raw = row.get("numeric_tolerance")
     if pd.notna(tol_raw) if isinstance(tol_raw, float) else tol_raw is not None:
-        try:
-            fields["numeric_tolerance"] = float(tol_raw)
-        except (TypeError, ValueError):
-            fields["numeric_tolerance"] = None
+        fields["numeric_tolerance"] = parse_tolerance(tol_raw)
     else:
         fields["numeric_tolerance"] = None
 

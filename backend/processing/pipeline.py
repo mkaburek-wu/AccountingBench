@@ -27,6 +27,7 @@ Environment variables required in .env:
                               If not set, ALL_MODELS below is used.
 """
 
+import contextvars
 import hashlib
 import json
 import logging
@@ -114,6 +115,16 @@ ATTACHMENTS_CACHE_DIR = ".attached_cache"
 ATTACHMENTS_MAX_CHARS = 12000
 HTTP_TIMEOUT_SEC      = 60
 
+# Per-call override for which models to run, set by callers (e.g. rerun_model.py)
+# that need to scope a single run_pipeline() call to specific models without
+# touching the process-wide OPENAI_MODEL_LIST env var. contextvars are
+# thread-local by default — each ThreadPoolExecutor worker thread gets its
+# own independent value, so concurrent callers setting different overrides
+# don't race each other the way a shared os.environ mutation would.
+MODEL_LIST_OVERRIDE: "contextvars.ContextVar[Optional[List[str]]]" = contextvars.ContextVar(
+    "MODEL_LIST_OVERRIDE", default=None
+)
+
 # ── Default model list ────────────────────────────────────────────────────────
 # Can be overridden via OPENAI_MODEL_LIST in .env (comma-separated).
 # To test with fewer models first, add to .env:
@@ -125,9 +136,9 @@ ALL_MODELS = [
     "claude-sonnet-4-6",
     "gpt-5-mini",
     "Mistral-Large-3",
-    "grok-4-fast",
+    "grok-4-fast-reasoning",
     "gpt-4o",
-    "DeepSeek-V3.2-2",
+    "DeepSeek-V3.2",
     "mercury-2",
 ]
 
@@ -202,6 +213,30 @@ def parse_choice_set(text: str, valid: Optional[List[str]] = None) -> List[str]:
         if c not in seen:
             seen.add(c)
             out.append(c)
+    if out or not valid:
+        return out
+    # Fallback: some models (observed with Claude opus) answer multi-select
+    # questions as a compact run with no separators, e.g. "BC" instead of
+    # "B,C" — CHOICE_RE requires a word boundary between letters and finds
+    # nothing in that case.
+    #
+    # Deliberately strict, because a loose rule misreads ordinary prose: with
+    # options A-E the German words "AB"/"DA"/"BAD" and with A-F "FACADE"/"CAFE"
+    # are all made purely of valid choice letters. Four guards prevent that:
+    #   1. the run must be the ENTIRE answer (not a word inside a sentence),
+    #   2. no repeated letters (a real choice set never repeats; kills "EBBE"),
+    #   3. no more letters than there are options,
+    #   4. ascending order — models enumerate choices in the order presented
+    #      ("BEF"), whereas words generally are not sorted ("CAFE", "BAD").
+    compact = text.strip().upper()
+    if (
+        re.fullmatch(r"[A-Z]{2,}", compact)
+        and len(compact) <= len(valid)
+        and len(set(compact)) == len(compact)
+        and list(compact) == sorted(compact)
+        and all(ch in valid for ch in compact)
+    ):
+        return list(compact)
     return out
 
 
@@ -1115,11 +1150,15 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 valid_choices = None
 
         # ── 3. Determine which models to run ──────────────────────────────────
-        model_list_raw = os.environ.get("OPENAI_MODEL_LIST", "")
-        models_to_run  = (
-            [m.strip() for m in model_list_raw.split(",") if m.strip()]
-            or ALL_MODELS
-        )
+        override = MODEL_LIST_OVERRIDE.get()
+        if override is not None:
+            models_to_run = override
+        else:
+            model_list_raw = os.environ.get("OPENAI_MODEL_LIST", "")
+            models_to_run  = (
+                [m.strip() for m in model_list_raw.split(",") if m.strip()]
+                or ALL_MODELS
+            )
 
         # ── 4. Shared run_id for this benchmark run ───────────────────────────
         run_id  = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -1139,20 +1178,25 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
             try:
                 logger.info(f"[PIPELINE] [{current_model}] Starting...")
 
-                # Insert run metadata
-                run = BenchmarkRun(
-                    run_id                = run_id,
-                    task_id               = task_id,
-                    model_name            = current_model,
-                    run_timestamp         = now_utc,
-                    temperature           = 0.0,
-                    n_trials              = N_TRIALS,
-                    system_prompt_version = SYSTEM_PROMPT_VERSION,
-                    dataset_version       = DATASET_VERSION,
-                    judge_model           = JUDGE_MODEL,
-                    inference_notes       = f"N_TRIALS={N_TRIALS}; JUDGE_MODEL={JUDGE_MODEL}; parallel=True",
-                )
-                thread_db.add(run)
+                # Insert or update run metadata. (task_id, model_name) is unique —
+                # if this model was already run for this task, update that row in
+                # place instead of inserting a duplicate (see backend/dedup_outputs.py
+                # for why this matters: a stale caller-side "already exists" check
+                # must never be able to produce two rows for the same pair).
+                run = thread_db.query(BenchmarkRun).filter_by(
+                    task_id=task_id, model_name=current_model
+                ).first()
+                if run is None:
+                    run = BenchmarkRun(task_id=task_id, model_name=current_model)
+                    thread_db.add(run)
+                run.run_id                = run_id
+                run.run_timestamp         = now_utc
+                run.temperature           = 0.0
+                run.n_trials              = N_TRIALS
+                run.system_prompt_version = SYSTEM_PROMPT_VERSION
+                run.dataset_version       = DATASET_VERSION
+                run.judge_model           = JUDGE_MODEL
+                run.inference_notes       = f"N_TRIALS={N_TRIALS}; JUDGE_MODEL={JUDGE_MODEL}; parallel=True"
 
                 # Build a minimal task-like object for build_trial_prompt.
                 # We use a simple namespace instead of the ORM object to
@@ -1297,32 +1341,36 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     final_score = judge_score_percent
 
                 # ── Write output row ──────────────────────────────────────────
-                output = BenchmarkOutput(
-                    run_id               = run_id,
-                    task_id              = task_id,
-                    model_name           = current_model,
-                    model_answer_1       = trial_answers[0] if len(trial_answers) > 0 else None,
-                    model_confidence_1   = trial_confs[0]   if len(trial_confs) > 0 else None,
-                    model_answer_2       = trial_answers[1] if len(trial_answers) > 1 else None,
-                    model_confidence_2   = trial_confs[1]   if len(trial_confs) > 1 else None,
-                    model_answer_3       = trial_answers[2] if len(trial_answers) > 2 else None,
-                    model_confidence_3   = trial_confs[2]   if len(trial_confs) > 2 else None,
-                    final_answer         = final_answer,
-                    avg_model_confidence = avg_conf,
-                    score_percent_sc_mc  = sc_mc_score_percent,
-                    judge_score_percent  = judge_score_percent,
-                    judge_confidence     = judge_conf,
-                    final_score_percent  = final_score,
-                    evaluation_method    = eval_method,
-                    token_input          = token_input,
-                    token_output         = token_output,
-                    judge_token_input    = judge_tok_in  if eval_method == "judge" else None,
-                    judge_token_output   = judge_tok_out if eval_method == "judge" else None,
-                    token_reasoning      = token_reasoning,
-                    evaluated_at_utc     = datetime.now(timezone.utc),
-                    evaluation_notes     = notes,
-                )
-                thread_db.add(output)
+                # Same insert-or-update pattern as the run row above — (task_id,
+                # model_name) is unique, so a re-run of an already-scored model
+                # replaces its result in place rather than creating a duplicate.
+                output = thread_db.query(BenchmarkOutput).filter_by(
+                    task_id=task_id, model_name=current_model
+                ).first()
+                if output is None:
+                    output = BenchmarkOutput(task_id=task_id, model_name=current_model)
+                    thread_db.add(output)
+                output.run_id               = run_id
+                output.model_answer_1       = trial_answers[0] if len(trial_answers) > 0 else None
+                output.model_confidence_1   = trial_confs[0]   if len(trial_confs) > 0 else None
+                output.model_answer_2       = trial_answers[1] if len(trial_answers) > 1 else None
+                output.model_confidence_2   = trial_confs[1]   if len(trial_confs) > 1 else None
+                output.model_answer_3       = trial_answers[2] if len(trial_answers) > 2 else None
+                output.model_confidence_3   = trial_confs[2]   if len(trial_confs) > 2 else None
+                output.final_answer         = final_answer
+                output.avg_model_confidence = avg_conf
+                output.score_percent_sc_mc  = sc_mc_score_percent
+                output.judge_score_percent  = judge_score_percent
+                output.judge_confidence     = judge_conf
+                output.final_score_percent  = final_score
+                output.evaluation_method    = eval_method
+                output.token_input          = token_input
+                output.token_output         = token_output
+                output.judge_token_input    = judge_tok_in  if eval_method == "judge" else None
+                output.judge_token_output   = judge_tok_out if eval_method == "judge" else None
+                output.token_reasoning      = token_reasoning
+                output.evaluated_at_utc     = datetime.now(timezone.utc)
+                output.evaluation_notes     = notes
                 thread_db.commit()
 
                 score_str = f"{final_score:.1f}%" if final_score is not None else "N/A"

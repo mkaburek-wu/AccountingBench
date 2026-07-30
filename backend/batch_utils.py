@@ -322,6 +322,19 @@ def check_field_consistency(tasks: list[dict]) -> int:
                 f"(judge has no tolerance band)"
             )
             warnings += 1
+        elif answer_type == "open_numeric" and tol_set:
+            # A value being present is not enough — it also has to survive
+            # parsing. Anything parse_tolerance() cannot read is stored as NULL,
+            # so the judge silently ends up with no tolerance band even though
+            # the sheet looks populated.
+            from backend.processing.pipeline import parse_tolerance
+            if parse_tolerance(tol) is None:
+                logger.warning(
+                    f"  TOL   {qid}  →  'numeric_tolerance' {tol!r} cannot be parsed to a "
+                    f"number — it will be stored as NULL and the judge will have no "
+                    f"tolerance band. Use a plain number or a form like '+/- 1'."
+                )
+                warnings += 1
 
         # Detect options stored as {"raw": "..."} — means parse_options could not
         # parse the format. The pipeline will derive valid_choices=["RAW"] and
@@ -351,6 +364,58 @@ def check_field_consistency(tasks: list[dict]) -> int:
                     f"will always return 0."
                 )
                 warnings += 1
+
+        # ── Option-integrity checks for choice tasks ─────────────────────────
+        # parse_options() only treats "X)" as a new option at the start of a
+        # line. When the source sheet puts two options on one line, the second
+        # one is absorbed into the first one's TEXT: the models then see a
+        # malformed list, and the swallowed letter disappears from the keys.
+        # None of this is visible in the score, because score_sc_mc_percent()
+        # never validates letters against options — so catch it here instead.
+        if answer_type in ("single_choice", "multi_choice") and "options" in t:
+            opts = t.get("options")
+            if isinstance(opts, dict) and list(opts.keys()) != ["raw"]:
+                keys = {str(k).strip().upper() for k in opts.keys()}
+
+                # 1. an option marker buried inside another option's text
+                for k, v in opts.items():
+                    if not isinstance(v, str):
+                        continue
+                    buried = re.findall(r"(?<![A-Za-z0-9])([A-Za-z])\)\s", v)
+                    if buried:
+                        logger.warning(
+                            f"  OPTS  {qid}  →  option {str(k).upper()!r} text contains a buried "
+                            f"option marker {buried!r} — a later option was absorbed into it. "
+                            f"Put each option on its own line in the source sheet. "
+                            f"Text: {v[:80]!r}"
+                        )
+                        warnings += 1
+                        break
+
+                # 2. a gap in the option-letter sequence (e.g. A, B, D, E)
+                letters = sorted(k for k in keys if len(k) == 1 and k.isalpha())
+                if len(letters) >= 2:
+                    span   = [chr(c) for c in range(ord("A"), ord(letters[-1]) + 1)]
+                    absent = [c for c in span if c not in letters]
+                    if absent:
+                        logger.warning(
+                            f"  OPTS  {qid}  →  option letters {letters} have gap(s) {absent} — "
+                            f"an option is missing from the parsed set."
+                        )
+                        warnings += 1
+
+                # 3. gold_answer cites a letter that has no option
+                gold_raw = (t.get("gold_answer") or "").strip()
+                gold_ltrs = {g.strip().upper() for g in re.split(r"[,;]+", gold_raw) if g.strip()}
+                if gold_ltrs and all(len(g) == 1 and g.isalpha() for g in gold_ltrs):
+                    orphan = sorted(gold_ltrs - keys)
+                    if orphan:
+                        logger.warning(
+                            f"  GOLD  {qid}  →  gold_answer {gold_raw!r} cites option(s) {orphan} "
+                            f"that do not exist in options {sorted(keys)} — no model can score "
+                            f"full marks on this task."
+                        )
+                        warnings += 1
 
     if warnings == 0:
         logger.info(

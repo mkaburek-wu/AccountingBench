@@ -20,7 +20,7 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 6. [Submission Pipeline](#6-submission-pipeline)
 7. [Stripe Payment Flow](#7-stripe-payment-flow)
 8. [Batch Runner (`batch_run.py`)](#8-batch-runner-batch_runpy)
-9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy)
+9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy) — incl. §9.8 pre-computed importer, §9.9 maintenance scripts, §9.10 per-task model scoping
 10. [Frontend Pages](#10-frontend-pages)
 11. [Environment Setup](#11-environment-setup)
 12. [Clerk Configuration](#12-clerk-configuration)
@@ -81,6 +81,10 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Model re-run script | ✅ Done | `rerun_model.py` — run new models on existing DB tasks, with task filters |
 | Pre-computed results importer | ✅ Done | `import_precomputed_results.py` — imports already-scored tasks/outputs from an external run, no live API calls |
 | Shared batch utilities | ✅ Done | `batch_utils.py` — shared helpers for batch scripts |
+| Idempotent result writes | ✅ Done | `pipeline.py` upserts on `(task_id, model_name)`; DB-level UNIQUE constraint makes duplicates impossible (see §3.3) |
+| Per-task model scoping | ✅ Done | `rerun_model.py` runs only the models a task is actually missing (see §9.10) |
+| Maintenance scripts | ✅ Done | `dedup_outputs.py`, `backfill_sc_mc_scores.py`, `fix_broken_options.py` — one-off data repairs (see §9.9) |
+| Data-quality dry-run gate | ✅ Done | `--dry-run` flags buried option markers, option-letter gaps, unwinnable golds, unparseable tolerances (see §8.3) |
 | Database reset utility | ✅ Done | `reset_db.py` — wipes tasks/submissions safely |
 | Public site fully dynamic | ✅ Done | All charts/tables driven from `results.js` + `data.js` |
 | Stripe payments | ✅ Done | Full Checkout flow with payment confirmation and pipeline trigger |
@@ -140,6 +144,9 @@ accountingbench/
     ├── batch_run.py               ← Batch import + pipeline runner (see §8)
     ├── rerun_model.py             ← Run new model(s) on existing DB tasks (see §9)
     ├── import_precomputed_results.py ← Import already-scored tasks/outputs from Excel, no API calls (see §9.8)
+    ├── dedup_outputs.py           ← Maintenance: remove duplicate/orphaned run+output rows (see §9.9)
+    ├── backfill_sc_mc_scores.py   ← Maintenance: recompute stale SC/MC scores (see §9.9)
+    ├── fix_broken_options.py      ← Maintenance: re-parse options stuck as {"raw": ...} (see §9.9)
     ├── batch_utils.py             ← Shared helpers for batch_run + rerun_model
     ├── processing/
     │   ├── pipeline.py            ← Real benchmark pipeline (parallel models)
@@ -202,6 +209,19 @@ Mirrors the Outputs sheet of `final_evaluation_template.xlsx` exactly. One row p
 | `evaluation_method` | `"sc_mc_formula"` for choice tasks, `"judge"` for open tasks, `"dummy"` during testing. |
 | `model_answer_1/2/3` | Three independent trial answers from the model. |
 | `final_answer` | Majority vote (choice) or consolidation call result (open). |
+
+> **Note on imported rows:** `import_precomputed_results.py` copies whatever the source sheet contains. If an external run recorded a `final_answer` and confidences but not every individual trial text, `model_answer_2/3` land as `NULL`. This is impossible for rows the live pipeline wrote — it only reaches the output write after all three trials succeed (see the trial-integrity rule in §6.4) — so a populated `final_answer` alongside a `NULL` trial answer is a reliable marker of imported data.
+
+### 3.3 Uniqueness constraint on results
+
+`benchmark_outputs` and `benchmark_runs` both carry a **`UNIQUE (task_id, model_name)`** constraint (migration `a3f9c1d8e2b7`). One model can therefore hold exactly one result per task, enforced by the database rather than by convention.
+
+This exists because a re-run used to *insert* a second row instead of replacing the first, leaving the same task/model pair with two different scores and silently skewing every aggregate. Two layers now prevent that:
+
+1. `pipeline.py` **upserts** — it looks for an existing `(task_id, model_name)` row and updates it in place, inserting only when none exists. Re-running a model overwrites its previous result.
+2. The constraint rejects a duplicate outright, so any future code path that tries to blind-insert fails loudly with an `IntegrityError` instead of corrupting the data quietly.
+
+> ⚠️ Because a re-run **overwrites**, re-running a model that already has a result replaces its score. Use `--skip-existing` (or `rerun_model.py`, which skips completed work by default) when you want to preserve existing results.
 
 #### `submissions`
 
@@ -416,6 +436,18 @@ For open-ended tasks (`open_text`, `open_numeric`, `journal_entry`), the LLM jud
 | `numeric_tol` | `open_numeric` only | Tolerance band — answers within ±N are fully correct |
 
 These fields are read from `benchmark_tasks` and must be set before the pipeline runs. The dry-run field consistency check (see §8.3) flags tasks where required fields are missing.
+
+> ⚠️ `numeric_tolerance` must be parsed with `parse_tolerance()`, never bare `float()`. The ground-truth sheets write tolerances as `"+/- 1"`, `"± 5"`, `"+/- 0,01"` — `float()` rejects all of those, and the old importer caught the `ValueError` and stored `None`, leaving the judge with no tolerance band while the sheet still looked populated. `--dry-run` now emits a `TOL` warning for any tolerance it cannot parse.
+
+**Which models run:**
+
+`run_pipeline()` resolves its model list in this order:
+
+1. `pipeline.MODEL_LIST_OVERRIDE` — a `contextvars.ContextVar`. Set it to scope a *single* `run_pipeline()` call to specific models. Because `contextvars` are thread-local, each `ThreadPoolExecutor` worker gets its own value, so concurrent callers cannot clobber each other the way a shared `os.environ` write would. `rerun_model.py` uses this to run only a task's missing models (see §9.10).
+2. `OPENAI_MODEL_LIST` env var — the normal path for `batch_run.py` and the web submission flow.
+3. `ALL_MODELS` — the hardcoded fallback in `pipeline.py`. Every name here must exist in `MODEL_REGISTRY_JSON`, otherwise that model 404s, is skipped, and the run aborts with `IncompleteRunError`.
+
+**Result writes are idempotent:** each model's `BenchmarkRun` and `BenchmarkOutput` row is written with an upsert keyed on `(task_id, model_name)` — see §3.3 for why, and for the overwrite caveat.
 
 **Error handling:**
 
@@ -643,9 +675,21 @@ python -m backend.batch_run --file backend\tasks.xlsx [options]
 | 1 | Required fields | Rows with empty `question_id`, `prompt`, `answer_type`, `gold_answer`, `regulatory_framework`, `category`, or `education_level` |
 | 2 | Duplicate IDs | Same `question_id` appearing more than once in the sheet |
 | 3 | Skip-existing preview | How many tasks already exist in the DB vs how many are new *(only shown with `--skip-existing`)* |
-| 4 | Field consistency | `open_text`/`journal_entry` tasks missing `grading_criteria`; `open_numeric` tasks missing `numeric_tolerance` (judge will have no rubric/tolerance without these) |
+| 4 | Field consistency | See the warning-code table below — answer types, rubrics, tolerances, and option/gold integrity |
 | 5 | Attached files + PDF readability | Which referenced files can / cannot be found under `--uploads-dir`; warns if any PDF has no extractable text (scanned image — would raise `PDF_NO_TEXT` at runtime) |
 | 6 | API endpoints | Whether each model in `OPENAI_MODEL_LIST` is reachable and authenticated |
+
+**Field consistency warning codes** (emitted by `check_field_consistency()` in `batch_utils.py`, used by both `batch_run.py` and `rerun_model.py`):
+
+| Code | Meaning | Why it matters |
+|---|---|---|
+| `TYPE` | `answer_type` is not one of the five recognised values | Task cannot be scored — a blank trailing Excel row imports as a live, public, unscoreable task |
+| `MISS` | `grading_criteria` empty on `open_text`/`journal_entry`, or `numeric_tolerance` unset on `open_numeric` | Judge runs with no rubric / no tolerance band |
+| `TOL` | `numeric_tolerance` is present but unparseable | Stored as `NULL` — the sheet looks populated but the judge gets nothing |
+| `OPTS` | options stuck as `{"raw": ...}`; **or** an option's text contains a buried `X)` marker; **or** the option letters have a gap (`A, B, D, E`) | A swallowed option means models see a malformed choice list, and the missing letter vanishes from the parsed set |
+| `GOLD` | `gold_answer` uses `;` instead of `,`; **or** it cites an option letter that does not exist | Scoring silently returns 0, or **no model can ever reach full marks** |
+
+> **Why detection instead of a smarter parser:** `parse_options()` only treats `X)` as a new option at the start of a line, which is what lets a second option on the same line get absorbed. Loosening that regex to split after any whitespace would wrongly split ordinary German legal citations (`§ 4 Abs 1 Z 2 lit b) EStG`, `gemäß lit a)`) across the whole corpus. Flagging the anomaly at dry-run time and fixing the source sheet is the safer trade.
 
 ```bash
 # Full pre-flight check before a real run (always do this first)
@@ -860,6 +904,22 @@ The script creates a new `Submission` row for each task with `task_id` pointing 
 
 Before creating any submission, the script queries `benchmark_outputs` for existing rows matching the requested model(s). If all requested models already have outputs for a task, that task is skipped. Running the script twice for the same model is completely safe — the second run does nothing.
 
+Note the skip test is **existence-only**: a row that exists but holds an empty `final_answer` (a genuine model failure) still counts as "done" and is skipped. To force such a row to be re-answered, delete it first so the task looks incomplete again.
+
+**`--dry-run` validates the whole selection**
+
+In `--dry-run`, `rerun_model.py` validates **every task the filters matched**, not only the tasks that would run. It therefore doubles as a data-quality report over any slice of the dataset:
+
+```bash
+# audit one matrikelnummer's tasks without running anything
+python -m backend.rerun_model --models "gpt-5-mini" --question-ids "12015528" --dry-run
+
+# audit the entire dataset
+python -m backend.rerun_model --models "gpt-5-mini" --dry-run
+```
+
+This still reports `OPTS`/`GOLD`/`TOL`/`MISS`/`TYPE` findings when nothing needs running — earlier versions returned early in that case and validated nothing.
+
 ### 9.7 Shared utilities (`batch_utils.py`)
 
 Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/batch_utils.py`:
@@ -871,7 +931,7 @@ Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/bat
 | `get_existing_model_outputs()` | Checks which models already have outputs for a task |
 | `log_summary()` | Standardised run summary |
 | `setup_error_log(script_name)` | Adds a WARNING+ `FileHandler` to the root logger; writes `logs/<script_name>_errors_<timestamp>.log`. Called automatically at the start of every run. |
-| `check_field_consistency(tasks)` | Validates judge-relevant fields: warns when `grading_criteria` is missing for `open_text`/`journal_entry` tasks or `numeric_tolerance` is missing for `open_numeric` tasks. Called during `--dry-run`. |
+| `check_field_consistency(tasks)` | The data-quality gate. Validates `answer_type`, judge inputs (`grading_criteria`, `numeric_tolerance` incl. parseability), and choice-task option/gold integrity. Emits `TYPE`/`MISS`/`TOL`/`OPTS`/`GOLD` codes — see §8.3. Called during `--dry-run` by both scripts. |
 | `check_attached_files()` | Checks which attached file paths can be resolved (dry-run only) |
 | `check_pdf_readability()` | Opens each local PDF with PyMuPDF and warns if no text is extractable (scanned image PDF); same condition that raises `PDF_NO_TEXT` at runtime (dry-run only) |
 | `resolve_attached_files()` | Resolves attached file paths for real runs |
@@ -882,35 +942,40 @@ Both `batch_run.py` and `rerun_model.py` import shared helpers from `backend/bat
 
 ### 9.8 Pre-computed Results Importer (`import_precomputed_results.py`)
 
-`backend/import_precomputed_results.py` imports tasks **and already-scored model outputs** from an Excel file produced by an external run (e.g. a colleague's own offline evaluation script). Unlike `batch_run.py` and `rerun_model.py`, it **never calls a model API or the judge** — it writes `benchmark_tasks` / `benchmark_runs` / `benchmark_outputs` rows directly from the spreadsheet data. Use it when someone hands you a finished results file instead of a task-only Excel to run through the live pipeline.
+`backend/import_precomputed_results.py` imports **already-scored model outputs** from an Excel file produced by an external run (e.g. a colleague's own offline evaluation script). Unlike `batch_run.py` and `rerun_model.py`, it **never calls a model API or the judge** — it writes `benchmark_runs` / `benchmark_outputs` rows (and, in the default mode, `benchmark_tasks` rows too) directly from the spreadsheet data. Use it when someone hands you a finished results file instead of a task-only Excel to run through the live pipeline.
 
-**Expected Excel layout** — two sheets in the same workbook:
+**Two supported Excel layouts**, selected by the `--outputs-only` flag:
 
-| Sheet | Layout |
-|---|---|
-| `Questions` | Same layout as `batch_run.py`'s ground-truth template (`question_id`, `task_type`, `prompt`, `answer_type`, `gold_answer`, ...) |
-| `Outputs` | One row per `(question_id, model)` pair: `Model`, `run_id`, `question_id`, `model_answer_1/2/3`, `model_confidence_1/2/3`, `final_answer`, `avg_model_confidence`, `score_percent_sc_mc`, `judge_score_percent`, `judge_confidence`, `final_score_percent`, `evaluation_method`, `token_input`, `token_output`, `token_reasoning`, `evaluated_at_utc`, `evaluation_notes` |
+| Mode | Sheets required | Task handling |
+|---|---|---|
+| Default | `Questions` + `Outputs` (or whatever `--questions-sheet`/`--outputs-sheet` point to) | Tasks are upserted by `question_id` via `upsert_task()`, same as `batch_run.py` |
+| `--outputs-only` | Just the output sheet — no task sheet at all | Tasks must **already exist** in the DB; looked up by `question_id`. A task missing from the DB is reported as an error for that row, never fabricated |
+
+Use `--outputs-only` when backfilling results for tasks that were already imported previously (e.g. adding "old model" results against the original 521-task dataset) — task metadata is left completely untouched, only `benchmark_runs`/`benchmark_outputs` rows are added.
+
+Output sheet columns (either mode) — one row per `(question_id, model)` pair: `Model`, `question_id`, `model_answer_1/2/3`, `model_confidence_1/2/3`, `final_answer`, `avg_model_confidence`, `score_percent_sc_mc`, `judge_score_percent`, `judge_confidence`, `final_score_percent`, `evaluation_method`, `token_input`, `token_output`, `token_reasoning`, `evaluated_at_utc`, `evaluation_notes`.
 
 **All flags:**
 
 | Flag | Default | Description |
 |---|---|---|
 | `--file` | *(required)* | Path to the Excel file |
-| `--questions-sheet` | `Questions` | Sheet name for tasks |
+| `--questions-sheet` | `Questions` | Sheet name for tasks. Ignored with `--outputs-only` |
 | `--outputs-sheet` | `Outputs` | Sheet name for model outputs |
+| `--outputs-only` | off | Skip the Questions sheet — look up existing tasks in the DB by `question_id` instead of upserting them |
 | `--dry-run` | off | Parse + validate only — no DB writes |
 | `--limit` | off | Only process the first N tasks (useful for testing) |
 | `--user` | `batch_admin` | User ID to attribute submissions to |
 | `--rename-model` | *(none)* | Rename a model on import, e.g. `"DeepSeek-V3.2-2:DeepSeek-V3.2"`. Repeatable. Applied on top of `DEFAULT_RENAMES` in the script (used to fold naming variants from an external run into the model name already used elsewhere in the DB) |
 | `--skip-existing` | off | Skip `(task, model)` pairs that already have a `benchmark_output` row — same dedup logic as `rerun_model.py`, via `get_existing_model_outputs()` |
 
-**Validation (runs on every invocation, dry-run or not):** for every task in `Questions`, confirms there's at least one matching row in `Outputs`, flags missing models and duplicate `(question_id, model)` rows before anything is written.
+**Validation (runs on every invocation, dry-run or not):** for every task, confirms there's at least one matching row in the output sheet, flags missing models and duplicate `(question_id, model)` rows before anything is written. With `--outputs-only`, also confirms every `question_id` already resolves to a task in the DB.
 
 **What gets written per task:**
-- One `BenchmarkTask` row (via the same `upsert_task()` used by `batch_run.py` — `source="batch_import"`, `is_public=True`, `validation_status="approved"`)
+- Default mode only: one `BenchmarkTask` row (via the same `upsert_task()` used by `batch_run.py` — `source="batch_import"`, `is_public=True`, `validation_status="approved"`). `--outputs-only` skips this entirely — the existing task row is untouched.
 - One `Submission` row, set directly to `status="done"` with `completed_at` set (no pending → processing → done flow, since there's no live run to track)
 - One shared `run_id` per task (`run_import_<timestamp>_<uuid8>`), used across all of that task's models — matches the same semantics `run_pipeline()` uses (`run_id` groups the models run together *for one task*)
-- One `BenchmarkRun` + one `BenchmarkOutput` row per model, populated straight from the matching `Outputs` row (`judge_token_input`/`judge_token_output` are left `null` if the source sheet doesn't have them)
+- One `BenchmarkRun` + one `BenchmarkOutput` row per model, populated straight from the matching output row (`judge_token_input`/`judge_token_output` are left `null` if the source sheet doesn't have them). `inference_notes` records the source filename, e.g. `"Imported from output_old_models.xlsx (external run)"`
 
 ```bash
 # Pre-flight check — no DB writes, no API calls
@@ -927,9 +992,55 @@ python -m backend.import_precomputed_results --file backend/uploads/results_IFRS
 
 # Fold an extra model-naming variant into an existing model name on import
 python -m backend.import_precomputed_results --file backend/uploads/results.xlsx --rename-model "gpt-5.4-preview:gpt-5.4"
+
+# Outputs-only — backfill results for "old" models against tasks that already exist in the DB
+python -m backend.import_precomputed_results --file backend/output_old_models.xlsx --outputs-sheet Output --outputs-only --dry-run
+python -m backend.import_precomputed_results --file backend/output_old_models.xlsx --outputs-sheet Output --outputs-only --skip-existing
 ```
 
-Attached files referenced in the `Questions` sheet are resolved the same way as in `batch_run.py` — via `resolve_attached_files()`, recursively searching `backend/uploads/` by filename if the original (often external-machine) absolute path doesn't exist locally. See §8.9.
+Attached files referenced in the `Questions` sheet (default mode only) are resolved the same way as in `batch_run.py` — via `resolve_attached_files()`, recursively searching `backend/uploads/` by filename if the original (often external-machine) absolute path doesn't exist locally. See §8.9.
+
+---
+
+### 9.9 Maintenance scripts (one-off data repairs)
+
+Three read-then-repair scripts for defects that predate the current safeguards. All three follow the same conventions: `--dry-run` prints the full diff and writes nothing, `--yes` skips the confirmation prompt, and all are **idempotent** — on a clean database each reports "nothing to do", so they are safe to re-run any time.
+
+| Script | Fixes | Reusable? |
+|---|---|---|
+| `dedup_outputs.py` | Duplicate `(task_id, model_name)` rows in `benchmark_outputs`, keeping the **earliest** `evaluated_at_utc` and deleting later ones; also removes orphaned `benchmark_runs` rows left by abandoned attempts | Largely historical — the §3.3 constraint prevents new duplicates |
+| `backfill_sc_mc_scores.py` | Stale `score_percent_sc_mc` / `final_score_percent` on choice tasks, by recomputing with the current `score_sc_mc_percent()` from the already-stored `final_answer` (no API calls) | Yes — safe after any scoring-logic change |
+| `fix_broken_options.py` | Tasks whose `options` are stuck as `{"raw": ...}`, by re-parsing with the current `parse_options()`. Flags but never touches anything still unparseable | Yes |
+
+```bash
+python -m backend.dedup_outputs --dry-run
+python -m backend.backfill_sc_mc_scores --dry-run
+python -m backend.fix_broken_options --dry-run
+# then re-run with --yes to apply
+```
+
+> Run `dedup_outputs.py` **before** applying migration `a3f9c1d8e2b7` on any database that still contains duplicates — the UNIQUE constraint cannot be created while they exist.
+
+### 9.10 Per-task model scoping in `rerun_model.py`
+
+When `--models` names several models and a task is missing only *some* of them, only the missing ones are called. `process_task()` sets `pipeline.MODEL_LIST_OVERRIDE` to that task's `models_needed` list for the duration of its `run_pipeline()` call:
+
+```python
+token = MODEL_LIST_OVERRIDE.set(models_needed)
+try:
+    pipeline_status = run_pipeline(sub.id)
+finally:
+    MODEL_LIST_OVERRIDE.reset(token)
+```
+
+`OPENAI_MODEL_LIST` is deliberately **not** set process-wide by this script. Previously it was, which meant `run_pipeline()` re-ran *every* requested model for any task that needed even one — wasting API spend and (before §3.3) inserting duplicate rows with conflicting scores. `contextvars` are thread-local, so this stays correct under `--max-workers > 1`.
+
+You can confirm the scoping in the log — each task reports only what it actually needs:
+
+```
+[1/5] [RUN] 12008933_0001 → submission 2820 — models: ['gpt-5-mini', 'claude-opus-4-8']
+[2/5] [RUN] 12008933_0042 → submission 2822 — models: ['gpt-5-mini']
+```
 
 ---
 
@@ -1126,8 +1237,11 @@ FRONTEND_URL=http://127.0.0.1:5500
 Run these commands from the root `accountingbench/` folder:
 
 ```bash
-# 1. Run database migrations (creates all tables including checkout_url column)
-python -m alembic upgrade head
+# 1. Run database migrations (creates all tables, the checkout_url column, and
+#    the UNIQUE (task_id, model_name) constraint on results — see §3.3).
+#    On an existing DB that still has duplicates, run backend/dedup_outputs.py
+#    first: the constraint cannot be created while duplicates exist.
+python -m alembic -c backend/alembic.ini upgrade head
 
 # 2. Import the 521 original tasks from the Excel spreadsheet
 python import_tasks.py --excel backend/matrikelnummer_ground_truth_template.xlsx
@@ -1339,5 +1453,5 @@ After running any query, click **Write Changes** in DB Browser to save.
 
 ---
 
-*AccountingBench Developer Documentation · Version 1.9 · July 2026*
+*AccountingBench Developer Documentation · Version 2.0 · July 2026*
 *WU Vienna · Financial Accounting & Auditing Group · Board Service Center*

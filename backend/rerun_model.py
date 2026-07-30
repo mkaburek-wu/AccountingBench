@@ -71,12 +71,16 @@ How it works
 1. Queries ALL benchmark_tasks from the database.
 2. For each task, checks benchmark_outputs for existing rows matching the
    requested model(s). Tasks where ALL requested models already have outputs
-   are skipped entirely.
+   are skipped entirely; tasks missing only SOME of the requested models are
+   queued with just that missing subset (models_needed).
 3. For tasks that need running, creates a new Submission row.
-4. Calls run_pipeline(submission.id) — which reads OPENAI_MODEL_LIST from the
-   environment to determine which models to run. OPENAI_MODEL_LIST is set once
-   at startup (from --models or from OPENAI_MODEL_LIST in .env) before any
-   threads are started, so it is never mutated during parallel execution.
+4. Calls run_pipeline(submission.id) with pipeline.MODEL_LIST_OVERRIDE set
+   (via a contextvars.ContextVar, not the process-wide OPENAI_MODEL_LIST env
+   var) to that task's specific models_needed list — so a task missing only
+   one of several requested models does NOT re-run the models it already
+   has. contextvars are thread-local, so this is safe under --max-workers
+   task-level parallelism: each worker thread sets its own value without
+   affecting other concurrently-running tasks.
 
 The pipeline itself is unchanged. Outputs are linked to the existing task via
 submission.task_id → benchmark_outputs.task_id, exactly as in a normal run.
@@ -111,7 +115,9 @@ logger = logging.getLogger("rerun_model")
 from sqlalchemy import func, or_
 from backend.database import SessionLocal
 from backend.models   import BenchmarkTask
-from backend.processing.pipeline import run_pipeline, InsufficientBalanceError, IncompleteRunError
+from backend.processing.pipeline import (
+    run_pipeline, InsufficientBalanceError, IncompleteRunError, MODEL_LIST_OVERRIDE,
+)
 from backend.batch_utils import (
     ensure_batch_user,
     create_submission,
@@ -132,8 +138,8 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
                  index: int = 0, total: int = 0) -> dict:
     """
     Creates a submission for one task and runs only the needed models.
-    Temporarily overrides OPENAI_MODEL_LIST so the pipeline only calls
-    the models that are missing for this task.
+    Sets pipeline.MODEL_LIST_OVERRIDE (thread-local) so the pipeline only
+    calls the models that are missing for this task.
     """
     prefix = f"[{index}/{total}]"
     result = {"question_id": task_qid, "status": "unknown",
@@ -159,7 +165,11 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
         db.close()
         db = None
 
-        pipeline_status = run_pipeline(sub.id)
+        token = MODEL_LIST_OVERRIDE.set(models_needed)
+        try:
+            pipeline_status = run_pipeline(sub.id)
+        finally:
+            MODEL_LIST_OVERRIDE.reset(token)
         if pipeline_status == "error":
             logger.warning(f"{prefix} [FAIL] {task_qid} → submission {sub.id} — all models failed.")
             result["status"] = "error"
@@ -326,8 +336,10 @@ def main():
         logger.error("No models specified. Use --models or set OPENAI_MODEL_LIST in .env")
         sys.exit(1)
 
-    # Set once before any threads start — pipeline reads this value, never written again
-    os.environ["OPENAI_MODEL_LIST"] = ",".join(requested_models)
+    # Note: OPENAI_MODEL_LIST is deliberately NOT set here — each task sets
+    # pipeline.MODEL_LIST_OVERRIDE to its own models_needed subset in
+    # process_task() instead, so partially-complete tasks don't re-run
+    # models they already have (see process_task() docstring).
 
     # Parse filter values (split comma-separated strings into lists)
     def _split(val):
@@ -378,6 +390,11 @@ def main():
         all_tasks = query.all()
         logger.info(f"Found {len(all_tasks)} tasks matching filters.")
 
+        # Every task the filters selected, needed or not — --dry-run validates
+        # this whole set so it works as a data-quality gate even when nothing
+        # is missing (IDs only: the session closes before the checks run).
+        filtered_task_ids = [task.id for task in all_tasks]
+
         # For each task, determine which requested models are still missing
         work_items = []  # list of (task_id, task_qid, models_needed)
         skipped = 0
@@ -400,17 +417,26 @@ def main():
         work_items = work_items[:args.limit]
         logger.info(f"Limiting to first:  {len(work_items)} task(s) (--limit {args.limit})")
 
-    if not work_items:
+    # In --dry-run we continue even with nothing to run, so the validation
+    # checks below still execute (they are the point of a dry run).
+    if not work_items and not args.dry_run:
         logger.info("Nothing to do — all requested models already have outputs for all tasks.")
         return
 
     if args.dry_run:
         for i, (tid, qid, models) in enumerate(work_items, 1):
             logger.info(f"  [{i}/{len(work_items)}] {qid} — would run: {models}")
+        if not work_items:
+            logger.info("  Nothing would run — all requested models already have outputs.")
         logger.info("Dry run complete. No changes made.")
 
-        # Field consistency check — re-query only the tasks that would run
-        task_ids = [tid for tid, _, _ in work_items]
+        # Validate every task the filters selected, not just the ones that would
+        # run: a dry run should report data defects (buried option markers,
+        # option-letter gaps, gold citing a missing option, absent rubric or
+        # tolerance) across the whole selection, even when nothing is missing.
+        task_ids = filtered_task_ids
+        if args.limit:
+            task_ids = task_ids[: args.limit]
         if task_ids:
             db_check = SessionLocal()
             try:
