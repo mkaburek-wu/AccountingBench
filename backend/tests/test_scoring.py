@@ -12,6 +12,7 @@ import pytest
 from backend.processing.pipeline import (
     ALL_MODELS,
     MODEL_REGISTRY,
+    build_judge_prompt,
     gold_set,
     majority_vote,
     parse_choice_id,
@@ -262,6 +263,60 @@ def test_parse_number_german_thousands_is_ambiguous():
 def test_parse_number_returns_none_without_digits():
     assert parse_number("keine Angabe") is None
     assert parse_number("") is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# build_judge_prompt — the numeric tolerance band
+# ─────────────────────────────────────────────────────────────────────────────
+
+TOLERANCE_MARKER = "NUMERISCHE TOLERANZ"
+
+
+def _judge_prompt(numeric_tol):
+    return build_judge_prompt(
+        "Ermitteln Sie den Auszahlungsbetrag.",
+        "Der Auszahlungsbetrag beträgt € 2.853,13.",
+        "2853.12",
+        grading_criteria="Akzeptiere EUR-Betrag mit 2 Dezimalstellen.",
+        numeric_tol=numeric_tol,
+    )
+
+
+def test_tolerance_band_is_emitted_whenever_a_tolerance_is_given():
+    """The band used to be gated on kind == "open_numeric" at the call site.
+
+    189 of the 227 tasks that define a tolerance are journal_entry or open_text,
+    so their band was silently dropped and the judge graded numeric answers
+    freehand: 2.853,13 against gold 2853.12 (tolerance ±1) scored 100 for
+    claude-opus-5 and 0 for gpt-5.6-sol in the same task.
+    """
+    prompt = _judge_prompt(1.0)
+    assert f"{TOLERANCE_MARKER}: ±1.0" in prompt
+
+
+def test_no_tolerance_block_when_tolerance_is_absent():
+    """Tasks without a tolerance must build exactly the prompt they did before
+    the fix — the change may only ever add the block, never alter anything else.
+    """
+    assert TOLERANCE_MARKER not in _judge_prompt(None)
+
+
+def test_sheet_tolerance_strings_survive_into_the_judge_prompt():
+    """End-to-end guard: the sheets write "+/- 1", parse_tolerance turns that
+    into 1.0, and it must reach the judge as a band rather than being lost on
+    the way (the two halves of this bug were fixed in separate passes).
+    """
+    prompt = _judge_prompt(parse_tolerance("+/- 1"))
+    assert f"{TOLERANCE_MARKER}: ±1.0" in prompt
+
+
+def test_unparseable_tolerance_yields_no_band():
+    """parse_tolerance returns None for junk, which must degrade to "no band"
+    rather than crashing the judge call or emitting "±None".
+    """
+    prompt = _judge_prompt(parse_tolerance("ca. eins"))
+    assert TOLERANCE_MARKER not in prompt
+    assert "None" not in prompt
 
 
 # ─────────────────────────────────────────────────────────────────────────────

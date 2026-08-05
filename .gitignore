@@ -206,5 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 backend/accountingbench.db
-backend/accountingbench.db
-backend/accountingbench.db
+
+# Run logs, including the verbatim raw-response records written by
+# pipeline.py (logs/raw_responses_<run_id>.jsonl). These run to tens of MB
+# per full benchmark run and are diagnostic artefacts, not source.
+logs/

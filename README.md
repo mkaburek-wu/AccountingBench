@@ -442,11 +442,15 @@ For open-ended tasks (`open_text`, `open_numeric`, `journal_entry`), the LLM jud
 |---|---|---|
 | `grading_criteria` | `open_text`, `journal_entry` | Rubric shown to the judge as `BEWERTUNGSKRITERIEN` |
 | `acceptable_variants` | all open types | Pipe-separated alternative valid answers shown as `AKZEPTABLE VARIANTEN` |
-| `numeric_tol` | `open_numeric` only | Tolerance band — answers within ±N are fully correct |
+| `numeric_tol` | **any** open type that sets one | Tolerance band — answers within ±N are fully correct, shown as `NUMERISCHE TOLERANZ` |
 
 These fields are read from `benchmark_tasks` and must be set before the pipeline runs. The dry-run field consistency check (see §8.3) flags tasks where required fields are missing.
 
 > ⚠️ `numeric_tolerance` must be parsed with `parse_tolerance()`, never bare `float()`. The ground-truth sheets write tolerances as `"+/- 1"`, `"± 5"`, `"+/- 0,01"` — `float()` rejects all of those, and the old importer caught the `ValueError` and stored `None`, leaving the judge with no tolerance band while the sheet still looked populated. `--dry-run` now emits a `TOL` warning for any tolerance it cannot parse.
+
+> ⚠️ **The tolerance applies to every task that defines one, not just `open_numeric`.** The judge call used to be gated on `numeric_tol=numeric_tol if kind == "open_numeric" else None`, which silently discarded the band for **189 of the 227** tasks that set one — 162 `journal_entry` and 27 `open_text`, the latter being payroll tasks whose `gold_answer` is a bare number such as `2853.12`. Without a band the judge graded numeric answers freehand, with visibly arbitrary results: on task `12008933_0022` (gold `2853.12`, tolerance `±1`) two models submitted the *same* value `2.853,13` and were scored **100** and **0** respectively. `build_judge_prompt()` already omits the block when the tolerance is `None`, so tasks without one build an unchanged prompt.
+>
+> Scores stored **before** this fix were produced without the band on those 189 tasks, so they are not strictly comparable with fresh reruns of the same tasks. Rejudging them was deliberately deferred — the stored values are untouched.
 
 **Which models run:**
 
@@ -458,12 +462,30 @@ These fields are read from `benchmark_tasks` and must be set before the pipeline
 
 **Result writes are idempotent:** each model's `BenchmarkRun` and `BenchmarkOutput` row is written with an upsert keyed on `(task_id, model_name)` — see §3.3 for why, and for the overwrite caveat.
 
+**An unreadable choice answer is an error, never a 0%.**
+
+A choice answer that resolves to no valid option used to be coerced to `""` and scored **0** — which in the database is indistinguishable from the model answering *incorrectly*. A real case: `gpt-5.6-terra` replied `{"answer":"RICHTIG","confidence":0.94}` to a RICHTIG/FALSCH task whose options were `{"a": "RICHTIG", "b": "FALSCH"}`. The answer was correct, but only `A`/`a` parsed, so it was stored as an empty answer scoring 0.
+
+The parser now tries, in order:
+
+1. letter extraction (`A`, `a`, `A) RICHTIG`, and the compact `BC` form for multi-select);
+2. an exact match against the **option text** — so `"RICHTIG"` resolves to `A`. Strict by design: case/whitespace-insensitive but no substring or fuzzy matching, and only when exactly one option matches;
+3. otherwise `UnparseableAnswerError`.
+
+The error takes the normal `ERROR` → `IncompleteRunError` route, so **no row is written** and `rerun_model.py` — which skips only where a row already exists — retries that `(task, model)` pair automatically. It is deliberately not retried in place: re-asking until an answer happens to parse would bias the result, the same reasoning as the trial-integrity rule above.
+
+**Every model call is logged verbatim.**
+
+`logs/raw_responses_<run_id>.jsonl` gets one JSON record per call — `trial_1/2/3`, `consolidation` and `judge` — with the raw response, the parsed answer, the confidence, `valid_choices` and token counts. Only the *post-parse* result is stored in the database, so without this "why did this score 0?" cannot be answered after the fact without paying to re-run the model. Set `RAW_RESPONSE_LOG=false` to disable. Log-writing failures are swallowed and can never abort a run; `logs/` is gitignored.
+
 **Error handling:**
 
 | Error type | Behaviour |
 |---|---|
-| Transient (429, 5xx, timeout, connection reset) | Retry once — 60s delay for 429, 5s for others |
+| Transient on a **trial** (429, 500, 502, 503, timeout, connection reset) | Retry once — 60s delay for 429, 30s for alawyer, 5s for others |
 | Any trial needs a retry | `RuntimeError` raised — model run aborted to preserve benchmark integrity |
+| Transient on the **judge** call | Retried up to `JUDGE_MAX_ATTEMPTS` (3) with 5s/15s backoff — the run is *not* aborted (see below) |
+| Choice answer cannot be resolved to a valid option | `UnparseableAnswerError` → model run aborted, **no output row written** (see below) |
 | Not found (404) | Skip model, task marked incomplete → stop |
 | PDF attachment yields no extractable text (scanned image PDF) | `TaskLevelError` raised → all model threads cancelled immediately → run stops |
 | Attached file not found on disk | `TaskLevelError` raised → all model threads cancelled immediately → run stops |
@@ -1248,6 +1270,7 @@ Create `.env` in the project root with the following variables:
 | `APP_ENV` | Set to `production` to disable auto-`create_all()` on startup. Default: `development`. |
 | `APP_VERSION` | API version string shown in `/health` and `/docs`. Default: `1.0.0`. |
 | `DEBUG_PIPELINE` | Set to `true` to enable DEBUG logging for the pipeline (prompts + raw responses). Default: off. |
+| `RAW_RESPONSE_LOG` | Set to `false` to stop writing `logs/raw_responses_<run_id>.jsonl`. Default: on — see §6.4. |
 | `OPENAI_MODEL_LIST` | Comma-separated list of model names to benchmark. Also used as fallback by `rerun_model.py --models`. |
 | `MODEL_REGISTRY_JSON` | JSON object mapping model names to API config (base_url, api_key, api_type, timeout). |
 | `ALAWYER_API_KEY` | API key for the Alawyer Austrian legal AI. Referenced in `MODEL_REGISTRY_JSON` as `${ALAWYER_API_KEY}`. |
@@ -1385,7 +1408,7 @@ The suite covers **pure functions only** — scoring, answer parsing, options pa
 
 | File | Covers |
 |---|---|
-| `test_scoring.py` | `score_sc_mc_percent`, `parse_choice_set`, `parse_choice_id`, `majority_vote`, `gold_set`, `parse_number`, `parse_tolerance`, and that every `ALL_MODELS` entry resolves in `MODEL_REGISTRY` |
+| `test_scoring.py` | `score_sc_mc_percent`, `parse_choice_set`, `parse_choice_id`, `majority_vote`, `gold_set`, `parse_number`, `parse_tolerance`, `build_judge_prompt`'s tolerance band (see §6.4), and that every `ALL_MODELS` entry resolves in `MODEL_REGISTRY` |
 | `test_options_parsing.py` | `parse_options` for each supported sheet format, plus every `check_field_consistency` warning code (`TYPE`/`MISS`/`TOL`/`OPTS`/`GOLD`) |
 | `test_task_import.py` | `upsert_task` — tolerance coercion, approved/private flags, update-in-place, options parsing, year coercion |
 | `test_results_export.py` | `avg`, `score_block`, `calibration` binning, `deep_diff` tolerance, and the `results.js` JS→JSON round-trip |

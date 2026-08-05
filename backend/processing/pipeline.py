@@ -89,6 +89,20 @@ class TaskLevelError(RuntimeError):
     Every model would fail identically, so the run is stopped immediately.
     Propagates out of run_pipeline so batch scripts can stop cleanly."""
 
+
+class UnparseableAnswerError(RuntimeError):
+    """Raised when a choice task's answer cannot be resolved to a valid option.
+
+    Previously such an answer was coerced to "" and scored 0, which in the
+    database is indistinguishable from the model answering incorrectly — a
+    silent data-quality failure that understates the model. Raising instead
+    routes it through the normal ERROR path: no benchmark_outputs row is
+    written, so rerun_model.py (which skips only where a row exists) retries
+    that (task, model) pair automatically.
+
+    Deliberately NOT retried: re-asking until the answer happens to parse
+    would bias the result, the same reasoning as the trial-integrity rule."""
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -107,6 +121,16 @@ CLIENT_CACHE: Dict[str, Any] = {}
 # Judge must stay fixed to gpt-5-mini for consistent benchmarking
 JUDGE_MODEL = "gpt-5-mini"
 
+# The judge IS retried on transient faults, unlike a trial. The trial-integrity
+# rule exists because re-asking a model until it answers would bias its measured
+# answer — that reasoning does not apply here: by the time the judge runs, the
+# model's answer is already fixed and stored, so retrying only re-asks the
+# grader about unchanged input. Before this, a single upstream 500 discarded an
+# entire model run *after* all three trials had succeeded and been paid for.
+JUDGE_MAX_ATTEMPTS  = 3          # initial call + 2 retries
+JUDGE_RETRY_DELAYS  = (5, 15)    # seconds before retry 1 and 2
+JUDGE_SDK_RETRIES   = 2          # openai SDK-level retries, judge client only
+
 SYSTEM_PROMPT_VERSION = "v3_types"
 DATASET_VERSION       = "v3"
 N_TRIALS              = 3
@@ -114,6 +138,64 @@ N_TRIALS              = 3
 ATTACHMENTS_CACHE_DIR = ".attached_cache"
 ATTACHMENTS_MAX_CHARS = 12000
 HTTP_TIMEOUT_SEC      = 60
+
+# ── Raw response logging ──────────────────────────────────────────────────────
+# Every model/judge call is appended verbatim to logs/raw_responses_<run_id>.jsonl.
+# Without this, only the POST-parse result is kept, so "why did this score 0?"
+# cannot be answered after the fact without paying to re-run the model — which
+# blocked three separate diagnoses before this existed. Set
+# RAW_RESPONSE_LOG=false in .env to disable.
+RAW_RESPONSE_LOG_ENABLED = os.environ.get("RAW_RESPONSE_LOG", "true").strip().lower() != "false"
+RAW_RESPONSE_LOG_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs"
+)
+
+
+def log_raw_response(
+    context: Optional[Dict[str, Any]],
+    model: str,
+    raw_text: str,
+    answer: Any = None,
+    conf: Any = None,
+    tokens: Tuple = (None, None, None),
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Append one JSONL record of a model call. Never raises.
+
+    Logging must never be able to abort a benchmark run, so every failure here
+    (unwritable directory, encoding problem, full disk) is swallowed.
+    """
+    if not RAW_RESPONSE_LOG_ENABLED:
+        return
+    try:
+        ctx = context or {}
+        record = {
+            "ts":                datetime.now(timezone.utc).isoformat(),
+            "run_id":            ctx.get("run_id"),
+            "task_id":           ctx.get("task_id"),
+            "model":             model,
+            "phase":             ctx.get("phase"),
+            "kind":              ctx.get("kind"),
+            "valid_choices":     ctx.get("valid_choices"),
+            "raw":               raw_text,
+            "parsed_answer":     answer,
+            "parsed_confidence": conf,
+            "token_input":       tokens[0] if len(tokens) > 0 else None,
+            "token_output":      tokens[1] if len(tokens) > 1 else None,
+            "token_reasoning":   tokens[2] if len(tokens) > 2 else None,
+        }
+        if extra:
+            record.update(extra)
+
+        os.makedirs(RAW_RESPONSE_LOG_DIR, exist_ok=True)
+        run_id = ctx.get("run_id") or "unknown_run"
+        path = os.path.join(RAW_RESPONSE_LOG_DIR, f"raw_responses_{run_id}.jsonl")
+        # Explicit UTF-8: the corpus is German and Windows would otherwise
+        # default to cp1252 and mangle it.
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:  # noqa: BLE001 - logging must never break a run
+        logger.debug(f"[raw-log] could not write raw response record: {exc}")
 
 # Per-call override for which models to run, set by callers (e.g. rerun_model.py)
 # that need to scope a single run_pipeline() call to specific models without
@@ -192,17 +274,52 @@ def majority_vote(strings: List[str]) -> str:
     return strings[0]
 
 
-def parse_choice_id(text: str, valid: Optional[List[str]] = None) -> Optional[str]:
+def _match_option_text(text: str, options: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Resolve an answer that quotes an option's TEXT back to its letter.
+
+    The prompt asks for JSON but never says to answer with the letter, so on a
+    RICHTIG/FALSCH item a model replying "RICHTIG" is fully compliant — and used
+    to be discarded and scored 0. Matching the option value recovers it.
+
+    Strict on purpose: exact match after case/whitespace normalisation, and only
+    when exactly one option matches. No substring or fuzzy matching, so a
+    partial echo never silently resolves to the wrong option.
+    """
+    if not text or not options or not isinstance(options, dict):
+        return None
+    needle = " ".join(str(text).split()).strip().casefold()
+    if not needle:
+        return None
+    hits = [
+        str(k).upper() for k, v in options.items()
+        if " ".join(str(v).split()).strip().casefold() == needle
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
+def parse_choice_id(
+    text: str,
+    valid: Optional[List[str]] = None,
+    options: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
     if not text:
         return None
     hits = [c.upper() for c in CHOICE_RE.findall(text.upper())]
     for c in hits:
         if valid is None or c in valid:
             return c
+    # Fallback: the answer may quote the option's text instead of its letter.
+    matched = _match_option_text(text, options)
+    if matched and (valid is None or matched in valid):
+        return matched
     return None
 
 
-def parse_choice_set(text: str, valid: Optional[List[str]] = None) -> List[str]:
+def parse_choice_set(
+    text: str,
+    valid: Optional[List[str]] = None,
+    options: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     if not text:
         return []
     hits      = [c.upper() for c in CHOICE_RE.findall(text.upper())]
@@ -237,6 +354,10 @@ def parse_choice_set(text: str, valid: Optional[List[str]] = None) -> List[str]:
         and all(ch in valid for ch in compact)
     ):
         return list(compact)
+    # Last resort: the answer may quote a single option's text verbatim.
+    matched = _match_option_text(text, options)
+    if matched and matched in valid:
+        return [matched]
     return out
 
 
@@ -675,6 +796,26 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
     raise RuntimeError(f"Unsupported api_type for model '{model}': {api_type}")
 
 
+def _is_transient_error(exc: Exception) -> bool:
+    """True if `exc` looks like a temporary upstream fault worth retrying.
+
+    Shared by the trial loop and call_judge so both classify errors the same
+    way. The wording matches what providers actually put in the message — the
+    Cortecs gateway reports its own upstream failures as
+    `500 - APIConnectionError: AzureException ... Connection error.`, so the
+    status code is matched as a substring rather than read off the exception.
+
+    Note 504 is deliberately absent, matching the historical trial behaviour.
+    """
+    error_str = str(exc)
+    is_conn = any(s in error_str for s in [
+        'no data event', 'Read timed out', 'ConnectionError',
+        'RemoteDisconnected', 'Connection reset',
+    ])
+    is_timeout = 'timed out' in error_str.lower()
+    return is_conn or is_timeout or any(c in error_str for c in ['429', '500', '502', '503'])
+
+
 def _get_timeout_for_model(model: str) -> float:
     """Return the configured timeout for a model (from MODEL_REGISTRY) or the default 240s."""
     if MODEL_REGISTRY and model in MODEL_REGISTRY:
@@ -731,8 +872,12 @@ def usage_to_tokens(usage_obj: Any) -> Tuple[Optional[int], Optional[int], Optio
 
 
 def call_llm_json(
-    prompt: str, model: str, temperature: float = 0.0
+    prompt: str, model: str, temperature: float = 0.0,
+    context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Optional[float], Tuple]:
+    """`context` carries run_id/task_id/phase for the raw-response log only —
+    it never affects the request. Kept as a kwarg so the return signature stays
+    unchanged for the existing call sites."""
     resolved_client, api_mode = _get_client_for_model(model)
     logger.debug(f"[LLM→] model={model} | prompt ({len(prompt)} chars):\n{prompt}")
 
@@ -776,6 +921,7 @@ def call_llm_json(
             token_in = token_out = None
         logger.debug(f"[LLM←] model={model} | raw={raw_text!r}")
         logger.debug(f"[LLM←] model={model} | answer={answer!r} conf={conf}")
+        log_raw_response(context, model, raw_text, answer, conf, (token_in, token_out, None))
         return answer, conf, (token_in, token_out, None)
 
     # Alawyer — Austrian legal AI (SSE streaming, custom endpoint)
@@ -948,6 +1094,7 @@ def call_llm_json(
             logger.warning(f"[alawyer] Could not extract answer from parsed response: {result!r}")
             answer = raw_response
 
+        log_raw_response(context, model, raw_response, answer, conf, (token_in, token_out, None))
         return answer, conf, (token_in, token_out, None)
 
     # GPT-5 / o-series — use Responses API
@@ -1019,6 +1166,7 @@ def call_llm_json(
     token_in, token_out, token_reason = usage_to_tokens(getattr(resp, "usage", None))
     logger.debug(f"[LLM←] model={model} | raw={raw_text!r}")
     logger.debug(f"[LLM←] model={model} | answer={answer!r} conf={conf}")
+    log_raw_response(context, model, raw_text, answer, conf, (token_in, token_out, token_reason))
     return answer, conf, (token_in, token_out, token_reason)
 
 
@@ -1029,6 +1177,7 @@ def call_judge(
     grading_criteria: str = "",
     acceptable_variants: str = "",
     numeric_tol: Optional[float] = None,
+    context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[float, Optional[float], str, Optional[int], Optional[int]]:
     resolved_client, api_mode = _get_client_for_model(JUDGE_MODEL)
     if api_mode == "anthropic_foundry":
@@ -1041,26 +1190,49 @@ def call_judge(
         numeric_tol=numeric_tol,
     )
 
-    if _is_responses_only_model(JUDGE_MODEL):
-        resp     = resolved_client.responses.create(
-            model=_get_model_api_id(JUDGE_MODEL),
-            reasoning={"effort": "low"},
-            input=[
-                {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
-                {"role": "user",   "content": prompt},
-            ],
-        )
-        raw_text = getattr(resp, "output_text", "") or "{}"
-    else:
-        resp     = resolved_client.chat.completions.create(
-            model=_get_model_api_id(JUDGE_MODEL),
-            temperature=0.0,
-            messages=[
-                {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
-                {"role": "user",   "content": prompt},
-            ],
-        )
-        raw_text = resp.choices[0].message.content or "{}"
+    judge_ctx = dict(context or {}, phase="judge")
+
+    # with_options() returns a COPY of the client. It must not be the cached one:
+    # JUDGE_MODEL and the benchmarked 'gpt-5-mini' share a cache entry, and
+    # SDK-level retries are invisible to the trial-integrity check, so raising
+    # max_retries on the shared client would silently let a benchmark trial be
+    # retried without trial_needed_retry ever being set.
+    judge_client = resolved_client.with_options(max_retries=JUDGE_SDK_RETRIES)
+
+    for attempt in range(1, JUDGE_MAX_ATTEMPTS + 1):
+        try:
+            if _is_responses_only_model(JUDGE_MODEL):
+                resp     = judge_client.responses.create(
+                    model=_get_model_api_id(JUDGE_MODEL),
+                    reasoning={"effort": "low"},
+                    input=[
+                        {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
+                        {"role": "user",   "content": prompt},
+                    ],
+                )
+                raw_text = getattr(resp, "output_text", "") or "{}"
+            else:
+                resp     = judge_client.chat.completions.create(
+                    model=_get_model_api_id(JUDGE_MODEL),
+                    temperature=0.0,
+                    messages=[
+                        {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
+                        {"role": "user",   "content": prompt},
+                    ],
+                )
+                raw_text = resp.choices[0].message.content or "{}"
+            break  # success — leave the retry loop
+
+        except Exception as e:
+            if attempt >= JUDGE_MAX_ATTEMPTS or not _is_transient_error(e):
+                raise
+            delay = 60 if '429' in str(e) else JUDGE_RETRY_DELAYS[attempt - 1]
+            logger.warning(
+                f"[JUDGE] transient error judging "
+                f"task_id={judge_ctx.get('task_id')} model={judge_ctx.get('model')} "
+                f"(attempt {attempt}/{JUDGE_MAX_ATTEMPTS}), retrying in {delay}s: {e}"
+            )
+            time.sleep(delay)
 
     j_in, j_out, _ = usage_to_tokens(getattr(resp, "usage", None))
 
@@ -1071,8 +1243,20 @@ def call_judge(
         conf_val      = data.get("confidence", None)
         conf          = max(0.0, min(1.0, float(conf_val))) if conf_val is not None else None
         notes         = str(data.get("notes", "") or "")[:200]
+        log_raw_response(judge_ctx, JUDGE_MODEL, raw_text, score_percent, conf, (j_in, j_out, None),
+                         extra={"judge_notes": notes})
         return score_percent, conf, notes, j_in, j_out
     except Exception:
+        # An unparseable judge reply currently scores the model 0 — the same
+        # silent-zero shape as an unreadable model answer. Logged so it is at
+        # least detectable after the fact instead of looking like a real 0.
+        logger.warning(
+            f"[JUDGE] could not parse judge response for "
+            f"task_id={judge_ctx.get('task_id')} model={judge_ctx.get('model')} "
+            f"— scoring 0. raw={raw_text[:200]!r}"
+        )
+        log_raw_response(judge_ctx, JUDGE_MODEL, raw_text, None, None, (j_in, j_out, None),
+                         extra={"judge_parse_error": True})
         return 0.0, None, "judge_parse_error", j_in, j_out
 
 
@@ -1224,7 +1408,15 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                     for attempt in range(2):
                         try:
                             ans, conf, (t_in, t_out, t_reason) = call_llm_json(
-                                trial_prompt, model=current_model, temperature=0.0
+                                trial_prompt, model=current_model, temperature=0.0,
+                                # Log metadata only — never sent to the model.
+                                context={
+                                    "run_id":        run_id,
+                                    "task_id":       task_id,
+                                    "phase":         f"trial_{t}",
+                                    "kind":          kind,
+                                    "valid_choices": valid_choices,
+                                },
                             )
                             break  # success — exit retry loop
 
@@ -1248,8 +1440,8 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                                 'no data event', 'Read timed out', 'ConnectionError',
                                 'RemoteDisconnected', 'Connection reset',
                             ])
-                            is_timeout   = 'timed out' in error_str.lower()
-                            is_transient = is_alawyer or is_timeout or any(c in error_str for c in ['429', '500', '502', '503'])
+                            # Same classification the judge uses — see _is_transient_error.
+                            is_transient = _is_transient_error(e)
 
                             if is_not_found:
                                 logger.warning(
@@ -1282,11 +1474,29 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                         token_output    = t_out
                         token_reasoning = t_reason
 
-                    # Parse answer based on task kind
-                    if kind == "single_choice":
-                        ans = parse_choice_id(ans, valid=valid_choices) or ""
-                    elif kind == "multi_choice":
-                        ans = ",".join(parse_choice_set(ans, valid=valid_choices))
+                    # Parse answer based on task kind.
+                    #
+                    # A choice answer that resolves to nothing used to be coerced
+                    # to "" and scored 0 — indistinguishable in the DB from the
+                    # model answering incorrectly. Raise instead, so the model
+                    # takes the normal ERROR path, no row is written, and
+                    # rerun_model.py retries the pair automatically.
+                    if kind in ("single_choice", "multi_choice"):
+                        raw_ans = ans
+                        if kind == "single_choice":
+                            parsed = parse_choice_id(ans, valid=valid_choices, options=task_options)
+                            ans = parsed or ""
+                        else:
+                            ans = ",".join(
+                                parse_choice_set(ans, valid=valid_choices, options=task_options)
+                            )
+                        if not ans:
+                            raise UnparseableAnswerError(
+                                f"[{current_model}] task_id={task_id} trial {t}: could not "
+                                f"resolve any valid choice from answer {raw_ans[:200]!r} "
+                                f"(kind={kind}, valid_choices={valid_choices}). "
+                                f"Full response in logs/raw_responses_{run_id}.jsonl"
+                            )
                     elif kind == "open_numeric":
                         ans = ans.strip()
 
@@ -1327,14 +1537,36 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                         trial_answers[2] if len(trial_answers) > 2 else "",
                     )
                     final_answer, _, _ = call_llm_json(
-                        final_prompt, model=current_model, temperature=0.0
+                        final_prompt, model=current_model, temperature=0.0,
+                        context={
+                            "run_id":  run_id,
+                            "task_id": task_id,
+                            "phase":   "consolidation",
+                            "kind":    kind,
+                        },
                     )
                     logger.info(f"  [{current_model}] Judge call...")
                     judge_score_percent, judge_conf, jnotes, judge_tok_in, judge_tok_out = call_judge(
                         task_prompt, final_answer, gold_answer,
                         grading_criteria=grading_criteria,
                         acceptable_variants=acceptable_variants,
-                        numeric_tol=numeric_tol if kind == "open_numeric" else None,
+                        # Pass the tolerance whenever the task defines one. This used
+                        # to be gated on kind == "open_numeric", which silently threw
+                        # the band away for 189 of the 227 tasks that set it — mostly
+                        # journal_entry and the payroll open_text tasks whose gold is a
+                        # bare number. Without a band the judge improvised: the same
+                        # answer (2.853,13 against gold 2853.12) scored 100 for one
+                        # model and 0 for another. build_judge_prompt() already skips
+                        # the block when this is None, so untoleranced tasks are
+                        # unaffected.
+                        numeric_tol=numeric_tol,
+                        context={
+                            "run_id":  run_id,
+                            "task_id": task_id,
+                            "kind":    kind,
+                            # the model being judged, distinct from JUDGE_MODEL
+                            "model":   current_model,
+                        },
                     )
                     eval_method = "judge"
                     notes       = f"Final via consolidation; Judge once; kind={kind}. {jnotes}"
