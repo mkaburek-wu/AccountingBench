@@ -1136,12 +1136,12 @@ The public site is fully dynamic — all numbers, charts, tables, and leaderboar
 
 #### `results.js` — single source of truth
 
-Contains `BENCHMARK_RESULTS` (one object per model) and `BENCHMARK_META` (dataset composition). To add a new model or update scores, edit only this file.
+Contains `BENCHMARK_RESULTS` (one object per model) and `BENCHMARK_META` (dataset composition). **Never hand-edit either — both are generated.** See "Regenerating `results.js`" below.
 
 **To add a new model:**
-1. Copy any existing model block
-2. Fill in all fields (see field reference at top of file)
-3. Insert at the correct position (sorted by `overall` descending)
+1. Run the model through the pipeline (`rerun_model.py`) so it has benchmark data
+2. Add an entry for it to `NEW_MODEL_META` in `backend/recompute_results.py` (`org`/`color`/`priceIn`/`priceOut`/`speed` — the only fields that can't be derived from the data)
+3. Run `python -m backend.recompute_results --write`
 4. Everything updates automatically — ticker, leaderboard, holistic matrix, cost table, token bars, all charts
 
 **Key fields per model:**
@@ -1186,13 +1186,13 @@ python -m backend.recompute_results --write
 What it does:
 
 1. Recomputes every score field (category / task-type / answer-type / regulatory-framework / `byEdu` / `n` / `cost` / `tokTask` / `calib`) per model, using exact-string-match masks — a hybrid or unknown `task_type`, `answer_type`, or `regulatory_framework` counts toward `overall` only, matching the site's existing convention (e.g. `open_numeric` answers, `interpretation_of_law_and_journal_entry` tasks).
-2. **Diffs every model not named in `--models`** against the current `results.js` and refuses to write if any of their *score* fields differ — the safety gate that catches a dataset covering more models than expected. `n`/`tokTask`/`cost`/`calib` drift is reported but never blocking.
+2. **Diffs every model not named in `--models`** against the current `results.js` and refuses to write if any of their *score* fields differ — the safety gate that catches a dataset covering more models than expected. `n`/`tokTask`/`cost`/`calib` drift is reported but never blocking. Models configured in `NEW_MODEL_META` (see below) are exempt from this check — they have no prior score to diff against.
 3. Re-sorts the array by `overall` descending and rewrites the file, leaving `BENCHMARK_META` and the untouched models' object bodies byte-for-byte identical (only their comment-header rank number may change).
 
 Notes and caveats:
 
 - **The task total is derived, not hardcoded.** `n` and the `note` string use the distinct task count in the source, so removing or adding tasks cannot silently mislabel coverage.
-- **Models absent from `results.js` are skipped, not written.** `name`, `org`, `color`, `priceIn`, `priceOut`, and `speed` are curated by hand and cannot be derived from the DB, so a model with no entry is treated as deliberately unpublished (`alawyer`, partial-coverage models). To publish a new model, add a stub block with those six fields first; the score fields are then generated.
+- **Models absent from both `results.js` and `NEW_MODEL_META` are skipped, not written.** `name`, `org`, `color`, `priceIn`, `priceOut`, and `speed` are curated by hand and cannot be derived from the DB. A model with neither is treated as deliberately unpublished (`alawyer`, partial-coverage models). To publish a new model, add those six fields to the `NEW_MODEL_META` dict at the top of the script and run `--write` — it's treated as "expected to change" automatically, regardless of `--models`, and its score fields are generated the same way as any other model's.
 - `priceIn`, `priceOut`, and `speed` are always carried over unchanged — update them by hand when pricing changes.
 - `token_reasoning` is already inside `token_output` for some providers but additive for others (see `ADD_REASONING_TOKENS` in the script). Verify that assumption for any model not already in the mapping before trusting its `tokTask`/`cost`.
 - Confidence values are rounded before calibration binning. Many are means of three trials that land exactly on a decile edge, where float noise (`0.20000000000000004` from SQLite vs `0.2` from an Excel round-trip) would otherwise move rows between bins and make `calib` non-reproducible.

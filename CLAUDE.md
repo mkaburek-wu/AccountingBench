@@ -34,7 +34,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/batch_run.py` — imports tasks from Excel and runs full pipeline on all models
 - `backend/rerun_model.py` — runs new model(s) on existing DB tasks (no Excel needed)
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
-- `backend/recompute_results.py` — recomputes `public/results.js` score fields from a `benchmark_tasks`/`benchmark_outputs` Excel export (e.g. a fresh full rerun); diffs against the current file before writing, see below
+- `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
 - `backend/processing/pipeline.py` — the real benchmark pipeline (do not break this)
 
 ---
@@ -46,7 +46,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 3. Run `python -m backend.rerun_model --models "model-name" --dry-run` to verify
 4. Run `python -m backend.rerun_model --models "model-name" --limit 1 --sequential` to test
 5. Run full rerun: `python -m backend.rerun_model --models "model-name" --max-workers 15`
-6. Add model to `BENCHMARK_RESULTS` in `public/results.js` with all score fields
+6. Add an entry for it to `NEW_MODEL_META` in `backend/recompute_results.py` (`org`/`color`/`priceIn`/`priceOut`/`speed` — the only fields that can't be derived from benchmark data), then run `python -m backend.recompute_results --write` to generate and publish all of its score fields in `public/results.js`
 
 ---
 
@@ -70,19 +70,37 @@ calib: [{x, y, n}]                           ← confidence calibration
 
 ---
 
-## Recomputing Scores from a Fresh Excel Export
+## Regenerating `results.js` (`recompute_results.py`)
 
-When a full/partial benchmark rerun is exported to Excel (sheets `benchmark_tasks` + `benchmark_outputs`, same layout as the DB tables), use `backend/recompute_results.py` instead of hand-editing scores:
+`public/results.js` is a **generated artefact** — never hand-edit the numbers. Use `backend/recompute_results.py` instead:
 
 ```bash
-python -m backend.recompute_results
+# report only: compute, diff against results.js, write nothing (the default)
+python -m backend.recompute_results --check
+
+# regenerate results.js (refuses to write if an unexpected score moved)
+python -m backend.recompute_results --write
 ```
 
-It recomputes every score field (category/task-type/answer-type/regulatory-framework/byEdu/n/cost/tokTask/calib) per model from the Excel data, then **diffs the result against the current `public/results.js`** before writing anything:
-- Models listed in `UPDATED_MODELS` (edit this list in the script) get their block replaced and the whole array re-sorted by `overall` descending.
-- All other models are checked field-by-field against their current values — the script refuses to write if any of their **scores** differ unexpectedly (this is the safety gate; it only ever touches the models you told it to).
-- `priceIn`/`priceOut`/`speed` are always carried over unchanged from the current file (no pricing/timing data lives in these exports) — edit them by hand afterward if pricing changed.
-- `token_reasoning` handling is per-model (see `ADD_REASONING_TOKENS` in the script) — it's already folded into `token_output` for some models (gpt-5.x, Kimi) but additive for others (grok, mercury-2); check this assumption before trusting `tokTask`/`cost` for a new model.
+| Flag | Effect |
+|---|---|
+| `--check` | Compute + diff + report, no writes. Exits non-zero on an unexpected score change. **Default.** |
+| `--write` | Rewrite the `BENCHMARK_RESULTS` array, gated on the diff passing. |
+| `--models "a,b"` | Models *expected* to change. Every other published model is diff-checked strictly and must match `results.js` exactly. Omit to refresh all published models. |
+| `--from-excel PATH` | Read a `benchmark_tasks` + `benchmark_outputs` Excel export instead of the live DB — for reproducing an earlier published run, or as an independent cross-check. |
+| `--include-private` | Include non-public tasks (DB source only). By default only `is_public = 1` tasks count, matching what the site reports. |
+
+It recomputes every score field (category/task-type/answer-type/regulatory-framework/`byEdu`/`n`/`cost`/`tokTask`/`calib`) per model, then **diffs the result against the current `public/results.js`** before writing anything — any model not named in `--models` must match its current score fields exactly, or the write is refused (`n`/`tokTask`/`cost`/`calib` drift is reported but never blocking).
+
+**Publishing a brand-new model:** `name`/`org`/`color`/`priceIn`/`priceOut`/`speed` are curated by hand and cannot be derived from benchmark data, so a model with no existing `results.js` entry needs an entry in the `NEW_MODEL_META` dict at the top of the script first:
+```python
+NEW_MODEL_META = {
+    "New-Model-Name": {"org": "...", "color": "#hexvalue", "priceIn": 1.0, "priceOut": 2.0, "speed": 50.0},
+}
+```
+Once configured, it's treated as "expected to change" automatically (no need to also list it in `--models`) — all of its score fields are generated from the data and it's inserted into the array at its earned sort position.
+
+`priceIn`/`priceOut`/`speed` are always carried over unchanged for existing models — edit them by hand if pricing changed. `token_reasoning` handling is per-model (see `ADD_REASONING_TOKENS` in the script) — it's already folded into `token_output` for some models (gpt-5.x, Kimi) but additive for others (grok, mercury-2); check this assumption before trusting `tokTask`/`cost` for a new model.
 
 ---
 

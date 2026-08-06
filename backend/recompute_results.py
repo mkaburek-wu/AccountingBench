@@ -27,6 +27,11 @@ Models named by --models are treated as "expected to change" and are written
 with freshly computed values. Every other model is compared field-by-field
 against results.js; any score difference is treated as unexpected and blocks a
 --write. With no --models, every model in the data is refreshed.
+
+To publish a model that has never been in results.js before, add it to the
+NEW_MODEL_META dict below (org/color/priceIn/priceOut/speed — the fields that
+can't be derived from benchmark data) and run --write. It's treated as
+"expected to change" automatically, regardless of --models.
 """
 import argparse
 import json
@@ -57,6 +62,22 @@ SCORE_FIELDS = [
 # larger than token_output, so they must be added; gpt-5.x/Kimi already
 # include reasoning inside token_output).
 ADD_REASONING_TOKENS = {"grok-4-fast-reasoning", "mercury-2"}
+
+# Models present in this run's data that have never been published before.
+# org/color/priceIn/priceOut/speed cannot be derived from benchmark data
+# (color is a hex swatch for the leaderboard's charts, priceIn/priceOut is
+# the model's published API $/1M-token rate, speed is output-tokens/sec
+# measured separately — there is no timing column in this data), so fill
+# them in here for a model, then run --write once. The score fields are
+# then generated automatically — no manual stub block in results.js needed.
+# A model already published is never re-synthesized from this dict (see
+# `brand_new` in main()), so it's safe to leave an entry here afterward,
+# but pruning it keeps this dict readable as a "not yet published" to-do
+# list.
+NEW_MODEL_META = {
+    # "New-Model-Name": {"org": "...", "color": "#hexvalue", "priceIn": 1.0, "priceOut": 2.0, "speed": 50.0},
+}
+NEW_MODEL_META_FIELDS = ["org", "color", "priceIn", "priceOut", "speed"]
 
 
 def _merge(tasks: pd.DataFrame, outputs: pd.DataFrame) -> pd.DataFrame:
@@ -422,11 +443,39 @@ def main(argv=None):
     current, raw_blocks = parse_current_results_js()
     all_models = sorted(df["model_name"].dropna().unique().tolist())
 
+    # existing_in_js is the pre-synthesis snapshot of what results.js actually
+    # contains — this, not `current`, is what "already published" means from
+    # here on. `current` gets synthetic entries added below for brand-new
+    # models so cur['org']/['color']/['priceIn']/['priceOut']/['speed'] reads
+    # downstream (format_model_js, compute_model's price_in/price_out) work
+    # uniformly without special-casing.
+    existing_in_js = set(current.keys())
+    brand_new = sorted((set(all_models) & set(NEW_MODEL_META)) - existing_in_js)
+    for m in brand_new:
+        meta = NEW_MODEL_META[m]
+        missing_fields = [f for f in NEW_MODEL_META_FIELDS if f not in meta]
+        if missing_fields:
+            print(f"!! NEW_MODEL_META['{m}'] is missing required field(s): {missing_fields}")
+            return 1
+        current[m] = {"name": m, **meta}
+
+    # A NEW_MODEL_META entry whose name matches nothing in this run's data is
+    # almost always a typo (model_name must match byte-for-byte) or a stale
+    # entry left over from a previous publish — flag it instead of silently
+    # ignoring it.
+    stale_meta = sorted(set(NEW_MODEL_META) - set(all_models) - existing_in_js)
+    if stale_meta:
+        print(f"   NEW_MODEL_META also configures {stale_meta}, absent from this run's data — ignored")
+
     # results.js is the publication surface: name/org/color/priceIn/priceOut/
     # speed are curated by hand and cannot be derived from the DB. A model with
-    # no entry there is deliberately unpublished (e.g. partial coverage), not an
-    # error — so it is reported and skipped rather than blocking the run.
-    published   = [m for m in all_models if m in current]
+    # no entry there and no NEW_MODEL_META entry is deliberately unpublished
+    # (e.g. partial coverage), not an error — so it is reported and skipped
+    # rather than blocking the run. `published` deliberately uses the
+    # pre-synthesis snapshot so a brand-new model can never land in the
+    # diff-checked "unchanged" bucket below (it has no real prior score to
+    # diff against).
+    published   = [m for m in all_models if m in existing_in_js]
     unpublished = [m for m in all_models if m not in current]
 
     # Models named by --models are "expected to change"; everything else must
@@ -440,9 +489,16 @@ def main(argv=None):
     else:
         updated_models = list(published)
 
+    # A brand-new model is always written, whether or not the user named it in
+    # --models — otherwise it falls through to the missing_meta check below
+    # and blocks the run even though it's fully configured.
+    updated_models = list(dict.fromkeys(updated_models + brand_new))
+
     print(f"Source: {source}")
     print(f"Tasks:  {total_tasks}")
     print(f"Models: {len(published)} published, {len(all_models)} in data")
+    if brand_new:
+        print(f"        newly published via NEW_MODEL_META: {brand_new}")
     if unpublished:
         print(f"        not in results.js, skipped: {unpublished}")
     print()
@@ -496,9 +552,10 @@ def main(argv=None):
     elif unchanged:
         print(f"All {len(unchanged)} model(s) not expected to change match results.js exactly.")
 
-    # Rank the published models by new overall score for the comment numbering.
+    # Rank the published (+ newly published) models by new overall score for
+    # the comment numbering.
     all_overalls = []
-    for m in published:
+    for m in published + brand_new:
         cur = current.get(m, {})
         overall = computed_by_model[m]["overall"] if m in computed_by_model else cur.get("overall")
         all_overalls.append((m, overall))
@@ -521,10 +578,12 @@ def main(argv=None):
     missing_meta = [m for m in updated_models if m not in current]
     if missing_meta:
         # name/org/color/priceIn/priceOut/speed are curated by hand and cannot
-        # be derived from the DB, so a brand-new model needs a stub block first.
+        # be derived from the DB, so a brand-new model needs a NEW_MODEL_META
+        # entry before it can be published.
         print(f"\n!! No existing results.js entry for: {missing_meta}")
-        print("   Add a block with name/org/color/priceIn/priceOut/speed first; "
-              "the score fields will then be generated.")
+        print("   Add an entry to NEW_MODEL_META in backend/recompute_results.py "
+              "(org/color/priceIn/priceOut/speed) first; the score fields will "
+              "then be generated.")
         return 1
 
     if not args.write:
