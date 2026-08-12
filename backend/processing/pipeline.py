@@ -760,7 +760,7 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
         return CLIENT_CACHE[cache_key]
     if api_type == "openai_v1":
         base_url = cfg.get("base_url")
-        api_key  = cfg.get("api_key")
+        api_key  = _resolve_api_key(cfg.get("api_key", ""))
         if not base_url or not api_key:
             raise RuntimeError(f"MODEL_REGISTRY entry for '{model}' missing base_url/api_key")
         # Allow per-model timeout override via MODEL_REGISTRY_JSON "timeout" key
@@ -770,7 +770,7 @@ def _get_client_for_model(model: str) -> Tuple[Any, str]:
         return CLIENT_CACHE[cache_key]
     if api_type == "anthropic_foundry":
         base_url = cfg.get("base_url")
-        api_key  = cfg.get("api_key")
+        api_key  = _resolve_api_key(cfg.get("api_key", ""))
         if not base_url or not api_key:
             raise RuntimeError(f"MODEL_REGISTRY entry for '{model}' missing base_url/api_key")
         if AnthropicFoundry is None:
@@ -885,7 +885,7 @@ def call_llm_json(
     _timeout = _get_timeout_for_model(model)
     if api_mode == "anthropic_foundry":
         resp     = resolved_client.messages.create(
-            model=model,
+            model=_get_model_api_id(model),
             system="Gib strikt nur JSON aus. Kein anderer Text.",
             max_tokens=30000,
             messages=[{"role": "user", "content": prompt}],

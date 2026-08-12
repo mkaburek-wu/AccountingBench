@@ -516,7 +516,8 @@ MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_k
 
 | `api_type` | Protocol | Used for |
 |---|---|---|
-| `openai_v1` | OpenAI Chat / Responses API | OpenAI, Cortecs, DeepSeek, Mistral, Kimi, Mercury |
+| `openai_v1` | OpenAI Chat / Responses API | Azure OpenAI (GPT models), Cortecs (DeepSeek, Mistral, Kimi), Mercury |
+| `anthropic_foundry` | Anthropic Messages API (via `AnthropicFoundry` SDK client) | Claude models on Azure AI Foundry |
 | `alawyer` | Custom SSE (POST `/api/v1/completions`) | Alawyer Austrian legal AI |
 
 **Optional keys per model entry:**
@@ -529,18 +530,30 @@ MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_k
 | `no_temperature` | bool | If `true`, omits the `temperature` parameter from the API call. Required for newer Claude models (4.7+) where temperature is deprecated by Anthropic. |
 | `extra_body` | object | Any additional fields to pass in the request body (merged at the top level). Useful for provider-specific parameters. |
 
-**Example — Claude model on Cortecs routed to Amazon Bedrock:**
+**Example — Claude model on Azure AI Foundry:**
 
 ```json
 "claude-opus-4-7": {
-    "api_type": "openai_v1",
-    "base_url": "https://api.cortecs.ai/v1",
-    "api_key": "...",
-    "model_id": "claude-opus4-7",
-    "allowed_providers": ["amazon_ireland"],
-    "no_temperature": true
+    "api_type": "anthropic_foundry",
+    "base_url": "https://<your-foundry-resource>.services.ai.azure.com/anthropic/",
+    "api_key": "${AZURE_FOUNDRY_API_KEY}",
+    "timeout": 900
 }
 ```
+
+All Claude models route through `anthropic_foundry` using the native Anthropic Messages API — not the OpenAI-compatible chat-completions shape. `model_id` isn't needed as long as the Azure deployment name matches the registry key; set it only if a deployment is named differently. `no_temperature`/`allowed_providers`/`extra_body` are `openai_v1`-only and have no effect on this branch (the Foundry call never sends `temperature`).
+
+**Example — GPT model on Azure OpenAI:**
+
+```json
+"gpt-4o": {
+    "api_type": "openai_v1",
+    "base_url": "https://<your-azure-openai-resource>.openai.azure.com/openai/v1/",
+    "api_key": "${AZURE_OPENAI_API_KEY}"
+}
+```
+
+Whether a `gpt-5.x`/`o`-series model uses the Responses API (with reasoning-effort config) instead of plain Chat Completions is decided by `_is_responses_only_model()` in `pipeline.py`, which checks whether `base_url` contains `openai.azure.com` or `api.openai.com` — so Azure OpenAI entries automatically get the same Responses-API routing as direct OpenAI ones.
 
 **Example — slow model with extended timeout:**
 
@@ -567,7 +580,7 @@ MODEL_REGISTRY_JSON={"model-name": {"api_type": "...", "base_url": "...", "api_k
 
 Then set `ALAWYER_API_KEY=your-key` separately in `.env`.
 
-**Cortecs model IDs:** The Cortecs API uses its own model ID strings that differ from the display names. Always verify the exact ID via `GET https://api.cortecs.ai/v1/models` and set `model_id` accordingly. Use `allowed_providers` to pin routing to a specific backend (e.g. `amazon_ireland` instead of the default Google Vertex AI for Claude models).
+**Cortecs model IDs:** The Cortecs API uses its own model ID strings that differ from the display names. Always verify the exact ID via `GET https://api.cortecs.ai/v1/models` and set `model_id` accordingly. Use `allowed_providers` to pin routing to a specific backend (e.g. `amazon_ireland`) when the default routing doesn't support a parameter you need.
 
 **Alawyer-specific notes:**
 - API rate limit is **10 requests per minute** — use `--max-workers 1` or `--max-workers 2` when running `rerun_model.py`

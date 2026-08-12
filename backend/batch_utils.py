@@ -433,8 +433,14 @@ def test_endpoints(models: list) -> None:
 
     Tries GET /models/{id} first; falls back to GET /models (list) for
     providers that don't expose individual model lookup (e.g. InceptionLabs).
+    `anthropic_foundry` models have no Models API on the AnthropicFoundry SDK
+    backend (`client.models` is `None` — Azure's Anthropic passthrough only
+    exposes the Messages API), so they're probed with a 1-token `messages.create`
+    call instead, via the same client-construction path the real pipeline uses.
     """
-    from backend.processing.pipeline import MODEL_REGISTRY, _get_model_api_id
+    from backend.processing.pipeline import (
+        MODEL_REGISTRY, _get_model_api_id, _resolve_api_key, _get_client_for_model,
+    )
 
     logger.info("")
     logger.info("=== ENDPOINT CHECK ===")
@@ -444,12 +450,29 @@ def test_endpoints(models: list) -> None:
         cfg      = MODEL_REGISTRY.get(model) or {}
         api_type = (cfg.get("api_type") or "").strip().lower()
         base_url = (cfg.get("base_url") or "").rstrip("/")
-        api_key  = cfg.get("api_key") or ""
+        api_key  = _resolve_api_key(cfg.get("api_key") or "")
         model_id = _get_model_api_id(model)
 
         if api_type == "alawyer":
             logger.info(f"  SKIP  {model}: alawyer (no /models endpoint)")
             skipped += 1
+            continue
+        if api_type == "anthropic_foundry":
+            if not base_url or not api_key:
+                logger.warning(f"  SKIP  {model}: no base_url/api_key configured")
+                skipped += 1
+                continue
+            try:
+                client, _ = _get_client_for_model(model)
+                client.messages.create(
+                    model=model_id, max_tokens=1,
+                    messages=[{"role": "user", "content": "ping"}],
+                )
+                logger.info(f"  OK    {model}  →  {model_id}")
+                ok += 1
+            except Exception as e:
+                logger.error(f"  FAIL  {model}  →  {model_id}  (anthropic messages.create error: {e})")
+                failed += 1
             continue
         if not base_url:
             logger.warning(f"  SKIP  {model}: no base_url configured")
