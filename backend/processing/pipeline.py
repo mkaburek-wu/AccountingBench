@@ -871,6 +871,37 @@ def usage_to_tokens(usage_obj: Any) -> Tuple[Optional[int], Optional[int], Optio
     return to_int(token_in), to_int(token_out), to_int(token_reason)
 
 
+def anthropic_content_text(resp: Any) -> Tuple[str, str]:
+    """Pull the assistant text out of an Anthropic Messages response.
+
+    Returns (text, thinking_text).
+
+    `resp.content` is a LIST of blocks, and the first one is not necessarily the
+    answer. With extended thinking enabled the model emits a ThinkingBlock
+    first, which has `.thinking` and no `.text` at all — reading content[0].text
+    then raises "'ThinkingBlock' object has no attribute 'text'" and kills the
+    whole model run. Reasoning models like claude-fable-5 do this on every call.
+
+    So: concatenate every text block, and hand back the thinking separately so
+    it can be logged without contaminating the answer that gets parsed.
+    """
+    blocks = getattr(resp, "content", None) or []
+    texts, thoughts = [], []
+    for block in blocks:
+        btype = getattr(block, "type", None)
+        if btype == "text":
+            texts.append(getattr(block, "text", "") or "")
+        elif btype == "thinking":
+            thoughts.append(getattr(block, "thinking", "") or "")
+        elif btype == "redacted_thinking":
+            thoughts.append("[redacted_thinking]")
+        elif btype is None and hasattr(block, "text"):
+            # Unknown/older SDK shape that still exposes .text — take it rather
+            # than silently dropping the only content we have.
+            texts.append(getattr(block, "text", "") or "")
+    return "\n".join(t for t in texts if t).strip(), "\n".join(thoughts).strip()
+
+
 def call_llm_json(
     prompt: str, model: str, temperature: float = 0.0,
     context: Optional[Dict[str, Any]] = None,
@@ -891,7 +922,7 @@ def call_llm_json(
             messages=[{"role": "user", "content": prompt}],
             timeout=_timeout,
         )
-        raw_text = resp.content[0].text if getattr(resp, "content", None) else ""
+        raw_text, thinking_text = anthropic_content_text(resp)
         text     = extract_json_object(raw_text)
         answer, conf = "", None
         try:
@@ -921,7 +952,20 @@ def call_llm_json(
             token_in = token_out = None
         logger.debug(f"[LLM←] model={model} | raw={raw_text!r}")
         logger.debug(f"[LLM←] model={model} | answer={answer!r} conf={conf}")
-        log_raw_response(context, model, raw_text, answer, conf, (token_in, token_out, None))
+        if not raw_text:
+            # Every block was thinking and none was text. Surface it instead of
+            # letting an empty answer look like a content failure.
+            logger.warning(
+                f"[{model}] response contained no text block "
+                f"(blocks={[getattr(b, 'type', '?') for b in getattr(resp, 'content', None) or []]}, "
+                f"stop_reason={getattr(resp, 'stop_reason', None)!r}). "
+                f"If stop_reason is 'max_tokens', the thinking budget consumed the whole response."
+            )
+        # Anthropic counts thinking inside output_tokens, so it is already paid
+        # for in token_out; the extra field is for the log only.
+        extra = {"thinking_chars": len(thinking_text)} if thinking_text else None
+        log_raw_response(context, model, raw_text, answer, conf,
+                         (token_in, token_out, None), extra=extra)
         return answer, conf, (token_in, token_out, None)
 
     # Alawyer — Austrian legal AI (SSE streaming, custom endpoint)
