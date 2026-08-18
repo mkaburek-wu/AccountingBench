@@ -104,6 +104,8 @@ def load_data_from_db(public_only: bool = True) -> pd.DataFrame:
 
     Only public tasks are counted by default, matching what the site reports.
     """
+    from sqlalchemy import func
+
     from backend.database import SessionLocal
     from backend.models import BenchmarkOutput, BenchmarkTask
 
@@ -119,10 +121,17 @@ def load_data_from_db(public_only: bool = True) -> pd.DataFrame:
             "avg_model_confidence", "judge_confidence",
             "token_input", "token_output", "token_reasoning",
         ]
-        outputs = pd.DataFrame(
-            db.query(*[getattr(BenchmarkOutput, c) for c in out_cols]).all(),
-            columns=out_cols,
+        # The consolidation call (open text/numeric/journal tasks) can itself
+        # come back empty, leaving final_answer NULL — but the judge still
+        # scores that empty answer, so final_score_percent ends up 0.0 anyway.
+        # final_answer presence, not final_score_percent, is the real signal
+        # that the model completed the task; without this filter those rows
+        # count as a genuine (0-scoring) attempt instead of being excluded.
+        out_q = db.query(*[getattr(BenchmarkOutput, c) for c in out_cols]).filter(
+            BenchmarkOutput.final_answer.isnot(None),
+            func.trim(BenchmarkOutput.final_answer) != "",
         )
+        outputs = pd.DataFrame(out_q.all(), columns=out_cols)
     finally:
         db.close()
 
@@ -136,6 +145,12 @@ def load_data_from_excel(xlsx_path: Path) -> pd.DataFrame:
     reproduced exactly, and as an independent cross-check of the DB path."""
     tasks = pd.read_excel(xlsx_path, sheet_name="benchmark_tasks")
     outputs = pd.read_excel(xlsx_path, sheet_name="benchmark_outputs")
+    # Same final_answer presence filter as load_data_from_db(), so --from-excel
+    # reproduces the DB result exactly.
+    has_final_answer = outputs["final_answer"].notna() & (
+        outputs["final_answer"].astype(str).str.strip() != ""
+    )
+    outputs = outputs[has_final_answer]
     return _merge(tasks, outputs)
 
 

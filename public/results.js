@@ -265,18 +265,19 @@ const BENCHMARK_RESULTS = [
   // ── 10. claude-sonnet-5 ───────────────────────────────────
   {
     name: 'claude-sonnet-5', org: 'Anthropic', color: '#3b82f6',
-    overall: 69.1, tax: 63.2, financial: 76.5, management: 85.5,
-    interpLaw: 73.4, calculation: 32.4, journal: 79.8,
-    multiChoice: 89.5, openText: 57.9, singleChoice: 72.7, journalEntry: 87.8,
-    austrianTax: 61.2, mixedAcc: 85.3, ugb: 82.3, ifrs: 89.7,
-    eduProf: 65.6, eduMaster: 90.1, eduVoc: 50.0,
+    overall: 69.2, tax: 63.4, financial: 76.5, management: 85.5,
+    interpLaw: 73.6, calculation: 32.4, journal: 79.8,
+    multiChoice: 89.5, openText: 58.1, singleChoice: 72.7, journalEntry: 87.8,
+    austrianTax: 61.4, mixedAcc: 85.3, ugb: 82.3, ifrs: 89.7,
+    eduProf: 65.7, eduMaster: 90.1, eduVoc: 50.0,
     byEdu: {
-      prof:   { overall: 65.6, tax: 63.2, financial: 84.4, management: 62.7, interpLaw: 67.8, calculation: 42.3, journal: 91.4, multiChoice: 87.2, openText: 60.5, singleChoice: 73.1, journalEntry: 92.5, austrianTax: 63.2, mixedAcc: 62.7, ugb: null, ifrs: 84.4 },
+      prof:   { overall: 65.7, tax: 63.4, financial: 84.4, management: 62.7, interpLaw: 68.0, calculation: 42.3, journal: 91.4, multiChoice: 87.2, openText: 60.7, singleChoice: 73.1, journalEntry: 92.5, austrianTax: 63.4, mixedAcc: 62.7, ugb: null, ifrs: 84.4 },
       master: { overall: 90.1, tax: 79.2, financial: 89.6, management: 94.7, interpLaw: 90.1, calculation: null, journal: null, multiChoice: 90.9, openText: 100.0, singleChoice: 80.0, journalEntry: null, austrianTax: 77.3, mixedAcc: 91.9, ugb: 84.5, ifrs: 99.0 },
       voc:    { overall: 50.0, tax: 0.0, financial: 52.9, management: null, interpLaw: 67.5, calculation: 10.2, journal: 76.5, multiChoice: 75.0, openText: 35.6, singleChoice: 62.5, journalEntry: 86.2, austrianTax: 41.4, mixedAcc: null, ugb: 78.7, ifrs: null },
     },
-    n: '564', priceIn: 2.0, priceOut: 10.0, cost: 0.052268, tokTask: 6047, speed: 59.0,
-    calib: [{x:0.15,y:12.0,n:5}, {x:0.25,y:6.2,n:12}, {x:0.35,y:15.0,n:11}, {x:0.45,y:26.5,n:17}, {x:0.55,y:55.6,n:116}, {x:0.65,y:66.4,n:133}, {x:0.75,y:69.4,n:85}, {x:0.85,y:90.3,n:137}, {x:0.95,y:96.9,n:48}],
+    n: '563/564', priceIn: 2.0, priceOut: 10.0, cost: 0.051825, tokTask: 6003, speed: 59.0,
+    note: '1 task not completed for this model. Scored on 563/564 tasks.',
+    calib: [{x:0.15,y:12.0,n:5}, {x:0.25,y:6.2,n:12}, {x:0.35,y:15.0,n:11}, {x:0.45,y:26.5,n:17}, {x:0.55,y:55.6,n:116}, {x:0.65,y:66.4,n:133}, {x:0.75,y:69.4,n:85}, {x:0.85,y:91.0,n:136}, {x:0.95,y:96.9,n:48}],
   },
 
   // ── 11. gpt-5.6-luna ───────────────────────────────────
@@ -367,18 +368,19 @@ const BENCHMARK_RESULTS = [
   // ── 16. Mistral-Large-3 ───────────────────────────────────
   {
     name: 'Mistral-Large-3', org: 'Mistral AI', color: '#c2410c',
-    overall: 52.0, tax: 42.3, financial: 62.4, management: 85.5,
-    interpLaw: 56.8, calculation: 24.7, journal: 39.4,
-    multiChoice: 86.2, openText: 33.3, singleChoice: 70.5, journalEntry: 36.1,
-    austrianTax: 42.4, mixedAcc: 86.4, ugb: 70.4, ifrs: 62.6,
-    eduProf: 42.3, eduMaster: 89.2, eduVoc: 42.9,
+    overall: 52.4, tax: 42.8, financial: 62.4, management: 85.5,
+    interpLaw: 57.3, calculation: 24.7, journal: 39.4,
+    multiChoice: 86.2, openText: 33.7, singleChoice: 70.5, journalEntry: 36.1,
+    austrianTax: 42.8, mixedAcc: 86.4, ugb: 70.4, ifrs: 62.6,
+    eduProf: 42.7, eduMaster: 89.2, eduVoc: 42.9,
     byEdu: {
-      prof:   { overall: 42.3, tax: 41.3, financial: 41.9, management: 66.9, interpLaw: 44.8, calculation: 24.5, journal: 27.1, multiChoice: 80.6, openText: 32.9, singleChoice: 61.5, journalEntry: 25.0, austrianTax: 41.3, mixedAcc: 66.9, ugb: null, ifrs: 41.9 },
+      prof:   { overall: 42.7, tax: 41.8, financial: 41.9, management: 66.9, interpLaw: 45.3, calculation: 24.5, journal: 27.1, multiChoice: 80.6, openText: 33.3, singleChoice: 61.5, journalEntry: 25.0, austrianTax: 41.8, mixedAcc: 66.9, ugb: null, ifrs: 41.9 },
       master: { overall: 89.2, tax: 79.2, financial: 89.0, management: 93.0, interpLaw: 89.2, calculation: null, journal: null, multiChoice: 89.1, openText: 90.0, singleChoice: 90.0, journalEntry: null, austrianTax: 77.3, mixedAcc: 92.1, ugb: 84.8, ifrs: 99.0 },
       voc:    { overall: 42.9, tax: 6.7, financial: 44.9, management: null, interpLaw: 80.0, calculation: 25.2, journal: 42.9, multiChoice: 100.0, openText: 35.0, singleChoice: 75.0, journalEntry: 40.2, austrianTax: 41.6, mixedAcc: null, ugb: 47.1, ifrs: null },
     },
-    n: '564', priceIn: 0.5, priceOut: 1.5, cost: 0.001485, tokTask: 1391, speed: 48.2,
-    calib: [{x:0.05,y:70.0,n:1}, {x:0.15,y:25.0,n:1}, {x:0.35,y:10.0,n:1}, {x:0.65,y:85.0,n:1}, {x:0.75,y:31.8,n:4}, {x:0.85,y:36.5,n:51}, {x:0.95,y:53.8,n:505}],
+    n: '560/564', priceIn: 0.5, priceOut: 1.5, cost: 0.001485, tokTask: 1392, speed: 48.2,
+    note: '4 tasks not completed for this model. Scored on 560/564 tasks.',
+    calib: [{x:0.05,y:70.0,n:1}, {x:0.15,y:25.0,n:1}, {x:0.35,y:10.0,n:1}, {x:0.65,y:85.0,n:1}, {x:0.75,y:31.8,n:4}, {x:0.85,y:37.3,n:50}, {x:0.95,y:54.1,n:502}],
   },
 
   // ── 17. grok-4-fast-reasoning ───────────────────────────────────
