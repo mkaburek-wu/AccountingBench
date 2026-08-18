@@ -78,8 +78,8 @@ NEW_MODEL_META = {
     # "New-Model-Name": {"org": "...", "color": "#hexvalue", "priceIn": 1.0, "priceOut": 2.0, "speed": 50.0},
     "claude-sonnet-5": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 2.0, "priceOut": 10.0, "speed": 59.0},
     "claude-opus-4-8": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 5.0, "priceOut": 25.0, "speed": 59.0},
-    "claude-opus-5": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 5.0, "priceOut": 25.0, "speed": 54.0},
-    "claude-fable-5": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 10.0, "priceOut": 50.0, "speed": 0.0},
+    "claude-opus-5": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 5.0, "priceOut": 25.0, "speed": 51.0},
+    "claude-fable-5": {"org": "Anthropic", "color": "#3b82f6", "priceIn": 10.0, "priceOut": 50.0, "speed": 66.0},
     "gpt-5.6-sol": {"org": "OpenAI", "color": "#3b82f6", "priceIn": 5.0, "priceOut": 30.0, "speed": 64.0},
     "gpt-5.6-terra": {"org": "OpenAI", "color": "#3b82f6", "priceIn": 2.0, "priceOut": 12.0, "speed": 126.0},
     "gpt-5.6-luna": {"org": "OpenAI", "color":"#3b82f6", "priceIn": 0.2, "priceOut": 1.2, "speed": 187.0}

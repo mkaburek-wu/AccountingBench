@@ -60,7 +60,7 @@
 // Cost methodology: (input_tokens × price_in + output_tokens × price_out) / n_tasks / 1e6
 
 const BENCHMARK_META = {
-  date:                 'May 2026',
+  date:                 'August 2026',
   totalTasks:           564,
   regulatoryFrameworks: 5,
 
@@ -122,7 +122,7 @@ const BENCHMARK_RESULTS = [
       master: { overall: 94.2, tax: 93.1, financial: 94.1, management: 94.8, interpLaw: 94.2, calculation: null, journal: null, multiChoice: 93.6, openText: 100.0, singleChoice: 100.0, journalEntry: null, austrianTax: 92.4, mixedAcc: 96.2, ugb: 90.1, ifrs: 99.0 },
       voc:    { overall: 63.9, tax: 0.0, financial: 67.5, management: null, interpLaw: 90.0, calculation: 28.6, journal: 83.1, multiChoice: 100.0, openText: 49.6, singleChoice: 87.5, journalEntry: 90.3, austrianTax: 57.8, mixedAcc: null, ugb: 84.1, ifrs: null },
     },
-    n: '564', priceIn: 5.0, priceOut: 25.0, cost: 0.104625, tokTask: 5006, speed: 54.0,
+    n: '564', priceIn: 5.0, priceOut: 25.0, cost: 0.104625, tokTask: 5006, speed: 51.0,
     calib: [{x:0.35,y:0.0,n:1}, {x:0.45,y:25.0,n:8}, {x:0.55,y:38.2,n:32}, {x:0.65,y:68.9,n:72}, {x:0.75,y:83.9,n:200}, {x:0.85,y:93.1,n:171}, {x:0.95,y:98.8,n:80}],
   },
 
@@ -139,7 +139,7 @@ const BENCHMARK_RESULTS = [
       master: { overall: 90.5, tax: 86.1, financial: 89.6, management: 93.8, interpLaw: 90.5, calculation: null, journal: null, multiChoice: 89.5, openText: 100.0, singleChoice: 100.0, journalEntry: null, austrianTax: 84.8, mixedAcc: 95.5, ugb: 83.7, ifrs: 100.0 },
       voc:    { overall: 55.8, tax: 33.3, financial: 57.1, management: null, interpLaw: 60.0, calculation: 32.9, journal: 73.4, multiChoice: 100.0, openText: 49.6, singleChoice: 50.0, journalEntry: 76.3, austrianTax: 50.8, mixedAcc: null, ugb: 72.2, ifrs: null },
     },
-    n: '564', priceIn: 10.0, priceOut: 50.0, cost: 0.121125, tokTask: 3244, speed: 0.0,
+    n: '564', priceIn: 10.0, priceOut: 50.0, cost: 0.121125, tokTask: 3244, speed: 66.0,
     calib: [{x:0.25,y:0.0,n:2}, {x:0.35,y:18.0,n:10}, {x:0.45,y:21.5,n:10}, {x:0.55,y:40.6,n:18}, {x:0.65,y:53.2,n:31}, {x:0.75,y:71.3,n:100}, {x:0.85,y:87.1,n:269}, {x:0.95,y:97.8,n:124}],
   },
 
