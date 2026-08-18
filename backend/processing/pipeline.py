@@ -1740,7 +1740,7 @@ def run_pipeline(submission_id: int, db: Session = None) -> None:
                 db.commit()
         except Exception:
             pass
-        return "error"
+        raise  # propagate — do not swallow; the task is broken, not just this model
 
     except Exception as e:
         logger.error(f"[PIPELINE] Submission {submission_id} — fatal error: {e}", exc_info=True)

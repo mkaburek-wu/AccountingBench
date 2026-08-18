@@ -121,7 +121,8 @@ from sqlalchemy import func, or_
 from backend.database import SessionLocal
 from backend.models   import BenchmarkTask
 from backend.processing.pipeline import (
-    run_pipeline, InsufficientBalanceError, IncompleteRunError, MODEL_LIST_OVERRIDE,
+    run_pipeline, InsufficientBalanceError, IncompleteRunError, TaskLevelError,
+    MODEL_LIST_OVERRIDE,
 )
 from backend.batch_utils import (
     ensure_batch_user,
@@ -131,8 +132,7 @@ from backend.batch_utils import (
     setup_error_log,
     test_endpoints,
     check_field_consistency,
-    check_attached_files,
-    check_pdf_readability,
+    check_attachments,
     BATCH_USER_ID,
 )
 
@@ -183,7 +183,7 @@ def process_task(task_id: int, task_qid: str, models_needed: list[str],
             logger.info(f"{prefix} [DONE] {task_qid} → submission {sub.id} — complete.")
             result["status"] = "done"
 
-    except (InsufficientBalanceError, IncompleteRunError):
+    except (InsufficientBalanceError, IncompleteRunError, TaskLevelError):
         if db:
             db.close()
         raise  # propagate to main loop
@@ -526,15 +526,13 @@ def main():
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "backend", "uploads",
                 )
-                for t in tasks_to_check:
-                    if t.attached_files:
-                        found, missing = check_attached_files(t.attached_files, uploads_dir)
-                        for entry in missing:
-                            logger.warning(
-                                f"  MISS  {t.question_id}  →  '{entry}' not found in {uploads_dir}"
-                            )
-                        if found:
-                            check_pdf_readability(found)
+                check_attachments(
+                    [
+                        {"question_id": t.question_id, "attached_files": t.attached_files}
+                        for t in tasks_to_check
+                    ],
+                    uploads_dir,
+                )
             finally:
                 db_check.close()
 
@@ -554,7 +552,7 @@ def main():
             logger.info(f"{'─' * 60}")
             try:
                 results.append(process_task(tid, qid, models, args.user, args.dry_run, i, total))
-            except (InsufficientBalanceError, IncompleteRunError) as e:
+            except (InsufficientBalanceError, IncompleteRunError, TaskLevelError) as e:
                 stop_error = e
                 break
     else:
@@ -569,7 +567,7 @@ def main():
             for future in as_completed(futures):
                 try:
                     results.append(future.result())
-                except (InsufficientBalanceError, IncompleteRunError) as e:
+                except (InsufficientBalanceError, IncompleteRunError, TaskLevelError) as e:
                     if stop_error is None:
                         stop_error = e
                         for f in futures:
@@ -581,6 +579,10 @@ def main():
         if isinstance(stop_error, InsufficientBalanceError):
             logger.error(f"STOPPED — insufficient balance: {stop_error}")
             logger.error("Top up your API account balance, then resume:")
+            logger.error("  python -m backend.rerun_model   (picks up all missing model outputs)")
+        elif isinstance(stop_error, TaskLevelError):
+            logger.error(f"STOPPED — broken task: {stop_error}")
+            logger.error("Fix the task's data (e.g. missing/unreadable attachment), then resume:")
             logger.error("  python -m backend.rerun_model   (picks up all missing model outputs)")
         else:
             logger.error(f"STOPPED — incomplete task: {stop_error}")

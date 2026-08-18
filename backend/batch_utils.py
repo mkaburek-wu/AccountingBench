@@ -201,6 +201,49 @@ def check_pdf_readability(paths: list[str]) -> int:
     return warnings
 
 
+def check_attachments(tasks: list[dict], uploads_dir: str) -> int:
+    """Check every task's attached_files: confirm each file resolves on disk
+    and, for PDFs, that it has an extractable text layer.
+
+    Each dict in `tasks` must have: question_id, attached_files
+
+    Mirrors check_field_consistency()'s pattern — logs an explicit [OK]
+    summary when nothing is wrong, so a clean run is visible in the console
+    instead of producing no output at all.
+
+    Returns the number of warnings emitted.
+    """
+    logger.info("")
+    logger.info("=== ATTACHED FILES ===")
+    warnings      = 0
+    checked_tasks = 0
+    checked_files = 0
+
+    for t in tasks:
+        raw = t.get("attached_files")
+        if not raw:
+            continue
+        checked_tasks += 1
+        qid = t.get("question_id") or "?"
+        found, missing = check_attached_files(raw, uploads_dir)
+        checked_files += len(found) + len(missing)
+        for entry in missing:
+            logger.warning(f"  MISS  {qid}  →  '{entry}' not found in {uploads_dir}")
+            warnings += 1
+        if found:
+            warnings += check_pdf_readability(found)
+
+    if warnings == 0:
+        logger.info(
+            f"  {checked_files} attached file(s) across {checked_tasks} task(s) resolved "
+            f"and readable (PDF text layer present, where applicable). [OK]"
+        )
+    else:
+        logger.warning(f"=== {warnings} attached-file warning(s) ===")
+
+    return warnings
+
+
 def resolve_attached_files(raw, uploads_dir: str) -> str | None:
     """Resolve the attached_files cell value from an Excel row to a
     pipe-separated string of absolute paths suitable for the pipeline.

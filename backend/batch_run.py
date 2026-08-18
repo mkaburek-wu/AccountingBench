@@ -51,7 +51,7 @@ load_dotenv(os.path.join(_root, ".env"))
 from backend.database import SessionLocal
 from backend.models import BenchmarkTask, Submission
 from backend.processing.pipeline import (
-    run_pipeline, InsufficientBalanceError, IncompleteRunError, parse_tolerance,
+    run_pipeline, InsufficientBalanceError, IncompleteRunError, TaskLevelError, parse_tolerance,
 )
 from backend.batch_utils import (
     ensure_batch_user,
@@ -310,7 +310,7 @@ def process_row(row: pd.Series, args, user_id: str, index: int = 0, total: int =
             logger.info(f"{prefix} [DONE] {qid} → submission {sub.id} — pipeline complete.")
             result["status"] = "done"
 
-    except (InsufficientBalanceError, IncompleteRunError):
+    except (InsufficientBalanceError, IncompleteRunError, TaskLevelError):
         if db:
             db.close()
         raise  # propagate to main loop
@@ -484,7 +484,7 @@ def main():
             logger.info(f"{'─' * 60}")
             try:
                 results.append(process_row(row, args, user_id, index=i, total=len(rows)))
-            except (InsufficientBalanceError, IncompleteRunError) as e:
+            except (InsufficientBalanceError, IncompleteRunError, TaskLevelError) as e:
                 stop_error = e
                 break
     else:
@@ -498,7 +498,7 @@ def main():
             for future in as_completed(futures):
                 try:
                     results.append(future.result())
-                except (InsufficientBalanceError, IncompleteRunError) as e:
+                except (InsufficientBalanceError, IncompleteRunError, TaskLevelError) as e:
                     if stop_error is None:
                         stop_error = e
                         for f in futures:
@@ -512,6 +512,11 @@ def main():
         if isinstance(stop_error, InsufficientBalanceError):
             logger.error(f"STOPPED — insufficient balance: {stop_error}")
             logger.error("Top up your API account balance, then resume:")
+            logger.error("  1. python -m backend.batch_run --file <file> --approved --skip-existing")
+            logger.error("  2. python -m backend.rerun_model   (fills in any missing model outputs)")
+        elif isinstance(stop_error, TaskLevelError):
+            logger.error(f"STOPPED — broken task: {stop_error}")
+            logger.error("Fix the task's data (e.g. missing/unreadable attachment), then resume:")
             logger.error("  1. python -m backend.batch_run --file <file> --approved --skip-existing")
             logger.error("  2. python -m backend.rerun_model   (fills in any missing model outputs)")
         else:
