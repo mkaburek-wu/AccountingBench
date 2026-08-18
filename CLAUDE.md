@@ -33,6 +33,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 ### Backend scripts
 - `backend/batch_run.py` — imports tasks from Excel and runs full pipeline on all models
 - `backend/rerun_model.py` — runs new model(s) on existing DB tasks (no Excel needed)
+- `backend/rejudge.py` — re-runs only the LLM judge against existing `benchmark_outputs` rows (no target-model calls), for when a task's grading data (e.g. `numeric_tolerance`) changed after models already ran
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
 - `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
 - `backend/processing/pipeline.py` — the real benchmark pipeline (do not break this)
@@ -207,6 +208,11 @@ python -m backend.rerun_model --models "ModelName" --category "Tax"
 python -m backend.rerun_model --models "ModelName" --task-type "calculation"
 python -m backend.rerun_model --models "ModelName" --question-ids "q_0001,q_0042"
 python -m backend.rerun_model --models "ModelName" --task-ids "19,42,100:110"
+
+# rejudge.py — re-run only the LLM judge on existing outputs (no target-model calls)
+python -m backend.rejudge --question-ids "11830492_0007:11830492_0014" --dry-run
+python -m backend.rejudge --question-ids "11830492_0007:11830492_0014"
+python -m backend.rejudge --task-ids "19,42" --models "gpt-5.4"
 
 # inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
 python -m backend.inspect_db [task_id]
