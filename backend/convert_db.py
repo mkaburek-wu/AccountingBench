@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import os
 import sqlite3
 
 import pandas as pd
@@ -17,9 +18,12 @@ if args.public_only:
         "SELECT id FROM benchmark_tasks WHERE is_public = 1", conn
     )["id"].tolist()
 
-out_file = (
+output_dir = "output"
+os.makedirs(output_dir, exist_ok=True)
+out_file = os.path.join(
+    output_dir,
     f"output_public_{datetime.date.today().isoformat()}.xlsx"
-    if args.public_only else "output.xlsx"
+    if args.public_only else "output.xlsx",
 )
 
 # Export all tables to separate sheets

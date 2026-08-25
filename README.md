@@ -1108,11 +1108,11 @@ You can confirm the scoping in the log — each task reports only what it actual
 
 ### 9.11 Database export (`convert_db.py`)
 
-`backend/convert_db.py` dumps every table in `accountingbench.db` to an Excel workbook, one sheet per table — run it from inside `backend/` (it opens `accountingbench.db` as a relative path):
+`backend/convert_db.py` dumps every table in `accountingbench.db` to an Excel workbook, one sheet per table — run it from inside `backend/` (it opens `accountingbench.db` as a relative path). Output is written to `backend/output/` (created automatically, gitignored):
 
 ```bash
-python convert_db.py                # full dump → output.xlsx
-python convert_db.py -a              # public-only dump → output_public_<YYYY-MM-DD>.xlsx
+python convert_db.py                # full dump → output/output.xlsx
+python convert_db.py -a              # public-only dump → output/output_public_<YYYY-MM-DD>.xlsx
 python convert_db.py --public-only   # same as -a
 ```
 
