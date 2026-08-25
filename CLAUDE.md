@@ -36,6 +36,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/rejudge.py` — re-runs only the LLM judge against existing `benchmark_outputs` rows (no target-model calls), for when a task's grading data (e.g. `numeric_tolerance`) changed after models already ran
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
 - `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
+- `backend/convert_db.py` — dumps `accountingbench.db` to `output.xlsx` (one sheet per table); run with `-a`/`--public-only` to restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks, writing `output_public_<date>.xlsx` instead. Run from inside `backend/` (uses a relative DB path), not via `python -m`
 - `backend/processing/pipeline.py` — the real benchmark pipeline (do not break this)
 
 ---
@@ -216,6 +217,10 @@ python -m backend.rejudge --task-ids "19,42" --models "gpt-5.4"
 
 # inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
 python -m backend.inspect_db [task_id]
+
+# convert_db.py — dump accountingbench.db to Excel (run from inside backend/)
+python convert_db.py                # full dump -> output.xlsx
+python convert_db.py -a             # public-only dump -> output_public_<date>.xlsx
 
 # reset_db.py — wipe all tasks/submissions (dev only)
 python reset_db.py

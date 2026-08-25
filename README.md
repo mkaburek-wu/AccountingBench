@@ -20,7 +20,7 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 6. [Submission Pipeline](#6-submission-pipeline)
 7. [Stripe Payment Flow](#7-stripe-payment-flow)
 8. [Batch Runner (`batch_run.py`)](#8-batch-runner-batch_runpy)
-9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy) — incl. §9.8 pre-computed importer, §9.9 maintenance scripts, §9.10 per-task model scoping
+9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy) — incl. §9.8 pre-computed importer, §9.9 maintenance scripts, §9.10 per-task model scoping, §9.11 database export
 10. [Frontend Pages](#10-frontend-pages)
 11. [Environment Setup](#11-environment-setup)
 12. [Clerk Configuration](#12-clerk-configuration)
@@ -1105,6 +1105,26 @@ You can confirm the scoping in the log — each task reports only what it actual
 [1/5] [RUN] 12008933_0001 → submission 2820 — models: ['gpt-5-mini', 'claude-opus-4-8']
 [2/5] [RUN] 12008933_0042 → submission 2822 — models: ['gpt-5-mini']
 ```
+
+### 9.11 Database export (`convert_db.py`)
+
+`backend/convert_db.py` dumps every table in `accountingbench.db` to an Excel workbook, one sheet per table — run it from inside `backend/` (it opens `accountingbench.db` as a relative path):
+
+```bash
+python convert_db.py                # full dump → output.xlsx
+python convert_db.py -a              # public-only dump → output_public_<YYYY-MM-DD>.xlsx
+python convert_db.py --public-only   # same as -a
+```
+
+With `-a`/`--public-only`, three sheets are filtered to the public subset of the benchmark and the rest are exported unchanged:
+
+| Sheet | Filter |
+|---|---|
+| `benchmark_tasks` | `is_public = 1` |
+| `benchmark_outputs` | `task_id` belongs to one of those public tasks |
+| `benchmark_runs` | `task_id` belongs to one of those public tasks |
+
+Useful for sharing an export externally without including non-public (pending/rejected/embargoed) tasks and their results.
 
 ---
 

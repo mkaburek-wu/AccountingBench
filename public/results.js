@@ -139,7 +139,7 @@ const BENCHMARK_RESULTS = [
       master: { overall: 90.5, tax: 86.1, financial: 89.6, management: 93.8, interpLaw: 90.5, calculation: null, journal: null, multiChoice: 89.5, openText: 100.0, singleChoice: 100.0, journalEntry: null, austrianTax: 84.8, mixedAcc: 95.5, ugb: 83.7, ifrs: 100.0 },
       voc:    { overall: 55.8, tax: 33.3, financial: 57.1, management: null, interpLaw: 60.0, calculation: 32.9, journal: 73.4, multiChoice: 100.0, openText: 49.6, singleChoice: 50.0, journalEntry: 76.3, austrianTax: 50.8, mixedAcc: null, ugb: 72.2, ifrs: null },
     },
-    n: '564', priceIn: 10.0, priceOut: 50.0, cost: 0.121125, tokTask: 3244, speed: 66.0,
+    n: '564', priceIn: 10.0, priceOut: 50.0, cost: 0.121125, tokTask: 3244, speed: 67.6,
     calib: [{x:0.25,y:0.0,n:2}, {x:0.35,y:18.0,n:10}, {x:0.45,y:21.5,n:10}, {x:0.55,y:40.6,n:18}, {x:0.65,y:53.2,n:31}, {x:0.75,y:71.3,n:100}, {x:0.85,y:87.2,n:269}, {x:0.95,y:97.4,n:124}],
   },
 
