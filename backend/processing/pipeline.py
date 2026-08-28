@@ -732,14 +732,16 @@ def _is_responses_only_model(model: str) -> bool:
     return m.startswith("gpt-5") or m.startswith("o")
 
 
+
+
 def _reasoning_for_model(model: str):
-    m = (model or "").strip()
-    if m == "gpt-5.2-pro":
-        return {"effort": "medium"}
-    if m.endswith("-pro"):
-        return {"effort": "high"}
-    if m.startswith("gpt-5") or m.startswith("o"):
-        return {"effort": "low"}
+#    m = (model or "").strip()
+#    if m == "gpt-5.2-pro":
+#        return {"effort": "medium"}
+#    if m.endswith("-pro"):
+#        return {"effort": "high"}
+#    if m.startswith("gpt-5") or m.startswith("o"):
+#        return {"effort": "low"}
     return None
 
 
@@ -1222,10 +1224,15 @@ def call_judge(
     acceptable_variants: str = "",
     numeric_tol: Optional[float] = None,
     context: Optional[Dict[str, Any]] = None,
+    judge_model: Optional[str] = None,
 ) -> Tuple[float, Optional[float], str, Optional[int], Optional[int]]:
-    resolved_client, api_mode = _get_client_for_model(JUDGE_MODEL)
+    # Defaults to the fixed production JUDGE_MODEL. Override only for offline
+    # judge-comparison experiments (backend/judge_experiment.py) — production
+    # runs must always use the constant so scores stay comparable.
+    jm = judge_model or JUDGE_MODEL
+    resolved_client, api_mode = _get_client_for_model(jm)
     if api_mode == "anthropic_foundry":
-        raise RuntimeError("JUDGE_MODEL must be an OpenAI-compatible deployment.")
+        raise RuntimeError(f"Judge model {jm!r} must be an OpenAI-compatible deployment.")
 
     prompt = build_judge_prompt(
         question, final_answer, gold_answer,
@@ -1245,9 +1252,9 @@ def call_judge(
 
     for attempt in range(1, JUDGE_MAX_ATTEMPTS + 1):
         try:
-            if _is_responses_only_model(JUDGE_MODEL):
+            if _is_responses_only_model(jm):
                 resp     = judge_client.responses.create(
-                    model=_get_model_api_id(JUDGE_MODEL),
+                    model=_get_model_api_id(jm),
                     reasoning={"effort": "low"},
                     input=[
                         {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
@@ -1257,7 +1264,7 @@ def call_judge(
                 raw_text = getattr(resp, "output_text", "") or "{}"
             else:
                 resp     = judge_client.chat.completions.create(
-                    model=_get_model_api_id(JUDGE_MODEL),
+                    model=_get_model_api_id(jm),
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": "Gib strikt nur JSON aus. Kein anderer Text."},
@@ -1287,7 +1294,7 @@ def call_judge(
         conf_val      = data.get("confidence", None)
         conf          = max(0.0, min(1.0, float(conf_val))) if conf_val is not None else None
         notes         = str(data.get("notes", "") or "")[:200]
-        log_raw_response(judge_ctx, JUDGE_MODEL, raw_text, score_percent, conf, (j_in, j_out, None),
+        log_raw_response(judge_ctx, jm, raw_text, score_percent, conf, (j_in, j_out, None),
                          extra={"judge_notes": notes})
         return score_percent, conf, notes, j_in, j_out
     except Exception:
@@ -1299,7 +1306,7 @@ def call_judge(
             f"task_id={judge_ctx.get('task_id')} model={judge_ctx.get('model')} "
             f"— scoring 0. raw={raw_text[:200]!r}"
         )
-        log_raw_response(judge_ctx, JUDGE_MODEL, raw_text, None, None, (j_in, j_out, None),
+        log_raw_response(judge_ctx, jm, raw_text, None, None, (j_in, j_out, None),
                          extra={"judge_parse_error": True})
         return 0.0, None, "judge_parse_error", j_in, j_out
 

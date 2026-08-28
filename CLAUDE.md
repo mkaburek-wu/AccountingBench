@@ -34,6 +34,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/batch_run.py` — imports tasks from Excel and runs full pipeline on all models
 - `backend/rerun_model.py` — runs new model(s) on existing DB tasks (no Excel needed)
 - `backend/rejudge.py` — re-runs only the LLM judge against existing `benchmark_outputs` rows (no target-model calls), for when a task's grading data (e.g. `numeric_tolerance`) changed after models already ran
+- `backend/judge_experiment.py` — offline judge-comparison experiment: re-scores existing `benchmark_outputs` with one or more **alternative** judge models (`--judges "a,b"`) and writes every result to a CSV in `backend/output/` (gitignored). Read-only — never writes to the DB, never touches the production judge columns. Use `--repeats N` for judge self-consistency. Production `JUDGE_MODEL` stays `gpt-5-mini` — this is for analysis only
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
 - `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
 - `backend/convert_db.py` — dumps `accountingbench.db` to `backend/output/output.xlsx` (one sheet per table, folder auto-created, gitignored); run with `-a`/`--public-only` to restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks, writing `output/output_public_<date>.xlsx` instead. Run from inside `backend/` (uses a relative DB path), not via `python -m`
@@ -214,6 +215,11 @@ python -m backend.rerun_model --models "ModelName" --task-ids "19,42,100:110"
 python -m backend.rejudge --question-ids "11830492_0007:11830492_0014" --dry-run
 python -m backend.rejudge --question-ids "11830492_0007:11830492_0014"
 python -m backend.rejudge --task-ids "19,42" --models "gpt-5.4"
+
+# judge_experiment.py — re-score existing outputs with ALTERNATIVE judges -> CSV (read-only, no DB writes)
+python -m backend.judge_experiment --task-ids "19" --judges "gpt-5-mini" --limit 5 --sequential   # smoke test
+python -m backend.judge_experiment --question-ids "11830492" --judges "gpt-5.4,gpt-5-mini"
+python -m backend.judge_experiment --task-ids "19,42,100:110" --models "gpt-5.4,Kimi-K2.6" --judges "gpt-5.4,claude-sonnet-4.5" --repeats 3
 
 # inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
 python -m backend.inspect_db [task_id]
