@@ -37,7 +37,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/judge_experiment.py` — offline judge-comparison experiment: re-scores existing `benchmark_outputs` with one or more **alternative** judge models (`--judges "a,b"`) and writes every result to a CSV in `backend/output/` (gitignored). Read-only — never writes to the DB, never touches the production judge columns. Use `--repeats N` for judge self-consistency. Production `JUDGE_MODEL` stays `gpt-5-mini` — this is for analysis only
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
 - `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
-- `backend/convert_db.py` — dumps `accountingbench.db` to `backend/output/output.xlsx` (one sheet per table, folder auto-created, gitignored); run with `-a`/`--public-only` to restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks, writing `output/output_public_<date>.xlsx` instead. Run from inside `backend/` (uses a relative DB path), not via `python -m`
+- `backend/convert_db.py` — dumps `accountingbench.db` to `backend/output/output.xlsx` (one sheet per table, folder auto-created, gitignored); run with `-a`/`--public-only` to restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks, and/or `--question-ids` to restrict to specific tasks using the same exact/prefix/range comma-separated syntax as `rerun_model.py`'s `--question-ids` (errors if nothing matches, or nothing matches that's also public when combined with `-a`) — filenames adapt to the flags used. Run from inside `backend/` (uses a relative DB path), not via `python -m`
 - `backend/processing/pipeline.py` — the real benchmark pipeline (do not break this)
 
 ---
@@ -225,8 +225,12 @@ python -m backend.judge_experiment --task-ids "19,42,100:110" --models "gpt-5.4,
 python -m backend.inspect_db [task_id]
 
 # convert_db.py — dump accountingbench.db to Excel (run from inside backend/)
-python convert_db.py                # full dump -> output/output.xlsx
-python convert_db.py -a             # public-only dump -> output/output_public_<date>.xlsx
+python convert_db.py                                          # full dump -> output/output.xlsx
+python convert_db.py -a                                       # public-only dump -> output/output_public_<date>.xlsx
+python convert_db.py --question-ids "11801506_0001"            # exact task
+python convert_db.py --question-ids "11801506"                 # prefix: all 11801506_* tasks
+python convert_db.py --question-ids "11801506_0001:11801506_0010"  # inclusive range
+python convert_db.py -a --question-ids "11801506_0001,11801508"    # combine with -a, mix tokens
 
 # reset_db.py — wipe all tasks/submissions (dev only)
 python reset_db.py

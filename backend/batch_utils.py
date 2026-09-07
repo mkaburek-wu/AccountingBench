@@ -497,8 +497,50 @@ def test_endpoints(models: list) -> None:
         model_id = _get_model_api_id(model)
 
         if api_type == "alawyer":
-            logger.info(f"  SKIP  {model}: alawyer (no /models endpoint)")
-            skipped += 1
+            if not base_url or not api_key:
+                logger.warning(f"  SKIP  {model}: no base_url/api_key configured")
+                skipped += 1
+                continue
+            # No lightweight /models endpoint exists, and a real completion takes
+            # 1-10 minutes (SSE). Instead, open the real POST and read only the
+            # response headers/status line — those arrive immediately, before
+            # Alawyer streams the ": connected" comment — then close without
+            # waiting for the body, so auth/connectivity is verified in seconds.
+            try:
+                resp = requests.post(
+                    f"{base_url}/api/v1/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type":  "application/json",
+                        "Accept":        "text/event-stream",
+                    },
+                    json={"query": "Antworte nur mit 'ok'.", "mode": "base"},
+                    timeout=20,
+                    stream=True,
+                )
+                if resp.status_code == 401:
+                    resp.close()
+                    logger.error(f"  FAIL  {model}  →  alawyer (401 Unauthorized — check ALAWYER_API_KEY)")
+                    failed += 1
+                elif resp.status_code == 429:
+                    resp.close()
+                    logger.info(f"  OK    {model}  →  alawyer (rate-limited, but endpoint + key are valid)")
+                    ok += 1
+                elif resp.status_code != 200:
+                    # Error responses (400/500/etc.) return their full JSON body
+                    # immediately — unlike a successful stream, so it's safe to
+                    # read it here for diagnostics instead of just the status code.
+                    detail = resp.text[:300]
+                    resp.close()
+                    logger.error(f"  FAIL  {model}  →  alawyer (HTTP {resp.status_code}: {detail!r})")
+                    failed += 1
+                else:
+                    resp.close()
+                    logger.info(f"  OK    {model}  →  alawyer (connection + auth OK)")
+                    ok += 1
+            except Exception as e:
+                logger.error(f"  FAIL  {model}  →  alawyer (connection error: {e})")
+                failed += 1
             continue
         if api_type == "anthropic_foundry":
             if not base_url or not api_key:

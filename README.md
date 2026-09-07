@@ -1111,20 +1111,23 @@ You can confirm the scoping in the log — each task reports only what it actual
 `backend/convert_db.py` dumps every table in `accountingbench.db` to an Excel workbook, one sheet per table — run it from inside `backend/` (it opens `accountingbench.db` as a relative path). Output is written to `backend/output/` (created automatically, gitignored):
 
 ```bash
-python convert_db.py                # full dump → output/output.xlsx
-python convert_db.py -a              # public-only dump → output/output_public_<YYYY-MM-DD>.xlsx
-python convert_db.py --public-only   # same as -a
+python convert_db.py                                              # full dump → output/output.xlsx
+python convert_db.py -a                                           # public-only dump → output/output_public_<YYYY-MM-DD>.xlsx
+python convert_db.py --public-only                                # same as -a
+python convert_db.py --question-ids "11801506_0001"                # exact task
+python convert_db.py --question-ids "11801506"                     # prefix: all 11801506_* tasks
+python convert_db.py --question-ids "11801506_0001:11801506_0010"  # inclusive range
+python convert_db.py -a --question-ids "11801506_0001,11801508"    # combine with -a, mix tokens
 ```
 
-With `-a`/`--public-only`, three sheets are filtered to the public subset of the benchmark and the rest are exported unchanged:
-
-| Sheet | Filter |
+| Flag | Effect |
 |---|---|
-| `benchmark_tasks` | `is_public = 1` |
-| `benchmark_outputs` | `task_id` belongs to one of those public tasks |
-| `benchmark_runs` | `task_id` belongs to one of those public tasks |
+| `-a` / `--public-only` | Restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks. |
+| `--question-ids` | Restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to matching tasks. Same comma-separated exact/prefix/range syntax as `rerun_model.py`'s `--question-ids` (see §9.2) — mix tokens freely, combined with OR logic. Errors out (exit code 1, no file written) if nothing matches — or if nothing matches that's also public, when combined with `-a`. |
 
-Useful for sharing an export externally without including non-public (pending/rejected/embargoed) tasks and their results.
+Both flags filter the same three sheets (`benchmark_tasks` on its own columns, `benchmark_outputs`/`benchmark_runs` on `task_id`) and combine with AND logic; every other table is exported unchanged. The output filename picks up a `_public` and/or a sanitized `--question-ids` segment (plus a trailing date when `-a` is used) depending on which flags were passed.
+
+Useful for sharing an export externally without including non-public (pending/rejected/embargoed) tasks, or for pulling just one task (or a range of them) to debug a specific score without exporting everything else.
 
 ---
 
