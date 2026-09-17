@@ -1,7 +1,7 @@
 """
 AccountingBench — Database Models
 ==================================
-All six tables for the submission portal.
+All eight tables for the submission portal.
 
 Run migrations after any change to this file:
     alembic revision --autogenerate -m "describe your change"
@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, JSON, String, Text
+    Integer, JSON, String, Text, UniqueConstraint
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -277,7 +277,85 @@ class BenchmarkOutput(Base):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  TABLE 6 — submissions
+#  TABLE 6 — judge_comparisons
+#  Research-only: compares the production judge (gpt-5-mini, copied from
+#  benchmark_outputs, never re-run) against alternative judge models on the
+#  same stored final_answer. One row per (benchmark_outputs row, repeat_index),
+#  with a fixed set of columns per judge — mirrors how benchmark_outputs itself
+#  stores repeats as numbered columns (model_answer_1/2/3) rather than rows, so
+#  every judge's score for one answer sits side-by-side for easy comparison.
+#  Never affects benchmark_outputs / the leaderboard. Populated by
+#  backend/judge_comparison.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Maps a judge model name (MODEL_REGISTRY_JSON / --judges) to its column-group
+# prefix below. Adding a new judge requires a migration (new columns) plus a
+# new entry here — same hand-curated pattern as NEW_MODEL_META in
+# recompute_results.py for new target models.
+JUDGE_COLUMN_SLUGS = {
+    "gpt-5-mini":        "gpt5mini",
+    "gpt-5.6-luna":      "gpt56luna",
+    "claude-sonnet-5":   "claudesonnet5",
+    "DeepSeek-V4-Flash": "deepseekv4flash",
+}
+
+
+class JudgeComparison(Base):
+    __tablename__ = "judge_comparisons"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    task_id      = Column(Integer, ForeignKey("benchmark_tasks.id"), nullable=False, index=True)
+    output_id    = Column(Integer, ForeignKey("benchmark_outputs.id"), nullable=False)
+    model_name   = Column(String, nullable=False)
+    # Target model whose answer was judged. Denormalized (also reachable via
+    # output.model_name) for easy querying/export without a join.
+
+    repeat_index = Column(Integer, nullable=False, default=1)
+
+    # ── gpt-5-mini (production judge) — copied from benchmark_outputs, never re-run ──
+    judge_gpt5mini_score_percent = Column(Float, nullable=True)
+    judge_gpt5mini_confidence    = Column(Float, nullable=True)
+    judge_gpt5mini_token_input   = Column(Integer, nullable=True)
+    judge_gpt5mini_token_output  = Column(Integer, nullable=True)
+    judge_gpt5mini_notes         = Column(Text, nullable=True)
+    judge_gpt5mini_evaluated_at  = Column(DateTime, nullable=True)
+
+    # ── gpt-5.6-luna ──
+    judge_gpt56luna_score_percent = Column(Float, nullable=True)
+    judge_gpt56luna_confidence    = Column(Float, nullable=True)
+    judge_gpt56luna_token_input   = Column(Integer, nullable=True)
+    judge_gpt56luna_token_output  = Column(Integer, nullable=True)
+    judge_gpt56luna_notes         = Column(Text, nullable=True)
+    judge_gpt56luna_evaluated_at  = Column(DateTime, nullable=True)
+
+    # ── claude-sonnet-5 ──
+    judge_claudesonnet5_score_percent = Column(Float, nullable=True)
+    judge_claudesonnet5_confidence    = Column(Float, nullable=True)
+    judge_claudesonnet5_token_input   = Column(Integer, nullable=True)
+    judge_claudesonnet5_token_output  = Column(Integer, nullable=True)
+    judge_claudesonnet5_notes         = Column(Text, nullable=True)
+    judge_claudesonnet5_evaluated_at  = Column(DateTime, nullable=True)
+
+    # ── DeepSeek V4 Flash ──
+    judge_deepseekv4flash_score_percent = Column(Float, nullable=True)
+    judge_deepseekv4flash_confidence    = Column(Float, nullable=True)
+    judge_deepseekv4flash_token_input   = Column(Integer, nullable=True)
+    judge_deepseekv4flash_token_output  = Column(Integer, nullable=True)
+    judge_deepseekv4flash_notes         = Column(Text, nullable=True)
+    judge_deepseekv4flash_evaluated_at  = Column(DateTime, nullable=True)
+
+    # Relationships
+    task   = relationship("BenchmarkTask")
+    output = relationship("BenchmarkOutput")
+
+    __table_args__ = (
+        UniqueConstraint("output_id", "repeat_index",
+                          name="uq_judge_comparisons_output_repeat"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TABLE 7 — submissions
 #  Tracks each user's contribution from form submission through
 #  payment, script execution, and admin review.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -321,7 +399,7 @@ class Submission(Base):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  TABLE 7 — settings
+#  TABLE 8 — settings
 #  Single-row configuration table.
 #  Change the price here without touching any code.
 #  Initialise with one row: INSERT INTO settings (id) VALUES (1);
