@@ -20,7 +20,7 @@ Keywords: Artificial Intelligence, LLM, Benchmarking, Accounting, Accounting and
 6. [Submission Pipeline](#6-submission-pipeline)
 7. [Stripe Payment Flow](#7-stripe-payment-flow)
 8. [Batch Runner (`batch_run.py`)](#8-batch-runner-batch_runpy)
-9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy) — incl. §9.8 pre-computed importer, §9.9 maintenance scripts, §9.10 per-task model scoping, §9.11 database export
+9. [Model Re-run (`rerun_model.py`)](#9-model-re-run-rerun_modelpy) — incl. §9.8 pre-computed importer, §9.9 maintenance scripts, §9.10 per-task model scoping, §9.11 database export, §9.12 multi-judge comparison
 10. [Frontend Pages](#10-frontend-pages)
 11. [Environment Setup](#11-environment-setup)
 12. [Clerk Configuration](#12-clerk-configuration)
@@ -61,7 +61,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 
 | Feature | Status | Notes |
 |---|---|---|
-| Database schema + migrations | ✅ Done | 7 tables, Alembic migrations applied |
+| Database schema + migrations | ✅ Done | 8 tables, Alembic migrations applied |
 | 521 original tasks imported | ✅ Done | From `matrikelnummer_ground_truth_template.xlsx` |
 | FastAPI server | ✅ Done | Endpoints, running locally |
 | Clerk authentication | ✅ Done | JWT verification via local PEM key + JWKS fallback |
@@ -92,6 +92,7 @@ AccountingBench is an academic benchmarking platform that evaluates large langua
 | Stripe payments | ✅ Done | Full Checkout flow with payment confirmation and pipeline trigger |
 | Admin panel | ✅ Done | `admin.html` — task review, user management, live stats, domain management |
 | Rate limiting | ✅ Done | `slowapi` — per-IP limits on all endpoints; tighter limits on submit + payment |
+| Multi-judge comparison (research) | ✅ Done | `judge_comparison.py` — scores stored answers with alternative judge models (incl. Anthropic ones) into `judge_comparisons`, alongside a copy of the production `gpt-5-mini` score; never touches `benchmark_outputs`/the leaderboard (see §9.12) |
 | Live leaderboard | ⏳ Planned | Phase 5 |
 | Deployment to Render | ⏳ Planned | Phase 6 |
 
@@ -137,7 +138,7 @@ accountingbench/
     ├── config.py                  ← Shared constants sourced from .env (APP_VERSION, pricing)
     ├── database.py                ← SQLAlchemy engine + session factory
     ├── limiter.py                 ← slowapi Limiter singleton + rate-limit thresholds
-    ├── models.py                  ← 7 database table definitions
+    ├── models.py                  ← 8 database table definitions
     ├── submissions.py             ← POST /submissions/prepare endpoint (multi-file upload)
     ├── payments.py                ← POST /submissions/{id}/confirm-payment endpoint
     ├── users.py                   ← DELETE /users/me (account deletion — DB then Clerk)
@@ -150,6 +151,7 @@ accountingbench/
     ├── backfill_sc_mc_scores.py   ← Maintenance: recompute stale SC/MC scores (see §9.9)
     ├── fix_broken_options.py      ← Maintenance: re-parse options stuck as {"raw": ...} (see §9.9)
     ├── recompute_results.py       ← Regenerates public/results.js from the DB (or an Excel export) — see §10.3
+    ├── judge_comparison.py        ← Research: scores stored answers with alternative judges into judge_comparisons (see §9.12)
 ├── tests/                     ← pytest suite: scoring, parsing, import + export helpers (see §11.8)
 │   ├── conftest.py
 │   ├── test_scoring.py
@@ -175,7 +177,7 @@ accountingbench/
 
 ## 3. Database Schema
 
-The database has 7 tables defined in `backend/models.py` using SQLAlchemy. Migrations are managed by Alembic.
+The database has 8 tables defined in `backend/models.py` using SQLAlchemy. Migrations are managed by Alembic.
 
 ### 3.1 Table Overview
 
@@ -186,6 +188,7 @@ The database has 7 tables defined in `backend/models.py` using SQLAlchemy. Migra
 | `benchmark_tasks` | Every benchmark question — both the original 521 and user submissions. |
 | `benchmark_runs` | One row per model per benchmark execution (run metadata). |
 | `benchmark_outputs` | One row per model per task (answers, scores, evaluation method). |
+| `judge_comparisons` | Research only: alternative-judge scores on already-stored answers, alongside a copy of the production judge's score. Never affects `benchmark_outputs`/the leaderboard. |
 | `submissions` | Tracks each user contribution from submission through to review. |
 | `settings` | Single-row config table (pricing, currency). |
 
@@ -220,6 +223,21 @@ Mirrors the Outputs sheet of `final_evaluation_template.xlsx` exactly. One row p
 | `final_answer` | Majority vote (choice) or consolidation call result (open). |
 
 > **Note on imported rows:** `import_precomputed_results.py` copies whatever the source sheet contains. If an external run recorded a `final_answer` and confidences but not every individual trial text, `model_answer_2/3` land as `NULL`. This is impossible for rows the live pipeline wrote — it only reaches the output write after all three trials succeed (see the trial-integrity rule in §6.4) — so a populated `final_answer` alongside a `NULL` trial answer is a reliable marker of imported data.
+
+#### `judge_comparisons`
+
+Research-only table, populated by `backend/judge_comparison.py` (see §9.12). Never written to by `run_pipeline()`, and never read by `recompute_results.py` — it has no effect on `benchmark_outputs` or the public leaderboard.
+
+One row exists per `(benchmark_outputs row, repeat_index)` — mirroring how `benchmark_outputs` itself stores repeats as numbered columns (`model_answer_1/2/3`) rather than extra rows — with a **fixed set of columns per judge** (`judge_<slug>_score_percent/confidence/token_input/token_output/notes/evaluated_at`), so every judge's score for one answer sits side-by-side in one row instead of being spread across multiple rows keyed by a `judge_model` value.
+
+| Field | Description |
+|---|---|
+| `task_id` / `output_id` / `model_name` | Links back to the `benchmark_tasks` row and the exact `benchmark_outputs` row being judged. |
+| `repeat_index` | `1..N` — lets `--repeats` measure a judge's self-consistency at temperature 0. |
+| `judge_gpt5mini_*` | The **production** judge score, **copied** from `benchmark_outputs` — never re-run. |
+| `judge_gpt56luna_*`, `judge_claudesonnet5_*`, `judge_deepseekv4flash_*` | Alternative research judges, scored fresh via `pipeline.call_judge(..., judge_model=...)`. |
+
+The mapping from a judge model name to its column-group prefix lives in `JUDGE_COLUMN_SLUGS` (top of `backend/models.py`). **Adding a new judge requires a small migration** (`ADD COLUMN` × 6 for the new column group) plus one new entry in that dict — the same hand-curated pattern `NEW_MODEL_META` already uses for new target models (see §10.3).
 
 ### 3.3 Uniqueness constraint on results
 
@@ -1128,6 +1146,48 @@ python convert_db.py -a --question-ids "11801506_0001,11801508"    # combine wit
 Both flags filter the same three sheets (`benchmark_tasks` on its own columns, `benchmark_outputs`/`benchmark_runs` on `task_id`) and combine with AND logic; every other table is exported unchanged. The output filename picks up a `_public` and/or a sanitized `--question-ids` segment (plus a trailing date when `-a` is used) depending on which flags were passed.
 
 Useful for sharing an export externally without including non-public (pending/rejected/embargoed) tasks, or for pulling just one task (or a range of them) to debug a specific score without exporting everything else.
+
+---
+
+### 9.12 Multi-judge comparison (research) — `judge_comparison.py`
+
+`backend/judge_comparison.py` scores already-stored `benchmark_outputs` answers with one or more **alternative** judge models, for offline research into judge behaviour (e.g. does a different judge agree with `gpt-5-mini`?). It writes into the dedicated `judge_comparisons` table (see §3.2) — it **never** calls the target models again and **never** touches `benchmark_outputs` or the leaderboard. The production judge, `pipeline.JUDGE_MODEL` (`"gpt-5-mini"`), is never re-run either — its existing score is **copied** from `benchmark_outputs` into the `judge_gpt5mini_*` columns of the matching row.
+
+This is the DB-writing counterpart to a read-only sibling, `judge_experiment.py`, which does the same kind of alternative-judge scoring but writes every result to a disposable CSV in `backend/output/` instead of persisting it. Use `judge_comparison.py` when you want the comparison to be queryable later; use `judge_experiment.py` for a quick one-off CSV export.
+
+**Anthropic judges are supported.** `pipeline.call_judge()` originally only spoke the OpenAI-compatible API and hard-rejected any `anthropic_foundry` model (e.g. Claude). It now also supports the native Anthropic Messages API for judge calls (mirroring the branch `call_llm_json()` already used for normal target-model calls), so a Claude model such as `claude-sonnet-5` can be used as `judge_model` — through this script or `judge_experiment.py`.
+
+**All flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--question-ids` | *(one required)* | Filter tasks by `question_id` — same exact/prefix/range syntax as `rerun_model.py` (§9.2). |
+| `--task-ids` | *(one required)* | Filter tasks by `BenchmarkTask.id` — same exact/range syntax as `rerun_model.py` (§9.2). |
+| `--judges` | *(required)* | Comma-separated alternative judge model name(s). Each must be a key in `JUDGE_COLUMN_SLUGS` (see §3.2) — errors out immediately, listing the known set, if not. Must not include `gpt-5-mini` — that's handled by the automatic copy step. |
+| `--models` | all | Comma-separated target model name(s) whose outputs get judged. |
+| `--repeats` | `1` | `judge_comparisons` rows (`repeat_index` `1..N`) to produce per output — lets you measure judge self-consistency at temperature 0. |
+| `--include-private` | off | Include `is_public = 0` tasks (default: public only, matching what the site reports). |
+| `--skip-production-copy` | off | Skip copying the `gpt-5-mini` score onto `repeat_index` 1 (use on a rerun where it's already been copied). |
+| `--overwrite` | off | Re-score a judge's column group even if already filled. Default: **skip** cells that already have a value — reruns are idempotent, so adding a new judge later only fills in that judge's empty columns on existing rows. |
+| `--max-workers` | `10` | Max parallel judge calls. |
+| `--sequential` | off | Run one judge call at a time. |
+| `--dry-run` | off | List the work (rows to create/update, cells that would be judged) — no judge calls, no DB writes. |
+
+```bash
+# Smoke test
+python -m backend.judge_comparison --task-ids "19" --judges "gpt-5.6-luna" --sequential --dry-run
+
+# Compare two alt judges against the copied gpt-5-mini scores, public tasks only
+python -m backend.judge_comparison --question-ids "11830492" --judges "gpt-5.6-luna,claude-sonnet-5"
+
+# Restrict to specific target model(s), 3 repeats per alt judge (self-consistency)
+python -m backend.judge_comparison --task-ids "19,42,100:110" --models "gpt-5.4,Kimi-K2.6" --judges "gpt-5.6-luna,claude-sonnet-5" --repeats 3
+
+# Fill in a newly registered judge on rows that already have the others
+python -m backend.judge_comparison --task-ids "19,42" --judges "DeepSeek-V4-Flash"
+```
+
+**Adding a new judge** (beyond the four in `JUDGE_COLUMN_SLUGS` today): add the model to `MODEL_REGISTRY_JSON` in `.env` as usual (§6.5), write a small Alembic migration adding its `judge_<slug>_*` column group to `judge_comparisons`, and add one entry to `JUDGE_COLUMN_SLUGS` at the top of `backend/models.py`. No script changes are needed — `--judges` picks up the new name immediately.
 
 ---
 

@@ -96,7 +96,7 @@ with pd.ExcelWriter(out_file) as writer:
         if task_ids_filter is not None:
             if table_name == "benchmark_tasks":
                 df = df[df["id"].isin(task_ids_filter)]
-            elif table_name in ("benchmark_outputs", "benchmark_runs"):
+            elif table_name in ("benchmark_outputs", "benchmark_runs", "judge_comparisons"):
                 df = df[df["task_id"].isin(task_ids_filter)]
         df.to_excel(writer, sheet_name=table_name, index=False)
 

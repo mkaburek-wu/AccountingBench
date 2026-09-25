@@ -103,6 +103,17 @@ class UnparseableAnswerError(RuntimeError):
     Deliberately NOT retried: re-asking until the answer happens to parse
     would bias the result, the same reasoning as the trial-integrity rule."""
 
+
+class RefusalError(RuntimeError):
+    """Raised when an Anthropic model response has no text block at all —
+    e.g. a safety-classifier refusal (stop_reason='refusal'), or the
+    thinking budget consuming the whole response under 'max_tokens'.
+
+    Previously this was only logged as a WARNING and the answer silently
+    coerced to "" — indistinguishable in the DB from the model answering
+    correctly-but-blank. Raising instead routes it through the normal ERROR
+    path, the same reasoning as UnparseableAnswerError."""
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -954,18 +965,35 @@ def call_llm_json(
             token_in = token_out = None
         logger.debug(f"[LLM←] model={model} | raw={raw_text!r}")
         logger.debug(f"[LLM←] model={model} | answer={answer!r} conf={conf}")
-        if not raw_text:
-            # Every block was thinking and none was text. Surface it instead of
-            # letting an empty answer look like a content failure.
-            logger.warning(
-                f"[{model}] response contained no text block "
-                f"(blocks={[getattr(b, 'type', '?') for b in getattr(resp, 'content', None) or []]}, "
-                f"stop_reason={getattr(resp, 'stop_reason', None)!r}). "
-                f"If stop_reason is 'max_tokens', the thinking budget consumed the whole response."
-            )
         # Anthropic counts thinking inside output_tokens, so it is already paid
         # for in token_out; the extra field is for the log only.
         extra = {"thinking_chars": len(thinking_text)} if thinking_text else None
+        if not raw_text:
+            # Every block was thinking and none was text. stop_details is only
+            # populated when stop_reason == 'refusal' (category/explanation);
+            # it's None for every other stop_reason (e.g. 'max_tokens').
+            stop_reason  = getattr(resp, "stop_reason", None)
+            stop_details = getattr(resp, "stop_details", None)
+            refusal_category    = getattr(stop_details, "category", None)
+            refusal_explanation = getattr(stop_details, "explanation", None)
+            logger.warning(
+                f"[{model}] response contained no text block "
+                f"(blocks={[getattr(b, 'type', '?') for b in getattr(resp, 'content', None) or []]}, "
+                f"stop_reason={stop_reason!r}, "
+                f"stop_details_category={refusal_category!r}, "
+                f"stop_details_explanation={refusal_explanation!r}). "
+                f"If stop_reason is 'max_tokens', the thinking budget consumed the whole response."
+            )
+            extra = dict(extra or {}, stop_reason=stop_reason,
+                         refusal_category=refusal_category,
+                         refusal_explanation=refusal_explanation)
+            log_raw_response(context, model, raw_text, answer, conf,
+                             (token_in, token_out, None), extra=extra)
+            raise RefusalError(
+                f"[{model}] no text block in response "
+                f"(stop_reason={stop_reason!r}, category={refusal_category!r}, "
+                f"explanation={refusal_explanation!r})"
+            )
         log_raw_response(context, model, raw_text, answer, conf,
                          (token_in, token_out, None), extra=extra)
         return answer, conf, (token_in, token_out, None)
@@ -1231,8 +1259,10 @@ def call_judge(
     # runs must always use the constant so scores stay comparable.
     jm = judge_model or JUDGE_MODEL
     resolved_client, api_mode = _get_client_for_model(jm)
-    if api_mode == "anthropic_foundry":
-        raise RuntimeError(f"Judge model {jm!r} must be an OpenAI-compatible deployment.")
+    if api_mode not in ("openai_v1", "openai_default", "anthropic_foundry"):
+        raise RuntimeError(
+            f"Judge model {jm!r} must be an OpenAI-compatible or Anthropic deployment."
+        )
 
     prompt = build_judge_prompt(
         question, final_answer, gold_answer,
@@ -1252,7 +1282,17 @@ def call_judge(
 
     for attempt in range(1, JUDGE_MAX_ATTEMPTS + 1):
         try:
-            if _is_responses_only_model(jm):
+            if api_mode == "anthropic_foundry":
+                resp     = judge_client.messages.create(
+                    model=_get_model_api_id(jm),
+                    system="Gib strikt nur JSON aus. Kein anderer Text.",
+                    max_tokens=30000,
+                    messages=[{"role": "user", "content": prompt}],
+                    timeout=_get_timeout_for_model(jm),
+                )
+                raw_text, _thinking = anthropic_content_text(resp)
+                raw_text = raw_text or "{}"
+            elif _is_responses_only_model(jm):
                 resp     = judge_client.responses.create(
                     model=_get_model_api_id(jm),
                     reasoning={"effort": "low"},

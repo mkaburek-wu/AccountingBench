@@ -35,6 +35,7 @@ AccountingBench is an academic LLM benchmarking platform evaluating AI models on
 - `backend/rerun_model.py` — runs new model(s) on existing DB tasks (no Excel needed)
 - `backend/rejudge.py` — re-runs only the LLM judge against existing `benchmark_outputs` rows (no target-model calls), for when a task's grading data (e.g. `numeric_tolerance`) changed after models already ran
 - `backend/judge_experiment.py` — offline judge-comparison experiment: re-scores existing `benchmark_outputs` with one or more **alternative** judge models (`--judges "a,b"`) and writes every result to a CSV in `backend/output/` (gitignored). Read-only — never writes to the DB, never touches the production judge columns. Use `--repeats N` for judge self-consistency. Production `JUDGE_MODEL` stays `gpt-5-mini` — this is for analysis only
+- `backend/judge_comparison.py` — DB-writing multi-judge comparison for research: scores existing `benchmark_outputs` with one or more **alternative** judge models (`--judges "a,b"`) and persists every judge's result — plus a copy of the existing `gpt-5-mini` production score, never re-run — into the `judge_comparisons` table (one row per output, one column group per judge; see `JUDGE_COLUMN_SLUGS` in `backend/models.py`). Never writes to `benchmark_outputs`/the leaderboard. Adding a new judge requires a migration (new columns) + a `JUDGE_COLUMN_SLUGS` entry
 - `backend/batch_utils.py` — shared helpers imported by both batch scripts
 - `backend/recompute_results.py` — recomputes `public/results.js` score fields from the live DB (default) or a `benchmark_tasks`/`benchmark_outputs` Excel export (`--from-excel`); diffs against the current file before writing, see below
 - `backend/convert_db.py` — dumps `accountingbench.db` to `backend/output/output.xlsx` (one sheet per table, folder auto-created, gitignored); run with `-a`/`--public-only` to restrict `benchmark_tasks`/`benchmark_outputs`/`benchmark_runs` to `is_public = 1` tasks, and/or `--question-ids` to restrict to specific tasks using the same exact/prefix/range comma-separated syntax as `rerun_model.py`'s `--question-ids` (errors if nothing matches, or nothing matches that's also public when combined with `-a`) — filenames adapt to the flags used. Run from inside `backend/` (uses a relative DB path), not via `python -m`
@@ -220,6 +221,12 @@ python -m backend.rejudge --task-ids "19,42" --models "gpt-5.4"
 python -m backend.judge_experiment --task-ids "19" --judges "gpt-5-mini" --limit 5 --sequential   # smoke test
 python -m backend.judge_experiment --question-ids "11830492" --judges "gpt-5.4,gpt-5-mini"
 python -m backend.judge_experiment --task-ids "19,42,100:110" --models "gpt-5.4,Kimi-K2.6" --judges "gpt-5.4,claude-sonnet-4.5" --repeats 3
+
+# judge_comparison.py — score existing outputs with ALTERNATIVE judges -> judge_comparisons table (writes DB, never touches benchmark_outputs)
+python -m backend.judge_comparison --task-ids "19" --judges "gpt-5.6-luna" --sequential --dry-run   # smoke test
+python -m backend.judge_comparison --question-ids "11830492" --judges "gpt-5.6-luna,claude-sonnet-5"
+python -m backend.judge_comparison --task-ids "19,42,100:110" --models "gpt-5.4,Kimi-K2.6" --judges "gpt-5.6-luna,claude-sonnet-5" --repeats 3
+python -m backend.judge_comparison --task-ids "19,42" --judges "DeepSeek-V4-Flash"   # fills in a newly registered judge on existing rows
 
 # inspect_db.py — print task fields + all runs/outputs for a given task (default: task 19)
 python -m backend.inspect_db [task_id]
